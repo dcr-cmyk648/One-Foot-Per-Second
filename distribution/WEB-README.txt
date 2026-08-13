@@ -28,6 +28,14 @@ batter is at the top. Upgrades, Loadout, Event Log, and Save controls open over
 the field from the bottom navigation row. This is a browser presentation layer;
 the underlying game and exported save format remain identical to desktop.
 
+IPHONE HOME SCREEN INSTALL
+
+On an iPhone, the bottom menu shows INSTALL while the game is running in a
+browser. Tap it for the Apple-specific pathway: use Safari's Share button,
+choose Add to Home Screen, then tap Add. The action disappears when the game is
+launched from its Home Screen icon. EXPORT a backup before installing; if iOS
+opens the installed game with fresh storage, use LOAD to bring the run across.
+
 UPDATES AND OFFLINE PLAY
 
 The generated service worker identifies each release by its content-derived

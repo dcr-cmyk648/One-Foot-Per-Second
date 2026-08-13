@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.5 — Put baseball on the Home Screen
+
+- Added an INSTALL action to the browser phone menu on eligible iPhones, with concise Safari Share → Add to Home Screen instructions.
+- The install action automatically stays hidden on non-iOS platforms and when the game is already running as a standalone Home Screen app.
+- Added iPhone web-app metadata, Apple touch-icon validation, standalone-manifest validation, and a portable-save warning for possible iOS storage separation.
+
 ## 0.10.4 — Wide means wide again
 
 - Fixed a responsive-state lock that could leave a 720-pixel-tall browser in compact mode forever after the window had once crossed the narrow breakpoint.

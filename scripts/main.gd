@@ -102,6 +102,7 @@ var export_save_dialog: FileDialog
 var load_save_dialog: FileDialog
 var import_save_confirmation: ConfirmationDialog
 var save_transfer_message_dialog: AcceptDialog
+var ios_install_dialog: AcceptDialog
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
 var web_file_input: Variant = null
@@ -133,6 +134,7 @@ var mobile_overlay_surface: PanelContainer
 var mobile_overlay_content: VBoxContainer
 var mobile_overlay_title: Label
 var mobile_nav: HBoxContainer
+var mobile_install_button: Button
 var mobile_overlay_control: Control
 var mobile_overlay_home: Control
 var mobile_overlay_home_index := -1
@@ -247,6 +249,7 @@ func _notification(what: int) -> void:
 			_apply_browser_offline_catchup(maxf(now - web_backgrounded_at, 0.0))
 		web_backgrounded_at = 0.0
 		web_last_wall_clock = now
+		_refresh_ios_install_offer()
 
 func _configure_platform_ui() -> void:
 	if not is_web_build:
@@ -265,6 +268,38 @@ func _configure_platform_ui() -> void:
 	export_save_button.tooltip_text = "Download a portable JSON backup of this run."
 	load_save_button.tooltip_text = "Choose a portable JSON backup to replace the current run."
 	save_label.tooltip_text = storage_note
+	_refresh_ios_install_offer()
+
+func _ios_install_offer_for_state(web_build: bool, ios_device: bool, standalone: bool) -> bool:
+	return web_build and ios_device and not standalone
+
+func _should_offer_ios_install() -> bool:
+	if not is_web_build:
+		return false
+	var ios_result = JavaScriptBridge.eval(
+		"(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))",
+		true
+	)
+	var standalone_result = JavaScriptBridge.eval(
+		"(window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true)",
+		true
+	)
+	return _ios_install_offer_for_state(true, bool(ios_result), bool(standalone_result))
+
+func _set_ios_install_offer_visible(visible: bool) -> void:
+	if mobile_install_button == null:
+		return
+	mobile_install_button.visible = visible
+	if mobile_nav != null:
+		mobile_nav.queue_sort()
+
+func _refresh_ios_install_offer() -> void:
+	_set_ios_install_offer_visible(_should_offer_ios_install())
+
+func _show_ios_install_guide() -> void:
+	if ios_install_dialog == null:
+		return
+	ios_install_dialog.popup_centered_clamped(Vector2i(360, 350), 0.95)
 
 func _update_browser_release_status(delta: float) -> void:
 	web_update_status_elapsed += delta
@@ -691,6 +726,18 @@ func _build_mobile_navigation(parent: Control) -> void:
 		button.add_theme_font_size_override("font_size", 10)
 		button.pressed.connect(entry[2])
 		mobile_nav.add_child(button)
+	mobile_install_button = Button.new()
+	mobile_install_button.name = "MobileInstallButton"
+	mobile_install_button.text = "INSTALL"
+	mobile_install_button.tooltip_text = "Add One Foot Per Second to this iPhone's Home Screen."
+	mobile_install_button.custom_minimum_size.y = 44.0
+	mobile_install_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_install_button.focus_mode = Control.FOCUS_NONE
+	mobile_install_button.add_theme_font_size_override("font_size", 10)
+	mobile_install_button.add_theme_color_override("font_color", COLOR_GOLD)
+	mobile_install_button.pressed.connect(_show_ios_install_guide)
+	mobile_install_button.visible = false
+	mobile_nav.add_child(mobile_install_button)
 
 func _build_mobile_overlay() -> void:
 	mobile_overlay_panel = Control.new()
@@ -1772,6 +1819,7 @@ func _build_confirmation_dialog() -> void:
 	_build_locker_dialog()
 	_build_hard_reset_dialog()
 	_build_save_transfer_dialogs()
+	_build_ios_install_dialog()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
 	add_child(body_limit_dialog)
@@ -1787,6 +1835,21 @@ func _build_confirmation_dialog() -> void:
 	divine_confirmation.title = "Let God restore the universe?"
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
+
+func _build_ios_install_dialog() -> void:
+	ios_install_dialog = AcceptDialog.new()
+	ios_install_dialog.name = "IOSInstallGuide"
+	ios_install_dialog.title = "INSTALL ON IPHONE"
+	ios_install_dialog.dialog_autowrap = true
+	ios_install_dialog.dialog_text = (
+		"1. Tap Safari's SHARE button (the square with an up arrow).\n\n"
+		+ "2. Scroll down and tap ADD TO HOME SCREEN.\n\n"
+		+ "3. Tap ADD, then launch the game from its new Home Screen icon.\n\n"
+		+ "EXPORT a backup first. If iOS starts the installed game with a fresh save, use LOAD to bring your run across. If Add to Home Screen is missing, open this page in Safari."
+	)
+	ios_install_dialog.min_size = Vector2i(340, 310)
+	ios_install_dialog.get_ok_button().text = "GOT IT"
+	add_child(ios_install_dialog)
 
 func _build_save_transfer_dialogs() -> void:
 	export_save_dialog = FileDialog.new()

@@ -74,10 +74,17 @@ if ! /usr/bin/grep -q '"index\.wasm"' "${OFPS_WEB_BUILD_DIR}/index.html" \
   exit 1
 fi
 if ! /usr/bin/grep -q '"serviceWorker":"index\.service\.worker\.js"' "${OFPS_WEB_BUILD_DIR}/index.html" \
-    || ! /usr/bin/grep -q "const CACHE_VERSION = '" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js" \
-    || ! /usr/bin/grep -q "msg === 'update'" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js"; then
-  echo "Web export is missing its versioned update worker." >&2
-  exit 1
+		|| ! /usr/bin/grep -q "const CACHE_VERSION = '" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js" \
+		|| ! /usr/bin/grep -q "msg === 'update'" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js"; then
+	echo "Web export is missing its versioned update worker." >&2
+	exit 1
+fi
+if ! /usr/bin/grep -q 'apple-mobile-web-app-capable' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q 'apple-mobile-web-app-title' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q 'rel="apple-touch-icon"' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q '"display":"standalone"' "${OFPS_WEB_BUILD_DIR}/index.manifest.json"; then
+	echo "Web export is missing its iPhone Home Screen metadata." >&2
+	exit 1
 fi
 
 /bin/cp "${OFPS_ROOT}/distribution/WEB-README.txt" "${OFPS_WEB_BUILD_DIR}/README.txt"

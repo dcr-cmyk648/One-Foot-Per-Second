@@ -1,8 +1,8 @@
-919d0d287e01a439fa46f40051986130818755f66b7cdc21dc67e3ab90ee2a20  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 macOS Universal.dmg
-bc0d93169a2b1d9bc20ca616a0e56e910e5e80a7e920b5e1048faec15a4cb5c3  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 Windows x86_64.zip
-5af72df4c7d5dd47639c60cd2fa47201019e3c0cbd70a9e8b4050913b82d0ed1  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 Windows ARM64.zip
-e4f45f54e4645a989bf040fafb91a09c190af449c038bcbb3fe36d88024f35b7  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 Linux x86_64.tar.gz
-40c561dc64ab7bc50f2d48f5b8f79044d1966401d643db29b7b6ffd7b0b33743  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 Linux ARM64.tar.gz
-a1e53e8a3ce8de7f6e6033a926149ec17e057a252b4827f73f1e17e29f13aa4c  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 Source.zip
-075cda79cbf79b1ae5bbf458567435ccf552433b55cda0be90e09cb873a967c6  One Foot Per Second v0.10.4/One Foot Per Second v0.10.4 Browser.zip
-35828c908b43658c584dd085f0014b1214a546fce212fa6eab7c55e368abf2f3  One Foot Per Second v0.10.4 All Platforms.zip
+85d92c55c5e18da31c22dd8d8d71846cb12d54384631ff0589bc768bf7f6797f  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 macOS Universal.dmg
+b298152bd42cd6e40254adfc1dc8009674061e180b68ea5a4b4c1bef53a60915  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 Windows x86_64.zip
+309ec7b4f91fe9e14f8ed4c1b81a0d1fd85a97aa06e52057908f7dd87379c6f1  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 Windows ARM64.zip
+655545c0f5a1bd50639f58ee2abcaa5660cd81685dc29995ed53e407d2a038fd  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 Linux x86_64.tar.gz
+8f813d12774980e16fb55650899391e1eb3325e9dccdd5e2f5fbb2193433677e  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 Linux ARM64.tar.gz
+1b1b4207dd8300df752c307bb76ed29ba4a296d82a756a170f235ba7a7d2fa38  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 Source.zip
+df3b090e80944877911e6cb82d6bba2ccb89923823c413c44f279ca7a1bed04e  One Foot Per Second v0.10.5/One Foot Per Second v0.10.5 Browser.zip
+2a3ecee76c294963bbc2b2ec1264319ab312c4636d470a3be656c6260d2294d2  One Foot Per Second v0.10.5 All Platforms.zip
