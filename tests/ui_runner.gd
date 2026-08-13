@@ -186,7 +186,6 @@ func _run() -> void:
 	var equipped_item_label: Label
 	var comparison_item_label: Label
 	var comparison_item_panel: PanelContainer
-	var comparison_item_stack: VBoxContainer
 	var comparison_item_button: Button
 	var first_star_button: Button
 	var first_action_row: HBoxContainer
@@ -204,12 +203,10 @@ func _run() -> void:
 		else:
 			comparison_item_label = item_label
 			comparison_item_panel = item_panel
-			comparison_item_stack = item_stack
 			comparison_item_button = compare_button
 	_expect(equipped_item_label != null and equipped_item_label.text.contains("POWER"), "Locker rows should expose Power and make the equipped item unmistakable")
 	_expect(comparison_item_button != null and comparison_item_button.text == "COMPARE", "Each item should expose an explicit Compare action")
-	_expect(comparison_item_panel != null and comparison_item_stack.tooltip_text.contains("Compared with Golden Test Cap"), "Desktop browser item hover should expose the complete equipped-item comparison")
-	_expect(comparison_item_stack.tooltip_text.contains("(+0.010)"), "Desktop browser item hover should include signed stat deltas")
+	_expect(comparison_item_panel != null and comparison_item_panel.tooltip_text.is_empty(), "Passive item rows must not open a covering native hover tooltip")
 	_expect(comparison_item_label.text.contains("THIS ITEM:"), "Each row should explicitly distinguish its own bonuses from the aggregate loadout")
 	_expect(comparison_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Passive item text should leave touch drags available for scrolling")
 	_expect(not equipped_item_label.text.contains("✓") and first_star_button.text.is_empty() and first_star_button.icon != null, "Equipment controls should use browser-safe drawn icons instead of unsupported font glyphs")

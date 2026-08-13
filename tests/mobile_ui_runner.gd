@@ -1,7 +1,6 @@
 extends SceneTree
 
 const MainScene = preload("res://main.tscn")
-const MainScript = preload("res://scripts/main.gd")
 const Content = preload("res://scripts/content.gd")
 
 var failures: Array[String] = []
@@ -182,37 +181,16 @@ func _run() -> void:
 	_expect(main.locker_dialog.position.y >= 0, "The phone equipment browser should remain below the usable viewport edge")
 	_expect(main.locker_dialog.position.y + main.locker_dialog.size.y <= 844, "The phone equipment browser should fit inside the usable viewport")
 	var phone_compare_button: Button
-	var phone_compare_label: Label
-	var phone_compare_stack: VBoxContainer
 	for row_index in main.locker_dialog_items.get_child_count():
 		var phone_item_panel := main.locker_dialog_items.get_child(row_index) as PanelContainer
 		var phone_item_stack := phone_item_panel.get_child(0) as VBoxContainer
 		var phone_item_label := phone_item_stack.get_child(0) as Label
 		var phone_actions := phone_item_stack.get_child(1) as HBoxContainer
 		if str(phone_item_panel.get_meta("loot_item_id", "")) == "phone_compare_hat":
-			phone_compare_label = phone_item_label
-			phone_compare_stack = phone_item_stack
 			phone_compare_button = phone_actions.get_child(1) as Button
 			_expect(phone_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone item text should not intercept vertical scrolling")
 			_expect((phone_actions.get_child(0) as Button).text == "EQUIP", "Phone rows should expose an explicit Equip action")
 	_expect(phone_compare_button != null, "The phone locker should retain the comparison item")
-	_expect(phone_compare_stack.tooltip_text.is_empty(), "Phone and S-Pen layouts should not create a covering hover tooltip")
-	var hold_press := InputEventScreenTouch.new()
-	hold_press.pressed = true
-	hold_press.position = phone_compare_label.get_global_rect().get_center()
-	main._input(hold_press)
-	var hold_drag := InputEventScreenDrag.new()
-	hold_drag.relative = Vector2(0.0, MainScript.LOCKER_ITEM_DRAG_CANCEL_DISTANCE + 1.0)
-	main._input(hold_drag)
-	main._update_locker_item_hold(MainScript.LOCKER_ITEM_HOLD_SECONDS + 0.1)
-	_expect(not main.loot_item_dialog.visible, "Scrolling a phone item should cancel hold-to-inspect")
-	main._input(hold_press)
-	main._update_locker_item_hold(MainScript.LOCKER_ITEM_HOLD_SECONDS - 0.01)
-	_expect(not main.loot_item_dialog.visible, "A short phone press should not interrupt locker scrolling")
-	main._update_locker_item_hold(0.02)
-	await process_frame
-	_expect(main.loot_item_dialog.visible, "Holding passive phone item text should open its full comparison")
-	main._close_loot_item_dialog()
 	phone_compare_button.pressed.emit()
 	await process_frame
 	await process_frame
