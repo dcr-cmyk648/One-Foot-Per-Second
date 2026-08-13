@@ -28,6 +28,7 @@ func _run() -> void:
 	print("One Foot Per Second — portrait browser-interface audit")
 	_expect(main.mobile_layout, "Phone layout did not activate")
 	_expect(main.mobile_portrait_layout, "Portrait field orientation did not activate")
+	_expect(is_equal_approx(main._normalize_browser_content_scale(3.0), 3.0), "A 3× phone display must retain its logical content scale")
 	_expect(main.mobile_nav.visible, "Phone navigation should remain visible below the field")
 	_expect(not main.upgrade_panel.visible, "Upgrade panel should not squeeze the phone field")
 	_expect(not main.equipment_sidebar.visible, "Loadout sidebar should not squeeze the phone field")
@@ -40,6 +41,22 @@ func _run() -> void:
 	_expect(main.outcomes_grid.columns == 4, "Phone outcomes should wrap into a readable 4-by-2 grid")
 	_expect(main.previous_button.text == "‹" and main.next_button.text == "›", "Phone opponent controls should use compact arrows")
 	_expect(not main.visual_weight_label.visible, "Secondary renderer detail should not crowd the phone footer")
+	_expect(main.field_stat_panel.size.x <= 134.0, "The phone throw profile is wider than its values require")
+	_expect(
+		main.field_stat_panel.position.x + main.field_stat_panel.size.x
+		< main.pitch_field.get_pitcher_position().x - 10.0 * main.pitch_field._get_pitcher_visual_scale(),
+		"The phone throw profile overlaps the pitcher model"
+	)
+	var portrait_arm: Dictionary = main.pitch_field._get_throw_arm_geometry(0, 1, 0.0)
+	_expect(Vector2(portrait_arm.end).x > 0.0, "A right-handed phone pitcher should rest the arm on screen-right")
+	main.is_web_build = true
+	main._on_browser_update_available()
+	await process_frame
+	_expect(main.update_banner.visible, "An available browser release should show the update banner")
+	_expect(main.update_banner.size.x <= 370.0, "The browser update banner should fit a 390-pixel phone")
+	main._snooze_browser_update()
+	_expect(not main.update_banner.visible, "Choosing Later should dismiss the browser update banner")
+	main.is_web_build = false
 
 	main._show_mobile_overlay(main.upgrade_panel, "UPGRADES")
 	await process_frame
@@ -62,6 +79,8 @@ func _run() -> void:
 	_expect(not main.pitch_field.is_portrait_layout(), "Desktop field should return to its horizontal lane")
 	_expect(main.upgrade_panel.visible and main.equipment_sidebar.visible and main.event_log_panel.visible, "Desktop panels did not restore")
 	_expect(main.outcomes_grid.columns == 8, "Desktop outcome row should return to one line")
+	var desktop_arm: Dictionary = main.pitch_field._get_throw_arm_geometry(0, 1, 0.0)
+	_expect(Vector2(desktop_arm.end).y > 0.0, "A right-handed desktop pitcher should rest the arm below the throwing line")
 
 	main.free()
 	if failures.is_empty():

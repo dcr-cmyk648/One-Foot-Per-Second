@@ -6,8 +6,9 @@ repository. It contains no separate gameplay implementation.
 `npm run build` first verifies that `../web/` matches the current Godot source,
 then copies that exact browser export into `public/game/`. The large WebAssembly
 runtime is divided into host-safe segments and streamed back as one
-`application/wasm` response by the Worker. The root URL serves the game directly
-so the canvas can use the full phone viewport without iframe scaling.
+`application/wasm` response by the Worker. The root URL redirects to the direct
+game document under `/game/`, keeping the full phone viewport while placing the
+page inside its generated service worker's update scope.
 
 ## Local checks
 

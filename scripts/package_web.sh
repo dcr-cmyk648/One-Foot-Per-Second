@@ -59,7 +59,9 @@ rm -rf "${OFPS_WEB_BUILD_DIR}"
   --log-file "${OFPS_TEMP_DIR}/export-web.log" \
   --export-release "Web" "${OFPS_WEB_BUILD_DIR}/index.html"
 
-for OFPS_REQUIRED_FILE in index.html index.js index.pck index.wasm; do
+for OFPS_REQUIRED_FILE in \
+  index.html index.js index.pck index.wasm \
+  index.manifest.json index.offline.html index.service.worker.js; do
   if [[ ! -s "${OFPS_WEB_BUILD_DIR}/${OFPS_REQUIRED_FILE}" ]]; then
     echo "Web export is incomplete: ${OFPS_REQUIRED_FILE} is missing or empty." >&2
     exit 1
@@ -69,6 +71,12 @@ done
 if ! /usr/bin/grep -q '"index\.wasm"' "${OFPS_WEB_BUILD_DIR}/index.html" \
     || ! /usr/bin/grep -q '"executable":"index"' "${OFPS_WEB_BUILD_DIR}/index.html"; then
   echo "Web launcher does not reference the exported WebAssembly module." >&2
+  exit 1
+fi
+if ! /usr/bin/grep -q '"serviceWorker":"index\.service\.worker\.js"' "${OFPS_WEB_BUILD_DIR}/index.html" \
+    || ! /usr/bin/grep -q "const CACHE_VERSION = '" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js" \
+    || ! /usr/bin/grep -q "msg === 'update'" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js"; then
+  echo "Web export is missing its versioned update worker." >&2
   exit 1
 fi
 

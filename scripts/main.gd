@@ -13,6 +13,8 @@ const COLOR_ACCENT := Color("63d9ff")
 const COLOR_GOLD := Color("ffd36b")
 const COLOR_GOOD := Color("6ee7a8")
 const COLOR_BAD := Color("ff667d")
+const WEB_UPDATE_CHECK_INTERVAL := 300.0
+const WEB_UPDATE_SNOOZE_SECONDS := 600.0
 
 var game: BaseballGameState
 var pitch_field
@@ -110,6 +112,14 @@ var is_web_build := false
 var web_storage_persistent := true
 var web_backgrounded_at := 0.0
 var web_last_wall_clock := 0.0
+var web_update_check_elapsed := WEB_UPDATE_CHECK_INTERVAL - 5.0
+var web_update_status_elapsed := 0.0
+var web_update_ready := false
+var web_update_snoozed_until := 0.0
+var update_banner: PanelContainer
+var update_banner_label: Label
+var update_now_button: Button
+var update_later_button: Button
 var mobile_layout := false
 var mobile_portrait_layout := false
 var mobile_overlay_panel: Control
@@ -148,11 +158,13 @@ var header_metric_headings: Array[Label] = []
 func _ready() -> void:
 	is_web_build = OS.has_feature("web") or OS.has_feature("browser_build")
 	if is_web_build:
-		# Browser layouts should use CSS-sized pixels directly. Keeping the desktop
-		# 1600×1000 content scale would letterbox the whole game into a tiny landscape
-		# strip on a portrait phone before the responsive UI could participate.
+		# Browser layouts use a fluid canvas rather than the desktop 1600×1000 base.
+		# The canvas backing store is still rendered in device pixels, so a Retina
+		# phone also needs its display scale applied to the logical 2D content. Without
+		# that second step, a 3× iPhone makes every label and model one-third size.
 		get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
 		get_window().content_scale_size = Vector2i.ZERO
+		_sync_browser_content_scale()
 	else:
 		get_window().min_size = Vector2i(1280, 800)
 	theme = _build_theme()
@@ -186,6 +198,8 @@ func _size_initial_window() -> void:
 func _process(delta: float) -> void:
 	if game == null:
 		return
+	if is_web_build:
+		_update_browser_release_status(delta)
 	if is_web_build and web_backgrounded_at > 0.0:
 		web_last_wall_clock = Time.get_unix_time_from_system()
 		return
@@ -218,6 +232,9 @@ func _notification(what: int) -> void:
 			game.save_game()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN and is_web_build and game != null:
 		var now := Time.get_unix_time_from_system()
+		# Returning to a long-running idle tab is the most useful time to ask the
+		# service worker whether a newer release has landed.
+		web_update_check_elapsed = WEB_UPDATE_CHECK_INTERVAL
 		if web_backgrounded_at > 0.0:
 			_apply_browser_offline_catchup(maxf(now - web_backgrounded_at, 0.0))
 		web_backgrounded_at = 0.0
@@ -227,6 +244,10 @@ func _configure_platform_ui() -> void:
 	if not is_web_build:
 		return
 	web_storage_persistent = OS.is_userfs_persistent()
+	if not JavaScriptBridge.pwa_update_available.is_connected(_on_browser_update_available):
+		JavaScriptBridge.pwa_update_available.connect(_on_browser_update_available)
+	if JavaScriptBridge.pwa_needs_update():
+		_on_browser_update_available()
 	header_subtitle.text = "A BASEBALL IDLE GAME ABOUT A VERY SLOW PITCH  •  BROWSER BUILD"
 	var storage_note := (
 		"Progress is stored in this browser. EXPORT creates a portable backup."
@@ -237,6 +258,61 @@ func _configure_platform_ui() -> void:
 	export_save_button.tooltip_text = "Download a portable JSON backup of this run."
 	load_save_button.tooltip_text = "Choose a portable JSON backup to replace the current run."
 	save_label.tooltip_text = storage_note
+
+func _update_browser_release_status(delta: float) -> void:
+	web_update_status_elapsed += delta
+	web_update_check_elapsed += delta
+	if web_update_status_elapsed >= 1.0:
+		web_update_status_elapsed = 0.0
+		if JavaScriptBridge.pwa_needs_update():
+			_on_browser_update_available()
+		elif web_update_ready:
+			web_update_ready = false
+			update_banner.visible = false
+	if web_update_check_elapsed >= WEB_UPDATE_CHECK_INTERVAL:
+		web_update_check_elapsed = 0.0
+		# Browsers eventually check service workers themselves, but an idle game can
+		# remain open for days. Ask for a lightweight update check every five minutes.
+		JavaScriptBridge.eval(
+			"if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistration().then(function (registration) { if (registration) { registration.update(); } }).catch(function () {}); }",
+			true
+		)
+	if (
+		web_update_ready
+		and not update_banner.visible
+		and Time.get_unix_time_from_system() >= web_update_snoozed_until
+	):
+		update_banner.visible = true
+		update_banner.move_to_front()
+
+func _on_browser_update_available() -> void:
+	if not is_web_build:
+		return
+	web_update_ready = true
+	if Time.get_unix_time_from_system() >= web_update_snoozed_until:
+		update_banner.visible = true
+		update_banner.move_to_front()
+
+func _snooze_browser_update() -> void:
+	web_update_snoozed_until = Time.get_unix_time_from_system() + WEB_UPDATE_SNOOZE_SECONDS
+	update_banner.visible = false
+
+func _install_browser_update() -> void:
+	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
+		return
+	update_now_button.disabled = true
+	update_banner_label.text = "SAVING YOUR RUN…"
+	if game != null and not development_session:
+		game.save_game()
+	# Web saves live in IndexedDB. Flush them before asking the service worker to
+	# activate the new release and reload every open game tab.
+	JavaScriptBridge.force_fs_sync()
+	await get_tree().create_timer(0.35).timeout
+	var update_error := JavaScriptBridge.pwa_update()
+	if update_error != OK:
+		update_now_button.disabled = false
+		update_banner_label.text = "UPDATE READY — RELOAD THIS PAGE"
+		_log_event("The browser could not activate the update automatically. Reload this page to try again.")
 
 func _consume_browser_wall_clock(delta: float) -> float:
 	if not is_web_build:
@@ -435,6 +511,40 @@ func _build_interface() -> void:
 	_build_event_log(page_container)
 	_build_mobile_overlay()
 	_build_confirmation_dialog()
+	_build_update_banner()
+
+func _build_update_banner() -> void:
+	update_banner = PanelContainer.new()
+	update_banner.name = "BrowserUpdateBanner"
+	update_banner.visible = false
+	update_banner.z_index = 300
+	update_banner.mouse_filter = Control.MOUSE_FILTER_STOP
+	update_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	update_banner.offset_left = -280.0
+	update_banner.offset_top = 10.0
+	update_banner.offset_right = 280.0
+	update_banner.offset_bottom = 66.0
+	add_child(update_banner)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	update_banner.add_child(row)
+	update_banner_label = Label.new()
+	update_banner_label.text = "NEW VERSION READY"
+	update_banner_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	update_banner_label.add_theme_color_override("font_color", COLOR_GOOD)
+	update_banner_label.add_theme_font_size_override("font_size", 13)
+	row.add_child(update_banner_label)
+	update_now_button = Button.new()
+	update_now_button.text = "SAVE & UPDATE"
+	update_now_button.tooltip_text = "Save this run, install the newest browser build, and reload."
+	update_now_button.pressed.connect(_install_browser_update)
+	row.add_child(update_now_button)
+	update_later_button = Button.new()
+	update_later_button.text = "LATER"
+	update_later_button.tooltip_text = "Hide this reminder for ten minutes."
+	update_later_button.pressed.connect(_snooze_browser_update)
+	row.add_child(update_later_button)
 
 func _build_header(parent: Control) -> void:
 	header_panel = PanelContainer.new()
@@ -642,7 +752,26 @@ func _close_mobile_overlay() -> void:
 		mobile_overlay_panel.visible = false
 
 func _on_root_resized() -> void:
+	if is_web_build:
+		_sync_browser_content_scale()
 	call_deferred("_apply_responsive_layout")
+
+func _sync_browser_content_scale(reported_scale := -1.0) -> void:
+	if not is_web_build:
+		return
+	var display_scale := reported_scale
+	if display_scale <= 0.0:
+		display_scale = DisplayServer.screen_get_scale()
+	if display_scale <= 0.0:
+		var browser_ratio = JavaScriptBridge.eval("window.devicePixelRatio || 1", true)
+		if browser_ratio != null:
+			display_scale = float(browser_ratio)
+	display_scale = _normalize_browser_content_scale(display_scale)
+	if not is_equal_approx(get_window().content_scale_factor, display_scale):
+		get_window().content_scale_factor = display_scale
+
+func _normalize_browser_content_scale(reported_scale: float) -> float:
+	return clampf(reported_scale, 1.0, 4.0)
 
 func _get_responsive_viewport_size() -> Vector2:
 	var viewport_size := get_viewport_rect().size
@@ -684,6 +813,16 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	root_margin.add_theme_constant_override("margin_right", 5 if mobile_layout else 14)
 	root_margin.add_theme_constant_override("margin_top", 5 if mobile_layout else 12)
 	root_margin.add_theme_constant_override("margin_bottom", 5 if mobile_layout else 12)
+	update_banner.offset_left = -185.0 if mobile_layout else -280.0
+	update_banner.offset_right = 185.0 if mobile_layout else 280.0
+	update_banner.offset_top = 5.0 if mobile_layout else 10.0
+	update_banner.offset_bottom = 61.0 if mobile_layout else 66.0
+	update_banner_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
+	if not update_now_button.disabled:
+		update_banner_label.text = "UPDATE READY" if mobile_layout else "NEW VERSION READY"
+	update_now_button.text = "UPDATE" if mobile_layout else "SAVE & UPDATE"
+	update_now_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
+	update_later_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
 	page_container.add_theme_constant_override("separation", 4 if mobile_layout else 10)
 	body_container.add_theme_constant_override("separation", 0 if mobile_layout else 10)
 	header_row.add_theme_constant_override("separation", 7 if mobile_layout else 20)
@@ -731,7 +870,9 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	strikeout_payout_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
 	field_stat_panel.offset_left = 6.0 if mobile_layout else 10.0
 	field_stat_panel.offset_top = 6.0 if mobile_layout else 10.0
-	field_stat_panel.offset_right = 168.0 if mobile_layout else 252.0
+	# The phone readout only needs enough room for a short label and value. Keeping
+	# it clear of the centered pitcher matters more than preserving desktop width.
+	field_stat_panel.offset_right = 138.0 if mobile_layout else 252.0
 	field_stat_panel.offset_bottom = 150.0 if mobile_layout else 176.0
 	inventory_dock.offset_left = -248.0 if mobile_layout else -310.0
 	inventory_dock.offset_top = -40.0 if mobile_layout else -48.0

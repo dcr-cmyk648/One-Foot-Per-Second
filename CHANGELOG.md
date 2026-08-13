@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1 — Retina remembers that pixels have density
+
+- Fixed high-density browser displays treating device pixels as interface pixels. The Web build now applies the browser display scale to its fluid canvas, so iPhone text, controls, and character models render at readable CSS-pixel size instead of shrinking by the device pixel ratio.
+- Narrowed the phone's Live Throw Profile so it clears the centered pitcher while retaining every base statistic.
+- Moved the opening pitcher's rectangular throwing arm to the right-handed side in both portrait and landscape field orientations, without changing any pitch mechanics.
+- Added an update-aware Progressive Web App export. Open browser games check for a new release every five minutes, show a compact opt-in update banner, save and flush the run before activating it, and keep the existing build playable offline while an update waits.
+- Extended the portrait-interface audit to enforce the compact profile clearance, high-density scale normalization, right-handed arm orientation, and phone-safe update prompt.
+
 ## 0.10.0 — The ballpark turns sideways
 
 - Added a browser-only responsive phone interface. Portrait play rotates the field into a vertical lane with the pitcher below and batter above, while desktop and installed builds retain the established top-down landscape layout.

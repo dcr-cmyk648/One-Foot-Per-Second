@@ -23,7 +23,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.0 progressive-interface audit")
+	print("One Foot Per Second — v0.10.1 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
