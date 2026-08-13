@@ -15,7 +15,7 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 424242
 	game.loot_drops_enabled = false
-	print("One Foot Per Second — v0.10.5 first-human-lifetime pacing simulation")
+	print("One Foot Per Second — v0.10.6 first-human-lifetime pacing simulation")
 	print("00:00:00  Level 01  %s" % game.opponents[0].name)
 	while elapsed < MAX_SECONDS and not game.genetic_offer_unlocked:
 		_purchase_available_content()
@@ -25,7 +25,7 @@ func _initialize() -> void:
 			game._reset_batter_identity()
 		game.selected_distance_index = _best_xp_distance()
 		var step := _simulation_step()
-		game.simulate_offline(step)
+		game.simulate_active_time(step)
 		elapsed += step
 		if game.highest_unlocked != previous_unlocked:
 			previous_unlocked = game.highest_unlocked

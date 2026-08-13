@@ -1,10 +1,10 @@
-# One Foot Per Second — v0.10.5 Design
+# One Foot Per Second — v0.10.6 Design
 
 ## Product shape
 
 One Foot Per Second is a readable top-down idle simulation whose joke escalates honestly. The player begins three feet from a toddler, throws a large white wiffle ball at exactly 1 ft/s, and is visibly terrible. The same field eventually holds eight synchronized arms, alternate-reality pitchers, thousands of physical balls, a galaxy-width mound, and an eight-bat god.
 
-The design has five constraints:
+The design has six constraints:
 
 1. The opening joke must be physically legible: one foot per second over three feet takes three seconds.
 2. An upgrade changes only what it claims to change. A released projectile is immutable.
@@ -48,6 +48,8 @@ base strikeout XP
 × distance reward
 × optional mastery and equipment bonuses
 ```
+
+When the game is closed or a browser tab is suspended, the same state machine runs for up to seven days but its strikeout XP is multiplied by the body's offline efficiency. That value begins at `0.01`; Scorebook Study adds `0.01` per rank and ordinarily caps at `0.25`. Mastery, counts, batter replacement, story clocks, and loot still advance through the authoritative simulation. Returning with any deposited XP opens a summary that names the time away, XP gained, efficiency used, strikeouts, and loot.
 
 ## Outcome probabilities
 
@@ -94,7 +96,7 @@ The fresh game exposes ordinary XP, the human opponent ladder, Training, Pitch, 
 
 Within a revealed story tier, its full catalog is visible and every tab is ordered by unlock level, then cost. A locked entry shows only its unmet requirements; it does not reveal the effect. Most gates are campaign levels, while selected Facility gates ask for a measured speed, a farther mound, or a Strikeout achievement. Descriptions state concrete arithmetic such as `Base speed +0.15 ft/s`, `Quality ×1.08`, or `Lineup time ×0.90`. Maximum-rank and body-cap language appears only when reached. Attempting to train beyond a body limit opens a contextual hint rather than spoiling genetics.
 
-Ordinary Training offers one additive purchase per base stat, unlocked gradually in this order: Speed, Quality, Recovery, Distance Control, base Lineup time, fair-hit Delay, and Pitch Calling. The field's live profile shows all seven values with hover explanations. One-time Facilities provide the separate multiplicative layer, so a new building or questionable intervention is a larger event than pumping another Training rank. There are no same-operation quality buttons with cosmetic names.
+Ordinary Training offers one additive purchase per base stat, unlocked gradually in this order: Speed, Quality, Recovery, Offline XP, Distance Control, base Lineup time, fair-hit Delay, and Pitch Calling. The field's compact profile shows all eight values with hover explanations. One-time Facilities provide the separate multiplicative layer, so a new building or questionable intervention is a larger event than pumping another Training rank. There are no same-operation quality buttons with cosmetic names.
 
 Eight outcome cards contain only name, probability, and compact added delay. Hover text explains count/terminal behavior. Strikeout payout sits on its own small line. Player equipment is six compact rarity-colored squares at the field's lower-right; clicking a square opens its sorted slot inventory. Opponent equipment mirrors that language in a vertical strip on the batter's side.
 
@@ -199,7 +201,7 @@ Human simultaneous capacity is exactly one. Post-human throwing sources are `arm
 
 ## Save and completion contract
 
-Save version 13 persists the explicit pitch phase, hidden pending outcome, selected pitch ID, exact sampled speed, release distance, original and remaining duration, generated batter identity/loadout, live Strike and Ball counts, seven additive Training axes, forty-two Facilities, cooldown, eight result totals, strikeouts, currencies, upgrades, mastery, automation, loot, favorites, equipment, pity, and lifetime statistics.
+Save version 13 persists the explicit pitch phase, hidden pending outcome, selected pitch ID, exact sampled speed, release distance, original and remaining duration, generated batter identity/loadout, live Strike and Ball counts, eight additive Training axes, forty-two Facilities, cooldown, eight result totals, strikeouts, currencies, upgrades, mastery, automation, loot, favorites, equipment, pity, and lifetime statistics. Saves created before v0.10.6 default the new Scorebook Study rank to zero without a schema conversion.
 
 Version-12 multiplicative Training ranks migrate to equivalent additive ranks; its single lineup modifier becomes the new base-lineup investment while fair-hit recovery starts cleanly. Legacy Command, Spin, and Deception ranks migrate into one additive Command investment. Older saves retain the Belt-to-Jock-Strap migration, ten-item pruning, added outcome slots, count-compression mapping, portal mapping, and conversion of retired prestige systems.
 

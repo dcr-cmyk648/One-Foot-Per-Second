@@ -24,8 +24,16 @@ cleanup_ofps_all_platforms() {
 }
 trap cleanup_ofps_all_platforms EXIT
 
-"${OFPS_ROOT}/scripts/package_all_desktop.sh"
+# Build and stage Web first so the Source archive assembled by the desktop
+# packager contains this release's verified Pages tree rather than the previous
+# checked-in browser export. The desktop packager recreates the release folder,
+# so hold the browser artifacts across that step and restore them afterward.
 OFPS_SKIP_TESTS=true "${OFPS_ROOT}/scripts/package_web.sh"
+/bin/cp "${OFPS_RELEASE_DIR}/${OFPS_BROWSER_NAME}" "${OFPS_TEMP_DIR}/${OFPS_BROWSER_NAME}"
+/bin/cp "${OFPS_RELEASE_DIR}/${OFPS_BROWSER_NAME}.sha256.txt" "${OFPS_TEMP_DIR}/${OFPS_BROWSER_NAME}.sha256.txt"
+"${OFPS_ROOT}/scripts/package_all_desktop.sh"
+/bin/cp "${OFPS_TEMP_DIR}/${OFPS_BROWSER_NAME}" "${OFPS_RELEASE_DIR}/${OFPS_BROWSER_NAME}"
+/bin/cp "${OFPS_TEMP_DIR}/${OFPS_BROWSER_NAME}.sha256.txt" "${OFPS_RELEASE_DIR}/${OFPS_BROWSER_NAME}.sha256.txt"
 
 (
   cd "${OFPS_RELEASE_DIR}"

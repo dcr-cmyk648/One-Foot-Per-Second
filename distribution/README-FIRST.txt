@@ -1,4 +1,4 @@
-ONE FOOT PER SECOND v0.10.5
+ONE FOOT PER SECOND v0.10.6
 ALL-PLATFORMS RELEASE
 
 Choose the browser package or the native package matching the computer that
@@ -7,14 +7,14 @@ and the game does not install services or modify the registry.
 
 BROWSER
 
-"One Foot Per Second v0.10.5 Browser.zip" is a static website. Upload its
+"One Foot Per Second v0.10.6 Browser.zip" is a static website. Upload its
 contents unchanged to a static host with index.html at the web root, then share
 that URL. See WEB-README.txt in the browser package for local testing and save
 details. It cannot be run reliably by double-clicking index.html.
 
 MACOS — INTEL OR APPLE SILICON
 
-1. Open "One Foot Per Second v0.10.5 macOS Universal.dmg".
+1. Open "One Foot Per Second v0.10.6 macOS Universal.dmg".
 2. Drag One Foot Per Second into Applications, or run it from the disk image.
 3. The build is ad-hoc signed but not Apple-notarized. On first launch,
    Control-click the app and choose Open. If macOS still blocks it, open
@@ -60,6 +60,10 @@ The save is named one_foot_per_second_save.json. The in-game EXPORT and LOAD
 buttons are the preferred way to move or back up progress on every platform.
 Browser autosaves are local to that browser and site; use EXPORT before clearing
 site data, changing browsers, or changing devices.
+
+Offline catch-up simulates up to seven days. Strikeout XP begins at 1% of the
+open-game award and can be trained to 25% with Scorebook Study. A return popup
+shows the exact XP deposited and the multiplier that was used.
 
 CONTENTS
 

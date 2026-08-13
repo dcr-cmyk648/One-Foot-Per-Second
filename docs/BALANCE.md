@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.5 Balance Audit
+# One Foot Per Second — v0.10.6 Balance Audit
 
 ## Outcome
 
@@ -18,7 +18,7 @@ The complete campaign is long but finite, every prestige layer changes the strat
 | Octathulhu unlocked at 1c | 68 d 15 h |
 | First cosmic victory | 68 d 21 h |
 
-These are deterministic baselines with frequent purchasing and strategically timed resets. A player who explores, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice.
+These are deterministic open-game baselines with frequent purchasing and strategically timed resets. A player who explores, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study can raise the current body to 25%, so the game meaningfully rewards being left open without making a closed session worthless.
 
 The runner obeys the same human cadence as the field: one wind-up, one unresolved ball, full flight, impact, lineup change if needed, then the next wind-up. That is intentionally slower than a generic pitches-per-second spreadsheet and prevents hidden pitches from occurring while the visible ball or batter is unresolved.
 
@@ -110,6 +110,7 @@ Ordinary Training has one clear purchase per displayed base stat:
 | Speed Training | 1 | base speed +0.15 ft/s | ×1.30 | current body |
 | Command Drills | 2 | base quality +0.08 | ×1.105 | none |
 | Recovery Drills | 4 | base recovery +0.035/s | ×1.45 | 26 |
+| Scorebook Study | 5 | offline XP +1 percentage point | ×1.65 | 24 |
 | Long-Toss Mechanics | 6 | distance-threat factor −0.025 | ×1.72 | 20 |
 | Lineup Hustle | 8 | base lineup time −0.15 s | ×2.40 | 10 |
 | Shake It Off | 10 | fair-hit delay factor −0.05 | ×2.25 | 8 |
@@ -127,7 +128,7 @@ Human baseball is fixed at one unresolved ball. Post-human sources come from arm
 
 At readable rates, projectile creation is driven only by authoritative release events. A release snapshots pitch type, exact speed, distance, duration, color, path, and source hand. Movement and upgrades cannot mutate it. No release occurs while the plate is empty or while the previous human pitch is unresolved, and returning a batter never creates a catch-up burst.
 
-Dense and offline production use the exact count-state renewal model rather than iterating every pitch. It retains terminal-outcome mix, saved-hit volume, walks, strikeouts, downtime, XP, mastery, and statistically equivalent loot rolls while allowing seven days of offline play to resolve quickly.
+Dense and offline production use the exact count-state renewal model rather than iterating every pitch. It retains terminal-outcome mix, saved-hit volume, walks, strikeouts, downtime, mastery, and statistically equivalent loot rolls while allowing seven days of offline play to resolve quickly. The raw strikeout XP from that same solution is multiplied by the saved body's 1%–25% offline efficiency before it reaches spendable, run, or lifetime XP; foreground pacing audits explicitly use the full-rate path.
 
 ## Verified failure modes
 

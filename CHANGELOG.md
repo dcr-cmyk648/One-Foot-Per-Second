@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.6 — The scorebook does not study itself
+
+- Offline strikeout XP now begins at 1% of the normal open-game award instead of silently paying the full rate. Exact plate appearances, mastery, loot, batter state, and the seven-day catch-up window remain simulated.
+- Added the level-gated Scorebook Study fundamental. Each of its 24 ranks adds one percentage point of offline XP efficiency, raising the current body's rate from 1% to 25%.
+- Added Offline to the compact field profile and full Stats view, with a plain-language tooltip explaining what the percentage controls.
+- Returning after offline XP was earned now opens a responsive summary with the exact XP deposited, elapsed time, efficiency used, completed strikeouts, and any locker parcels found.
+- Split accelerated foreground pacing audits from genuine offline catch-up, and added reward-multiplier, save-default, popup, and compact-interface regression coverage.
+
 ## 0.10.5 — Put baseball on the Home Screen
 
 - Added an INSTALL action to the browser phone menu on eligible iPhones, with concise Safari Share → Add to Home Screen instructions.

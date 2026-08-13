@@ -23,7 +23,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.5 progressive-interface audit")
+	print("One Foot Per Second — v0.10.6 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -72,8 +72,9 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
-	_expect(main.field_stat_labels.size() == 7, "The default field should expose every base trained stat in a compact overlay")
+	_expect(main.field_stat_labels.size() == 8, "The default field should expose every base trained stat in a compact overlay")
 	_expect(str(main.field_stat_labels.speed.text).contains("1.00 ft/s"), "The field overlay should begin with the game's literal one-foot-per-second speed")
+	_expect(main.field_stat_labels.offline.text == "1%", "The fresh field should make its deliberately weak offline reward rate visible")
 	for stat_id in main.field_stat_labels:
 		_expect(not (main.field_stat_labels[stat_id] as Label).tooltip_text.is_empty(), "Field stat %s needs a hover explanation" % stat_id)
 	_expect(main.opponent_loadout_dock.get_child_count() == 2, "The opening opponent side should show body and bat squares")
@@ -108,6 +109,18 @@ func _run() -> void:
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
 	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
 	_expect(not main.import_save_confirmation.visible, "The load-save replacement confirmation should begin closed")
+	_expect(not main.offline_progress_dialog.visible, "The offline-XP return popup should begin closed")
+	main._show_offline_progress({
+		"earned_xp": 12.5,
+		"offline_seconds": 3600.0,
+		"offline_xp_efficiency": 0.01,
+		"strikeouts": 3.0,
+	}, "Welcome back")
+	await process_frame
+	_expect(main.offline_progress_dialog.visible, "Returning with offline XP should open a summary popup")
+	_expect(main.offline_progress_dialog.dialog_text.contains("+12.5 XP"), "The return popup should lead with the exact XP deposited")
+	_expect(main.offline_progress_dialog.dialog_text.contains("Offline efficiency: 1%"), "The return popup should explain the multiplier used")
+	main.offline_progress_dialog.hide()
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "The destructive reset window should begin closed and locked")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Fresh human baseball needs the regular-guy subtitle")
 	main.game.purchased_milestones.append("steroids")
@@ -130,7 +143,7 @@ func _run() -> void:
 	main.development_session = true
 	_audit_catalog_visibility(main, 0, "fresh")
 	_expect(not str(main.training_buttons.velocity.text).contains("🔒"), "Speed Training should be the only fundamental available from the opening level")
-	for training_id in ["command", "recovery", "distance_control", "turnover", "hit_recovery", "pitch_calling"]:
+	for training_id in ["command", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"]:
 		_expect(str(main.training_buttons[training_id].text).contains("🔒"), "%s should begin level-gated" % training_id)
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({

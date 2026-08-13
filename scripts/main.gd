@@ -103,6 +103,7 @@ var load_save_dialog: FileDialog
 var import_save_confirmation: ConfirmationDialog
 var save_transfer_message_dialog: AcceptDialog
 var ios_install_dialog: AcceptDialog
+var offline_progress_dialog: AcceptDialog
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
 var web_file_input: Variant = null
@@ -401,6 +402,28 @@ func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
 			loot_note,
 		]
 	)
+	_show_offline_progress(summary, prefix)
+
+func _show_offline_progress(summary: Dictionary, prefix: String) -> void:
+	var earned_xp := float(summary.get("earned_xp", 0.0))
+	if earned_xp <= 0.0 or offline_progress_dialog == null:
+		return
+	var detail_lines: Array[String] = [
+		"Away for %s" % BaseballGameState.format_duration(float(summary.get("offline_seconds", 0.0))),
+		"Offline efficiency: %.0f%%" % (float(summary.get("offline_xp_efficiency", 0.0)) * 100.0),
+	]
+	var strikeouts := float(summary.get("strikeouts", 0.0))
+	if strikeouts > 0.0:
+		detail_lines.append("Strikeouts completed: %s" % BaseballGameState.format_number(strikeouts))
+	var loot_found := int(summary.get("loot_found", 0))
+	if loot_found > 0:
+		detail_lines.append("Locker parcels found: %d" % loot_found)
+	offline_progress_dialog.title = prefix.to_upper()
+	offline_progress_dialog.dialog_text = (
+		"+%s XP\n\n%s"
+		% [BaseballGameState.format_number(earned_xp, 3), "\n".join(detail_lines)]
+	)
+	offline_progress_dialog.popup_centered_clamped(Vector2i(440, 270), 0.92)
 
 func _apply_development_arguments() -> void:
 	var arguments := OS.get_cmdline_user_args()
@@ -433,6 +456,7 @@ func _apply_development_arguments() -> void:
 		"hit_recovery": 8,
 		"pitch_calling": 12,
 		"distance_control": 20,
+		"offline_efficiency": 24,
 	}
 	for definition in Content.GENETIC_UPGRADES:
 		game.genetic_levels[definition.id] = mini(int(definition.max_level), 2) if preview == "alien" else int(definition.max_level)
@@ -1241,7 +1265,7 @@ func _build_field_stat_overlay(parent: Control) -> void:
 	field_stat_panel.offset_left = 10.0
 	field_stat_panel.offset_top = 10.0
 	field_stat_panel.offset_right = 252.0
-	field_stat_panel.offset_bottom = 176.0
+	field_stat_panel.offset_bottom = 190.0
 	field_stat_panel.modulate = Color(1.0, 1.0, 1.0, 0.88)
 	parent.add_child(field_stat_panel)
 	var stack := VBoxContainer.new()
@@ -1260,6 +1284,7 @@ func _build_field_stat_overlay(parent: Control) -> void:
 		["hit_delay", "HIT DELAY"],
 		["calling", "CALLING"],
 		["distance", "DISTANCE"],
+		["offline", "OFFLINE"],
 	]
 	for row_definition in rows:
 		var stat_id := str(row_definition[0])
@@ -1729,6 +1754,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		"lineup_time": "Base lineup time",
 		"hit_delay": "Fair-hit delay multiplier",
 		"pitch_calling": "Best-option calling bias",
+		"offline_xp": "Offline XP efficiency",
 		"strikes": "Strikes per batter",
 		"balls": "Balls per walk",
 		"strikeout_odds": "Strikeout chance / at-bat",
@@ -1767,6 +1793,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 			"lineup_time": "lineup",
 			"hit_delay": "hit_delay",
 			"pitch_calling": "calling",
+			"offline_xp": "offline",
 		}.get(str(id), ""))
 		if not str(help_id).is_empty():
 			name_label.tooltip_text = str(Content.STAT_HELP.get(str(help_id), ""))
@@ -1820,6 +1847,7 @@ func _build_confirmation_dialog() -> void:
 	_build_hard_reset_dialog()
 	_build_save_transfer_dialogs()
 	_build_ios_install_dialog()
+	_build_offline_progress_dialog()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
 	add_child(body_limit_dialog)
@@ -1835,6 +1863,15 @@ func _build_confirmation_dialog() -> void:
 	divine_confirmation.title = "Let God restore the universe?"
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
+
+func _build_offline_progress_dialog() -> void:
+	offline_progress_dialog = AcceptDialog.new()
+	offline_progress_dialog.name = "OfflineProgressDialog"
+	offline_progress_dialog.title = "WELCOME BACK"
+	offline_progress_dialog.dialog_autowrap = true
+	offline_progress_dialog.min_size = Vector2i(360, 220)
+	offline_progress_dialog.get_ok_button().text = "BACK TO THE MOUND"
+	add_child(offline_progress_dialog)
 
 func _build_ios_install_dialog() -> void:
 	ios_install_dialog = AcceptDialog.new()
@@ -2112,6 +2149,12 @@ func _refresh_guide_text(
 			+ "mastery target is passed, staying there adds a small logarithmic XP and loot-quality farming bonus."
 		),
 		(
+			"Closing the game or suspending its browser tab simulates up to seven days, but a fresh body "
+			+ "deposits only 1% of normal strikeout XP. Scorebook Study unlocks during early human baseball "
+			+ "and adds one percentage point per rank, up to 25%. The Offline field stat shows the current "
+			+ "rate, and the return popup reports exactly what was deposited."
+		),
+		(
 			"Completed strikeouts can leave random clothing. The first career strikeout guarantees a hat; "
 			+ "later eligible strikeouts have a 12% chance, with pity by the tenth roll and a five-second parcel "
 			+ "cadence at extreme production. Common, Magic, Rare, Legendary, and Unique gear gains progressively "
@@ -2307,6 +2350,7 @@ func _refresh_field_stats() -> void:
 	field_stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	field_stat_labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
 	field_stat_labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
+	field_stat_labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 
 func _format_compact_seconds(seconds: float) -> String:
 	if absf(seconds - round(seconds)) < 0.05:
@@ -2752,6 +2796,7 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	stat_labels.lineup_time.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
 	stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	stat_labels.pitch_calling.text = "×%.3f" % game.get_pitch_calling_bias()
+	stat_labels.offline_xp.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 	stat_labels.strikes.text = str(game.get_strikes_per_batter())
 	stat_labels.balls.text = str(game.get_balls_required())
 	stat_labels.strikeout_odds.text = "%.4f%%" % (float(at_bat_metrics.strikeout_probability) * 100.0)

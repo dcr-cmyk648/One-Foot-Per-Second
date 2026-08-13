@@ -7,7 +7,7 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.5 multiverse regression suite")
+	print("One Foot Per Second — v0.10.6 multiverse regression suite")
 	_test_content()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()
@@ -84,11 +84,11 @@ func _test_content() -> void:
 	_expect(Content.SIGNATURE_BATTER_NAMES[43] == "Ball-rog, the Unstrikeable", "Ball-rog should remain the penultimate named batter")
 	_expect(Content.SIGNATURE_BATTER_NAMES[44] == "Octathulhu, God of the Eightfold Swing", "Final named opponent changed unexpectedly")
 	_expect(Content.PITCHES.size() == 14, "Expected fourteen pitch types")
-	_expect(Content.TRAINING.size() == 7, "Expected seven repeatable training axes")
+	_expect(Content.TRAINING.size() == 8, "Expected eight repeatable training axes")
 	var training_ids: Array[String] = []
 	for definition in Content.TRAINING:
 		training_ids.append(str(definition.id))
-	_expect(training_ids == ["velocity", "command", "recovery", "distance_control", "turnover", "hit_recovery", "pitch_calling"], "Training should expose one clear purchase per base stat in unlock order")
+	_expect(training_ids == ["velocity", "command", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"], "Training should expose one clear purchase per base stat in unlock order")
 	_expect(Content.BALL_UPGRADES.size() == 26, "Expected twenty-six ball evolutions")
 	_expect(Content.MILESTONES.size() == 42, "Expected forty-two interstitial facilities and interventions")
 	_expect(Content.DISTANCE_TIERS.size() == 15, "Expected the 3-foot-to-galaxy range ladder")
@@ -1025,6 +1025,9 @@ func _test_progression_and_purchases() -> void:
 	var summary: Dictionary = game.simulate_offline(1800.0)
 	_expect(not summary.is_empty(), "Offline simulation should produce a summary")
 	_expect(game.xp > 0.0, "Thirty opening minutes should produce XP")
+	_expect_close(game.get_offline_xp_efficiency(), 0.01, "Fresh offline XP should begin at one-percent efficiency")
+	_expect_close(float(summary.earned_xp), float(summary.raw_earned_xp) * 0.01, "Offline catch-up should deposit only the trained share of normal XP")
+	_expect_close(float(summary.offline_xp_efficiency), 0.01, "Offline summaries should report the multiplier used for their award")
 	_expect(game.highest_unlocked >= 1, "Opening mastery should unlock another opponent")
 	game.xp = 10000.0
 	var initial_speed := game.get_velocity_fps()
@@ -1036,6 +1039,12 @@ func _test_progression_and_purchases() -> void:
 	_expect(BaseballGameState.format_cost(1.0e15) == "1e15", "Scientific costs should normalize")
 	_expect(game.buy_pitch("four_seam"), "The four-seam should purchase")
 	game.highest_unlocked = maxi(game.highest_unlocked, 11)
+	game.training_levels.offline_efficiency = 0
+	_expect(game.buy_training("offline_efficiency"), "Scorebook Study should upgrade offline rewards once unlocked")
+	_expect_close(game.get_offline_xp_efficiency(), 0.02, "Each Scorebook Study rank should add one percentage point of offline XP")
+	game.training_levels.offline_efficiency = BaseballGameState.OFFLINE_XP_MAX_RANK
+	_expect_close(game.get_offline_xp_efficiency(), 0.25, "Ordinary offline training should cap at twenty-five percent")
+	_expect(game.get_training_cost("offline_efficiency") == BaseballGameState.MAX_NUMBER, "A maxed offline axis should reject additional ranks")
 	var lineup_before := game.get_base_batter_turnover_seconds()
 	_expect(game.buy_training("turnover"), "Lineup Hustle should be a visible repeatable purchase")
 	_expect_close(game.get_base_batter_turnover_seconds(), lineup_before - BaseballGameState.LINEUP_SECONDS_PER_RANK, "Lineup training should reduce the universal replacement delay additively")
@@ -1184,6 +1193,7 @@ func _test_save_round_trip_and_migration() -> void:
 	original.eldritch_offer_unlocked = true
 	original.training_levels.velocity = 9
 	original.training_levels.turnover = 7
+	original.training_levels.offline_efficiency = 9
 	original.genetic_levels.compressed_strike_genome = 3
 	original.genetic_levels.prehensile_outfield = 2
 	original.eldritch_levels.mirror_clones = 2
@@ -1213,6 +1223,14 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect("four_seam" in restored.unlocked_pitches and restored.has_milestone("regulation_ball"), "Ordinary purchases should survive saves")
 	_expect_close(restored.opponent_mastery[3], 77.0, "Mastery should survive saves")
 	_expect(int(restored.training_levels.turnover) == 7, "Batter-cooldown training should survive saves")
+	_expect_close(restored.get_offline_xp_efficiency(), 0.10, "Offline-efficiency training should survive saves")
+
+	var early_v13: BaseballGameState = GameStateScript.new()
+	early_v13.apply_save_data({
+		"version": 13,
+		"training_levels": {"velocity": 5},
+	})
+	_expect_close(early_v13.get_offline_xp_efficiency(), 0.01, "Older v13 saves should start the new training axis at rank zero")
 
 	var legacy_data := {
 		"version": 5,
@@ -1276,6 +1294,7 @@ func _test_save_round_trip_and_migration() -> void:
 	migrated.free()
 	version_six.free()
 	version_eight.free()
+	early_v13.free()
 
 func _test_cosmic_completion_and_magnitude() -> void:
 	var game: BaseballGameState = GameStateScript.new()

@@ -169,6 +169,7 @@ const STAT_HELP := {
 	"hit_delay": "Hit delay scales only the extra lineup penalty caused by a fair hit; it does not shorten the universal lineup time.",
 	"calling": "Calling biases the random arsenal toward stronger learned pitch types without removing weaker ones.",
 	"distance": "Distance control reduces the added batter threat from moving the mound farther away.",
+	"offline": "Offline efficiency is the share of normal strikeout XP deposited while the game is closed or suspended.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Mastery fills opponent unlock bars and continues logarithmically after a batter is mastered.",
 }
@@ -548,6 +549,16 @@ const TRAINING := [
 		"required_level": 3,
 		"stats": ["recovery"],
 		"description": "Base recovery +0.035/s.",
+	},
+	{
+		"id": "offline_efficiency",
+		"name": "Scorebook Study",
+		"base_cost": 100.0,
+		"growth": 1.65,
+		"max_level": 24,
+		"required_level": 4,
+		"stats": ["offline"],
+		"description": "Offline XP +1 percentage point.",
 	},
 	{
 		"id": "distance_control",

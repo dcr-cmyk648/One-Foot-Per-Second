@@ -16,7 +16,7 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 303003
 	game.loot_drops_enabled = false
-	print("One Foot Per Second — v0.10.5 multiverse pacing simulation")
+	print("One Foot Per Second — v0.10.6 multiverse pacing simulation")
 	_log_checkpoint("BEGIN")
 	while elapsed < MAX_SECONDS and not game.cosmos_conquered:
 		_purchase_meta_upgrades()
@@ -29,7 +29,7 @@ func _initialize() -> void:
 			game._reset_batter_identity()
 		game.selected_distance_index = _best_xp_distance()
 		var step := _simulation_step()
-		game.simulate_offline(step)
+		game.simulate_active_time(step)
 		elapsed += step
 		if game.highest_unlocked != previous_level:
 			previous_level = game.highest_unlocked

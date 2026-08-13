@@ -45,6 +45,11 @@ chooses. The current run is saved and browser storage is flushed before the new
 release activates. After one successful online load, the current build can also
 start offline when the browser retains its cache.
 
+Closing the game or suspending its tab simulates up to seven days. Strikeout XP
+starts at 1% of the open-game award; Scorebook Study adds one percentage point
+per rank up to 25% for the current body. Returning with earned XP shows a popup
+with the exact deposit, elapsed time, and efficiency used.
+
 CODEX SITES
 
 The source project includes a Sites hosting shell that publishes this verified

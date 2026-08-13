@@ -36,6 +36,9 @@ const HIT_RECOVERY_MAX_RANK := 8
 const CALLING_BIAS_PER_RANK := 0.50
 const DISTANCE_FACTOR_PER_RANK := 0.025
 const DISTANCE_MIN_FACTOR := 0.50
+const BASE_OFFLINE_XP_EFFICIENCY := 0.01
+const OFFLINE_XP_EFFICIENCY_PER_RANK := 0.01
+const OFFLINE_XP_MAX_RANK := 24
 # Every completed plate appearance has a believable lineup-change baseline.
 # Contact adds the displayed delay on top; a walk uses the Single bonus.
 const BASE_BATTER_TURNOVER_SECONDS := 3.0
@@ -96,6 +99,7 @@ var training_levels := {
 	"hit_recovery": 0,
 	"pitch_calling": 0,
 	"distance_control": 0,
+	"offline_efficiency": 0,
 }
 var scale_levels := {}
 var genetic_levels := {
@@ -446,6 +450,7 @@ func reset_fresh() -> void:
 		"hit_recovery": 0,
 		"pitch_calling": 0,
 		"distance_control": 0,
+		"offline_efficiency": 0,
 	}
 	scale_levels = {}
 	_reset_genetic_levels()
@@ -585,8 +590,23 @@ func simulate_offline(seconds: float) -> Dictionary:
 	if bounded_seconds < 1.0:
 		return {}
 	_advance_story_encounters(bounded_seconds)
-	var summary := _resolve_elapsed(bounded_seconds, false, false)
+	var efficiency := get_offline_xp_efficiency()
+	var summary := _resolve_elapsed(bounded_seconds, false, false, efficiency)
 	summary["offline_seconds"] = bounded_seconds
+	summary["offline_xp_efficiency"] = efficiency
+	last_batch = summary
+	return summary
+
+# Deterministic pacing audits use the same closed-form at-bat math at the full
+# foreground reward rate. It is intentionally separate from offline catch-up so
+# test acceleration cannot silently bypass the player's offline-efficiency stat.
+func simulate_active_time(seconds: float) -> Dictionary:
+	var bounded_seconds := clampf(seconds, 0.0, MAX_OFFLINE_SECONDS)
+	if bounded_seconds <= 0.0:
+		return {}
+	_advance_story_encounters(bounded_seconds)
+	var summary := _resolve_elapsed(bounded_seconds, false, false)
+	summary["simulated_active_seconds"] = bounded_seconds
 	last_batch = summary
 	return summary
 
@@ -600,6 +620,7 @@ func _empty_resolution_summary() -> Dictionary:
 		"counts": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 		"strikeouts": 0.0,
 		"saved_hits": 0.0,
+		"raw_earned_xp": 0.0,
 		"earned_xp": 0.0,
 		"base_score": 0.0,
 		"visual_outcome": Content.STRIKE_INDEX,
@@ -617,7 +638,12 @@ func _empty_resolution_summary() -> Dictionary:
 		"unlocked_message": "",
 	}
 
-func _resolve_elapsed(seconds: float, stochastic: bool, should_emit: bool) -> Dictionary:
+func _resolve_elapsed(
+	seconds: float,
+	stochastic: bool,
+	should_emit: bool,
+	xp_reward_multiplier := 1.0
+) -> Dictionary:
 	var summary := _empty_resolution_summary()
 	var remaining := maxf(seconds, 0.0)
 	summary.elapsed_seconds = remaining
@@ -628,7 +654,7 @@ func _resolve_elapsed(seconds: float, stochastic: bool, should_emit: bool) -> Di
 		if batter_cooldown_remaining <= 0.000001:
 			_complete_batter_replacement()
 		pitch_credit = 0.0
-		_apply_resolution(summary, should_emit)
+		_apply_resolution(summary, should_emit, xp_reward_multiplier)
 		return summary
 	var elapsed_offset := 0.0
 	var recovery_rate := maxf(get_recovery_rate(), 0.000001)
@@ -665,7 +691,7 @@ func _resolve_elapsed(seconds: float, stochastic: bool, should_emit: bool) -> Di
 		if remaining > 0.0 and not is_pitch_in_flight():
 			pitch_credit = 0.0
 			_resolve_aggregate_time(remaining, summary, stochastic)
-		_apply_resolution(summary, should_emit)
+		_apply_resolution(summary, should_emit, xp_reward_multiplier)
 		return summary
 
 	var transitions := 0
@@ -713,7 +739,7 @@ func _resolve_elapsed(seconds: float, stochastic: bool, should_emit: bool) -> Di
 	if remaining > 0.000001 and not should_emit:
 		pitch_credit = 0.0
 		_resolve_aggregate_time(remaining, summary, stochastic)
-	_apply_resolution(summary, should_emit)
+	_apply_resolution(summary, should_emit, xp_reward_multiplier)
 	return summary
 
 func _resolve_one_pitch(summary: Dictionary, _stochastic: bool, elapsed_offset := -1.0) -> void:
@@ -935,7 +961,7 @@ func _resolve_aggregate_time(seconds: float, summary: Dictionary, stochastic: bo
 	summary.strike_requirement = requirement
 	summary.ball_requirement = get_balls_required()
 
-func _apply_resolution(summary: Dictionary, should_emit: bool) -> void:
+func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multiplier := 1.0) -> void:
 	var pitch_count := float(summary.pitches)
 	var released_count := float(summary.get("released_pitches", 0.0))
 	var strikeouts := float(summary.strikeouts)
@@ -945,8 +971,10 @@ func _apply_resolution(summary: Dictionary, should_emit: bool) -> void:
 	var reward_opponent := clampi(int(summary.get("resolved_opponent_index", current_opponent)), 0, opponents.size() - 1)
 	var reward_distance := int(summary.get("resolved_distance_index", selected_distance_index))
 	var base_score := minf(strikeouts * get_strikeout_base_points(reward_opponent), MAX_NUMBER)
-	var earned_xp := minf(base_score * get_xp_multiplier(reward_opponent, reward_distance), MAX_NUMBER)
+	var raw_earned_xp := minf(base_score * get_xp_multiplier(reward_opponent, reward_distance), MAX_NUMBER)
+	var earned_xp := minf(raw_earned_xp * maxf(xp_reward_multiplier, 0.0), MAX_NUMBER)
 	summary.base_score = base_score
+	summary.raw_earned_xp = raw_earned_xp
 	summary.earned_xp = earned_xp
 	xp = minf(MAX_NUMBER, xp + earned_xp)
 	run_xp = minf(MAX_NUMBER, run_xp + earned_xp)
@@ -2264,6 +2292,14 @@ func get_overmastery_summary(index: int = current_opponent) -> String:
 		get_opponent_loot_luck(index) * 100.0,
 	]
 
+func get_offline_xp_efficiency() -> float:
+	var rank := clampi(
+		int(training_levels.get("offline_efficiency", 0)),
+		0,
+		OFFLINE_XP_MAX_RANK
+	)
+	return BASE_OFFLINE_XP_EFFICIENCY + float(rank) * OFFLINE_XP_EFFICIENCY_PER_RANK
+
 func get_training_cost(id: String) -> float:
 	var definition := Content.training_by_id(id)
 	if definition.is_empty():
@@ -2607,6 +2643,7 @@ func _reset_body_progress() -> void:
 		"hit_recovery": 0,
 		"pitch_calling": 0,
 		"distance_control": 0,
+		"offline_efficiency": 0,
 	}
 	scale_levels = {}
 	unlocked_pitches = ["dead_fish"]
