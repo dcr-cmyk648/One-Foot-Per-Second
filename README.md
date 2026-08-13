@@ -2,14 +2,14 @@
 
 A top-down baseball idle game about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the playable **v0.9.0 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
+This repository contains the playable **v0.10.0 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
 
 ## Share or install on another computer
 
 Upload this single file to Google Drive (or any ordinary file host):
 
 ```text
-release/One Foot Per Second v0.9.0 All Platforms.zip
+release/One Foot Per Second v0.10.0 All Platforms.zip
 ```
 
 It contains a static browser-site ZIP, a Universal Mac DMG, separate Intel/AMD and ARM Windows ZIPs, separate Intel/AMD and ARM Linux archives, source code, instructions, a platform manifest, and SHA-256 checksums. Recipients can play from an uploaded browser build or choose the native package matching their computer. Godot is not needed to play.
@@ -26,7 +26,7 @@ The native packages are portable builds, not store submissions. The Mac app is a
 
 ## Play in a browser
 
-`release/One Foot Per Second v0.9.0/One Foot Per Second v0.9.0 Browser.zip` is a static site with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database, application server, special cross-origin headers, or installation step.
+`release/One Foot Per Second v0.10.0/One Foot Per Second v0.10.0 Browser.zip` is a static site with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database, application server, special cross-origin headers, or installation step.
 
 To build only the browser package, or serve the current build locally:
 
@@ -36,6 +36,10 @@ To build only the browser package, or serve the current build locally:
 ```
 
 Then open `http://127.0.0.1:8001/`. WebAssembly and WebGL 2 are required; current Chromium-based browsers and Firefox are the primary targets. The browser and desktop packages contain the same scenes, content, simulation, progression, and save schema. Only the visual ceilings differ: desktop keeps the 4,000-projectile pool, while the browser draws up to 512 outbound representatives, 96 returns, 96 stars, and 16 clone bodies before aggregating presentation. Gameplay math remains exact.
+
+### Publish with Codex Sites
+
+The `sites-host/` project is a deliberately thin production shell around the verified Godot export. It does not duplicate gameplay: its build first checks `web/` against the shared Godot source, copies that exact export, divides the large WebAssembly runtime into host-safe segments, and serves the reassembled runtime as one ordinary `application/wasm` response. Codex Sites can therefore publish the game directly while GitHub Pages remains an independent fallback.
 
 ### Publish with GitHub Pages
 
@@ -51,7 +55,7 @@ Commit the refreshed `web/` directory whenever gameplay source changes. The comp
 
 ## Play on macOS
 
-1. Open `release/One Foot Per Second v0.9.0 macOS Universal.dmg`.
+1. Open `release/One Foot Per Second v0.10.0 macOS Universal.dmg`.
 2. Drag **One Foot Per Second.app** to Applications, or run it from the disk image.
 3. If macOS asks for confirmation, Control-click the app, choose **Open**, and confirm.
 
@@ -115,7 +119,7 @@ Every released projectile snapshots its pitch type, source, exact randomized spe
 
 The camera begins at a 3.6× close-up. Pitcher and batter share the same point-and-ring graphic language; the fresh pitcher is about 50% larger than the toddler and grows smoothly with strength toward twice the original size. The pitching arm is a short bat-like rectangle that drives forward, and the ball leaves from its exact tip. Small arrows beside the pitcher move the mound. Backing away zooms out so later formations and contextually huge opponents remain legible. Departed batters clear toward the upper-right and replacements enter from the lower-left. Human leagues use muted grass; later environments change only when their campaign layers are revealed.
 
-The 1600×1000 interface opens maximized with a 1280×800 desktop minimum. The browser canvas adapts to its page while preserving the same logical layout and stable right-panel footprint. Future campaign tabs, currencies, statistics, upgrade lists, and Guide text remain hidden until their corresponding story reveal.
+The 1600×1000 installed interface opens maximized with a 1280×800 desktop minimum. On a portrait browser viewport, the field turns vertically so the pitcher is below the batter; desktop sidebars become touch-sized Upgrades, Loadout, Log, and Save overlays, and outcome cards wrap into two rows. This responsive layer changes presentation only. Future campaign tabs, currencies, statistics, upgrade lists, and Guide text remain hidden until their corresponding story reveal.
 
 ## Run from source
 
@@ -140,11 +144,12 @@ godot --headless --path . --script res://tests/balance_runner.gd
 godot --headless --path . --script res://tests/multiverse_balance_runner.gd
 godot --headless --path . --script res://tests/progression_audit.gd
 godot --headless --path . --script res://tests/ui_runner.gd -- --fresh
+godot --headless --path . --script res://tests/mobile_ui_runner.gd -- --fresh
 ```
 
-The regression suite covers all eight outcomes, strikeout-only rewards, Foul and Ball counts, walks, hit resets, protected counts, Grand Slam immunity, randomized pitch selection and exact speed snapshots, the release/flight/impact state machine, one-live-ball human rules, post-human 2,048-ball volleys, immutable projectiles, live mound/opponent controls, constant-speed misses, empty-plate suppression, both visible timers, replacement timing and direction, randomized opponent loadouts, all five loot tiers, Power sorting, rarity-colored slots, equipment caps and clone dilution, starred 10-item pruning, post-cap mastery farming, typed hard reset, save migration, cosmic completion, and seven-day aggregate simulation. The separate interface audit clicks every visible tab at every reveal layer and checks stable size, bounds, popup inventory, tier catalogs, and spoiler gating.
+The regression suite covers all eight outcomes, strikeout-only rewards, Foul and Ball counts, walks, hit resets, protected counts, Grand Slam immunity, randomized pitch selection and exact speed snapshots, the release/flight/impact state machine, one-live-ball human rules, post-human 2,048-ball volleys, immutable projectiles, live mound/opponent controls, constant-speed misses, empty-plate suppression, both visible timers, replacement timing and direction, randomized opponent loadouts, all five loot tiers, Power sorting, rarity-colored slots, equipment caps and clone dilution, starred 10-item pruning, post-cap mastery farming, typed hard reset, save migration, cosmic completion, and seven-day aggregate simulation. The desktop interface audit clicks every visible tab at every reveal layer and checks stable size, bounds, popup inventory, tier catalogs, and spoiler gating; the portrait audit checks the rotated lane, phone overlays, compact controls, and lossless return to desktop layout.
 
-The deterministic greedy benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. The v0.9 human lifetime reaches the first alien exhibition after roughly 37.5 active hours, while the complete multi-reset audit reaches cosmic victory after roughly 68 days 21 hours. The full audit is documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
+The deterministic greedy benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. The v0.10 human lifetime reaches the first alien exhibition after roughly 37.5 active hours, while the complete multi-reset audit reaches cosmic victory after roughly 68 days 21 hours. The full audit is documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Save data
 

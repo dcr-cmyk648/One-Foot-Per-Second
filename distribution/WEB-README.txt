@@ -21,6 +21,20 @@ the number of simultaneously visible late-game projectile representatives,
 return balls, stars, and clone bodies; those limits never reduce simulated
 pitches, rewards, loot, mastery, or progression.
 
+PHONE LAYOUT
+
+Portrait browsers rotate the field so the pitcher is at the bottom and the
+batter is at the top. Upgrades, Loadout, Event Log, and Save controls open over
+the field from the bottom navigation row. This is a browser presentation layer;
+the underlying game and exported save format remain identical to desktop.
+
+CODEX SITES
+
+The source project includes a Sites hosting shell that publishes this verified
+Godot export without forking the game. Its build splits the WebAssembly file
+into host-safe static segments and streams them back as the original runtime.
+GitHub Pages remains available as a plain static-host fallback.
+
 GITHUB PAGES
 
 The source repository contains the ready site in web/ and an automated Pages

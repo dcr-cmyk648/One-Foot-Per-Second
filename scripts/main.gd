@@ -110,10 +110,50 @@ var is_web_build := false
 var web_storage_persistent := true
 var web_backgrounded_at := 0.0
 var web_last_wall_clock := 0.0
+var mobile_layout := false
+var mobile_portrait_layout := false
+var mobile_overlay_panel: Control
+var mobile_overlay_surface: PanelContainer
+var mobile_overlay_content: VBoxContainer
+var mobile_overlay_title: Label
+var mobile_nav: HBoxContainer
+var mobile_overlay_control: Control
+var mobile_overlay_home: Control
+var mobile_overlay_home_index := -1
+var root_margin: MarginContainer
+var page_container: VBoxContainer
+var body_container: HBoxContainer
+var header_panel: PanelContainer
+var header_row: HBoxContainer
+var header_title_stack: VBoxContainer
+var header_title: Label
+var header_spacer: Control
+var save_stack: VBoxContainer
+var play_panel: PanelContainer
+var play_stack: VBoxContainer
+var opponent_row: HBoxContainer
+var opponent_stack: VBoxContainer
+var play_row: HBoxContainer
+var equipment_sidebar: ScrollContainer
+var field_stack: VBoxContainer
+var field_footer: HBoxContainer
+var outcomes_grid: GridContainer
+var upgrade_panel: PanelContainer
+var event_log_panel: PanelContainer
+var field_stat_panel: PanelContainer
+var locker_slot_grid: GridContainer
+var header_metric_stacks: Array[VBoxContainer] = []
+var header_metric_headings: Array[Label] = []
 
 func _ready() -> void:
 	is_web_build = OS.has_feature("web") or OS.has_feature("browser_build")
-	if not is_web_build:
+	if is_web_build:
+		# Browser layouts should use CSS-sized pixels directly. Keeping the desktop
+		# 1600×1000 content scale would letterbox the whole game into a tiny landscape
+		# strip on a portrait phone before the responsive UI could participate.
+		get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+		get_window().content_scale_size = Vector2i.ZERO
+	else:
 		get_window().min_size = Vector2i(1280, 800)
 	theme = _build_theme()
 	game = GameStateScript.new()
@@ -133,7 +173,9 @@ func _ready() -> void:
 	if is_web_build and not web_storage_persistent:
 		_log_event("Browser storage is temporary here. Use EXPORT after playing if you want to keep this run.")
 	_refresh_interface()
+	resized.connect(_on_root_resized)
 	web_last_wall_clock = Time.get_unix_time_from_system()
+	call_deferred("_apply_responsive_layout")
 	call_deferred("_size_initial_window")
 
 func _size_initial_window() -> void:
@@ -370,56 +412,58 @@ func _build_interface() -> void:
 	add_child(background)
 	move_child(background, 0)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	add_child(margin)
+	root_margin = MarginContainer.new()
+	root_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_margin.add_theme_constant_override("margin_left", 14)
+	root_margin.add_theme_constant_override("margin_right", 14)
+	root_margin.add_theme_constant_override("margin_top", 12)
+	root_margin.add_theme_constant_override("margin_bottom", 12)
+	add_child(root_margin)
 
-	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 10)
-	margin.add_child(page)
-	_build_header(page)
+	page_container = VBoxContainer.new()
+	page_container.add_theme_constant_override("separation", 10)
+	root_margin.add_child(page_container)
+	_build_header(page_container)
 
-	var body := HBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 10)
-	page.add_child(body)
-	_build_play_area(body)
-	_build_upgrade_area(body)
-	_build_event_log(page)
+	body_container = HBoxContainer.new()
+	body_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_container.add_theme_constant_override("separation", 10)
+	page_container.add_child(body_container)
+	_build_play_area(body_container)
+	_build_upgrade_area(body_container)
+	_build_mobile_navigation(page_container)
+	_build_event_log(page_container)
+	_build_mobile_overlay()
 	_build_confirmation_dialog()
 
 func _build_header(parent: Control) -> void:
-	var panel := PanelContainer.new()
-	parent.add_child(panel)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
-	panel.add_child(row)
-	var title_stack := VBoxContainer.new()
-	row.add_child(title_stack)
-	var title := Label.new()
-	title.text = "ONE FOOT PER SECOND"
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", COLOR_ACCENT)
-	title_stack.add_child(title)
+	header_panel = PanelContainer.new()
+	parent.add_child(header_panel)
+	header_row = HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 20)
+	header_panel.add_child(header_row)
+	header_title_stack = VBoxContainer.new()
+	header_row.add_child(header_title_stack)
+	header_title = Label.new()
+	header_title.text = "ONE FOOT PER SECOND"
+	header_title.add_theme_font_size_override("font_size", 27)
+	header_title.add_theme_color_override("font_color", COLOR_ACCENT)
+	header_title_stack.add_child(header_title)
 	header_subtitle = Label.new()
 	header_subtitle.text = "A BASEBALL IDLE GAME ABOUT A VERY SLOW PITCH"
 	header_subtitle.add_theme_font_size_override("font_size", 13)
 	header_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
-	title_stack.add_child(header_subtitle)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
-	xp_label = _header_metric(row, "XP", "0.00")
-	rate_label = _header_metric(row, "XP / SECOND", "0.00")
-	rings_label = _header_metric(row, "DNA • ARCANA", "D0 • A0")
+	header_title_stack.add_child(header_subtitle)
+	header_spacer = Control.new()
+	header_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(header_spacer)
+	xp_label = _header_metric(header_row, "XP", "0.00")
+	rate_label = _header_metric(header_row, "XP / SECOND", "0.00")
+	rings_label = _header_metric(header_row, "DNA • ARCANA", "D0 • A0")
 	prestige_header_stack = rings_label.get_parent() as VBoxContainer
 	prestige_header_heading = prestige_header_stack.get_child(0) as Label
-	var save_stack := VBoxContainer.new()
-	row.add_child(save_stack)
+	save_stack = VBoxContainer.new()
+	header_row.add_child(save_stack)
 	save_button = Button.new()
 	save_button.text = "SAVE"
 	save_button.custom_minimum_size = Vector2(78.0, 34.0)
@@ -460,12 +504,14 @@ func _header_metric(parent: Control, heading: String, value: String) -> Label:
 	var stack := VBoxContainer.new()
 	stack.custom_minimum_size.x = 126.0
 	parent.add_child(stack)
+	header_metric_stacks.append(stack)
 	var heading_label := Label.new()
 	heading_label.text = heading
 	heading_label.add_theme_font_size_override("font_size", 12)
 	heading_label.add_theme_color_override("font_color", COLOR_MUTED)
 	heading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	stack.add_child(heading_label)
+	header_metric_headings.append(heading_label)
 	var value_label := Label.new()
 	value_label.text = value
 	value_label.add_theme_font_size_override("font_size", 21)
@@ -474,31 +520,257 @@ func _header_metric(parent: Control, heading: String, value: String) -> Label:
 	stack.add_child(value_label)
 	return value_label
 
-func _build_play_area(parent: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.size_flags_stretch_ratio = 1.85
-	parent.add_child(panel)
+func _build_mobile_navigation(parent: Control) -> void:
+	mobile_nav = HBoxContainer.new()
+	mobile_nav.name = "MobileNavigation"
+	mobile_nav.visible = false
+	mobile_nav.add_theme_constant_override("separation", 4)
+	parent.add_child(mobile_nav)
+	var entries := [
+		["UPGRADES", "Upgrades", func() -> void: _show_mobile_overlay(upgrade_panel, "UPGRADES")],
+		["LOADOUT", "Current ball, pitches, body, and facilities", func() -> void: _show_mobile_overlay(equipment_sidebar, "LOADOUT")],
+		["LOG", "Recent game events", func() -> void: _show_mobile_overlay(event_log_panel, "EVENT LOG")],
+		["SAVE", "Save, export, load, or reset this run", func() -> void: _show_mobile_overlay(save_stack, "SAVE & TRANSFER")],
+	]
+	for entry in entries:
+		var button := Button.new()
+		button.name = "Mobile%sButton" % str(entry[0]).capitalize()
+		button.text = str(entry[0])
+		button.tooltip_text = str(entry[1])
+		button.custom_minimum_size.y = 44.0
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.focus_mode = Control.FOCUS_NONE
+		button.add_theme_font_size_override("font_size", 10)
+		button.pressed.connect(entry[2])
+		mobile_nav.add_child(button)
+
+func _build_mobile_overlay() -> void:
+	mobile_overlay_panel = Control.new()
+	mobile_overlay_panel.name = "MobileOverlay"
+	mobile_overlay_panel.visible = false
+	mobile_overlay_panel.z_index = 200
+	mobile_overlay_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	mobile_overlay_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(mobile_overlay_panel)
+
+	var dimmer := ColorRect.new()
+	dimmer.color = Color(0.01, 0.02, 0.04, 0.92)
+	dimmer.mouse_filter = Control.MOUSE_FILTER_STOP
+	dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mobile_overlay_panel.add_child(dimmer)
+
+	mobile_overlay_surface = PanelContainer.new()
+	mobile_overlay_surface.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mobile_overlay_surface.offset_left = 5.0
+	mobile_overlay_surface.offset_top = 5.0
+	mobile_overlay_surface.offset_right = -5.0
+	mobile_overlay_surface.offset_bottom = -5.0
+	mobile_overlay_panel.add_child(mobile_overlay_surface)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 7)
+	margin.add_theme_constant_override("margin_bottom", 7)
+	mobile_overlay_surface.add_child(margin)
 	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 8)
-	panel.add_child(stack)
+	stack.add_theme_constant_override("separation", 7)
+	margin.add_child(stack)
+	var heading_row := HBoxContainer.new()
+	stack.add_child(heading_row)
+	mobile_overlay_title = Label.new()
+	mobile_overlay_title.text = "MENU"
+	mobile_overlay_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_overlay_title.add_theme_font_size_override("font_size", 17)
+	mobile_overlay_title.add_theme_color_override("font_color", COLOR_ACCENT)
+	heading_row.add_child(mobile_overlay_title)
+	var close_button := Button.new()
+	close_button.name = "MobileOverlayCloseButton"
+	close_button.text = "CLOSE  ×"
+	close_button.custom_minimum_size = Vector2(88.0, 42.0)
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.pressed.connect(_close_mobile_overlay)
+	heading_row.add_child(close_button)
+	mobile_overlay_content = VBoxContainer.new()
+	mobile_overlay_content.name = "MobileOverlayContent"
+	mobile_overlay_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_overlay_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(mobile_overlay_content)
+
+func _show_mobile_overlay(control: Control, title: String) -> void:
+	if not mobile_layout or control == null:
+		return
+	if mobile_overlay_control != null:
+		_close_mobile_overlay()
+	mobile_overlay_control = control
+	mobile_overlay_home = control.get_parent() as Control
+	mobile_overlay_home_index = control.get_index()
+	control.reparent(mobile_overlay_content)
+	control.visible = true
+	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	control.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if control == upgrade_panel:
+		upgrade_panel.custom_minimum_size.x = 0.0
+	if control == equipment_sidebar:
+		equipment_sidebar.custom_minimum_size.x = 0.0
+	mobile_overlay_title.text = title
+	mobile_overlay_panel.visible = true
+	mobile_overlay_panel.move_to_front()
+
+func _close_mobile_overlay() -> void:
+	if mobile_overlay_control != null and is_instance_valid(mobile_overlay_control):
+		var control := mobile_overlay_control
+		if mobile_overlay_home != null and is_instance_valid(mobile_overlay_home):
+			control.reparent(mobile_overlay_home)
+			mobile_overlay_home.move_child(
+				control,
+				clampi(mobile_overlay_home_index, 0, maxi(mobile_overlay_home.get_child_count() - 1, 0))
+			)
+		if control == upgrade_panel:
+			control.size_flags_horizontal = Control.SIZE_FILL
+		elif control == equipment_sidebar:
+			control.size_flags_horizontal = Control.SIZE_FILL
+		elif control == event_log_panel:
+			control.size_flags_vertical = Control.SIZE_FILL
+		elif control == save_stack:
+			control.size_flags_horizontal = Control.SIZE_FILL
+			control.size_flags_vertical = Control.SIZE_FILL
+		control.visible = not mobile_layout
+	mobile_overlay_control = null
+	mobile_overlay_home = null
+	mobile_overlay_home_index = -1
+	if mobile_overlay_panel != null:
+		mobile_overlay_panel.visible = false
+
+func _on_root_resized() -> void:
+	call_deferred("_apply_responsive_layout")
+
+func _get_responsive_viewport_size() -> Vector2:
+	var viewport_size := get_viewport_rect().size
+	if not is_web_build:
+		return viewport_size
+	var css_width = JavaScriptBridge.eval("window.innerWidth", true)
+	var css_height = JavaScriptBridge.eval("window.innerHeight", true)
+	if css_width != null and css_height != null:
+		var browser_size := Vector2(float(css_width), float(css_height))
+		if browser_size.x > 0.0 and browser_size.y > 0.0:
+			return browser_size
+	return viewport_size
+
+func _apply_responsive_layout() -> void:
+	if pitch_field == null:
+		return
+	var viewport_size := _get_responsive_viewport_size()
+	var portrait := viewport_size.y > viewport_size.x * 1.08
+	var should_use_mobile := is_web_build and (
+		portrait or minf(viewport_size.x, viewport_size.y) < 720.0
+	)
+	_set_mobile_layout(should_use_mobile, portrait)
+
+func _set_mobile_layout(enabled: bool, portrait := true) -> void:
+	var layout_changed := enabled != mobile_layout
+	var portrait_changed := enabled and portrait != mobile_portrait_layout
+	if not layout_changed and not portrait_changed:
+		return
+	if not enabled:
+		mobile_layout = false
+		mobile_portrait_layout = false
+		_close_mobile_overlay()
+	else:
+		mobile_layout = true
+		mobile_portrait_layout = portrait
+		_close_mobile_overlay()
+
+	root_margin.add_theme_constant_override("margin_left", 5 if mobile_layout else 14)
+	root_margin.add_theme_constant_override("margin_right", 5 if mobile_layout else 14)
+	root_margin.add_theme_constant_override("margin_top", 5 if mobile_layout else 12)
+	root_margin.add_theme_constant_override("margin_bottom", 5 if mobile_layout else 12)
+	page_container.add_theme_constant_override("separation", 4 if mobile_layout else 10)
+	body_container.add_theme_constant_override("separation", 0 if mobile_layout else 10)
+	header_row.add_theme_constant_override("separation", 7 if mobile_layout else 20)
+	header_title.add_theme_font_size_override("font_size", 17 if mobile_layout else 27)
+	header_subtitle.visible = not mobile_layout
+	for index in header_metric_stacks.size():
+		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else 126.0
+		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 12)
+		var value_label := header_metric_stacks[index].get_child(1) as Label
+		value_label.add_theme_font_size_override("font_size", 15 if mobile_layout else 21)
+	if header_metric_headings.size() >= 3:
+		header_metric_headings[1].text = "XP / S" if mobile_layout else "XP / SECOND"
+		header_metric_headings[2].text = "DNA • ARCANA"
+	prestige_header_stack.visible = _has_genetic_reveal() and not mobile_layout
+	save_stack.visible = not mobile_layout
+	mobile_nav.visible = mobile_layout
+	upgrade_panel.visible = not mobile_layout
+	equipment_sidebar.visible = not mobile_layout
+	event_log_panel.visible = not mobile_layout
+	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else 360.0
+	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else 215.0
+	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
+	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else 8)
+	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else 12)
+	previous_button.custom_minimum_size.x = 42.0 if mobile_layout else 140.0
+	next_button.custom_minimum_size.x = 42.0 if mobile_layout else 140.0
+	previous_button.text = "‹" if mobile_layout else "‹ PREVIOUS BATTER"
+	if mobile_layout:
+		next_button.text = "›"
+	opponent_label.add_theme_font_size_override("font_size", 18 if mobile_layout else 25)
+	quirk_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 14)
+	era_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 13)
+	distance_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
+	field_stack.add_theme_constant_override("separation", 4 if mobile_layout else 7)
+	pitch_field.custom_minimum_size = Vector2(0.0, 320.0) if mobile_layout else Vector2(450.0, 360.0)
+	pitch_field.set_portrait_layout(mobile_layout and mobile_portrait_layout)
+	visual_weight_label.visible = not mobile_layout
+	last_result_label.add_theme_font_size_override("font_size", 12 if mobile_layout else 18)
+	mastery_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
+	outcomes_grid.columns = 4 if mobile_layout else Content.OUTCOME_NAMES.size()
+	for index in outcome_panels.size():
+		outcome_name_labels[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 11)
+		outcome_probability_labels[index].add_theme_font_size_override("font_size", 13 if mobile_layout else 16)
+		outcome_delay_labels[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 10)
+	strikeout_payout_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
+	field_stat_panel.offset_left = 6.0 if mobile_layout else 10.0
+	field_stat_panel.offset_top = 6.0 if mobile_layout else 10.0
+	field_stat_panel.offset_right = 168.0 if mobile_layout else 252.0
+	field_stat_panel.offset_bottom = 150.0 if mobile_layout else 176.0
+	inventory_dock.offset_left = -248.0 if mobile_layout else -310.0
+	inventory_dock.offset_top = -40.0 if mobile_layout else -48.0
+	for slot_button_value in inventory_slot_buttons.values():
+		var slot_button := slot_button_value as Button
+		slot_button.custom_minimum_size = Vector2(30.0, 30.0) if mobile_layout else Vector2(38.0, 38.0)
+		slot_button.add_theme_font_size_override("font_size", 12 if mobile_layout else 15)
+	opponent_loadout_dock.offset_left = -40.0 if mobile_layout else -46.0
+	opponent_loadout_dock.offset_top = 44.0 if mobile_layout else 54.0
+	opponent_loadout_dock.offset_bottom = 300.0 if mobile_layout else 354.0
+	locker_slot_grid.columns = 4 if mobile_layout else Content.LOOT_SLOTS.size()
+	root_margin.queue_sort()
+	_refresh_interface()
+
+func _build_play_area(parent: Control) -> void:
+	play_panel = PanelContainer.new()
+	play_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	play_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	play_panel.size_flags_stretch_ratio = 1.85
+	parent.add_child(play_panel)
+	play_stack = VBoxContainer.new()
+	play_stack.add_theme_constant_override("separation", 8)
+	play_panel.add_child(play_stack)
 
 	era_label = Label.new()
 	era_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	era_label.add_theme_font_size_override("font_size", 13)
 	era_label.add_theme_color_override("font_color", COLOR_ACCENT)
-	stack.add_child(era_label)
+	play_stack.add_child(era_label)
 
-	var opponent_row := HBoxContainer.new()
+	opponent_row = HBoxContainer.new()
 	opponent_row.add_theme_constant_override("separation", 12)
-	stack.add_child(opponent_row)
+	play_stack.add_child(opponent_row)
 	previous_button = Button.new()
 	previous_button.text = "‹ PREVIOUS BATTER"
 	previous_button.custom_minimum_size.x = 140.0
 	previous_button.pressed.connect(_previous_opponent)
 	opponent_row.add_child(previous_button)
-	var opponent_stack := VBoxContainer.new()
+	opponent_stack = VBoxContainer.new()
 	opponent_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	opponent_row.add_child(opponent_stack)
 	opponent_label = Label.new()
@@ -519,14 +791,14 @@ func _build_play_area(parent: Control) -> void:
 	next_button.pressed.connect(_next_opponent)
 	opponent_row.add_child(next_button)
 
-	_build_distance_status(stack)
+	_build_distance_status(play_stack)
 
-	var play_row := HBoxContainer.new()
+	play_row = HBoxContainer.new()
 	play_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	play_row.add_theme_constant_override("separation", 8)
-	stack.add_child(play_row)
+	play_stack.add_child(play_row)
 	_build_equipment_sidebar(play_row)
-	var field_stack := VBoxContainer.new()
+	field_stack = VBoxContainer.new()
 	field_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	field_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	field_stack.add_theme_constant_override("separation", 7)
@@ -549,7 +821,7 @@ func _build_play_area(parent: Control) -> void:
 	_build_inventory_dock(pitch_field)
 	_build_opponent_loadout_dock(pitch_field)
 
-	var field_footer := HBoxContainer.new()
+	field_footer = HBoxContainer.new()
 	field_stack.add_child(field_footer)
 	last_result_label = Label.new()
 	last_result_label.text = "Waiting for the first pitch…"
@@ -579,13 +851,15 @@ func _build_play_area(parent: Control) -> void:
 	mastery_bar.custom_minimum_size.y = 10.0
 	field_stack.add_child(mastery_bar)
 
-	var outcomes := HBoxContainer.new()
-	outcomes.add_theme_constant_override("separation", 5)
-	field_stack.add_child(outcomes)
+	outcomes_grid = GridContainer.new()
+	outcomes_grid.columns = Content.OUTCOME_NAMES.size()
+	outcomes_grid.add_theme_constant_override("h_separation", 5)
+	outcomes_grid.add_theme_constant_override("v_separation", 5)
+	field_stack.add_child(outcomes_grid)
 	for index in Content.OUTCOME_NAMES.size():
 		var outcome_panel := PanelContainer.new()
 		outcome_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		outcomes.add_child(outcome_panel)
+		outcomes_grid.add_child(outcome_panel)
 		outcome_panels.append(outcome_panel)
 		var outcome_stack := VBoxContainer.new()
 		outcome_panel.add_child(outcome_stack)
@@ -625,15 +899,16 @@ func _build_distance_status(parent: Control) -> void:
 	parent.add_child(distance_label)
 
 func _build_equipment_sidebar(parent: Control) -> void:
-	var sidebar_scroll := ScrollContainer.new()
-	sidebar_scroll.custom_minimum_size.x = 215.0
-	sidebar_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sidebar_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	parent.add_child(sidebar_scroll)
+	equipment_sidebar = ScrollContainer.new()
+	equipment_sidebar.custom_minimum_size.x = 215.0
+	equipment_sidebar.size_flags_horizontal = Control.SIZE_FILL
+	equipment_sidebar.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	equipment_sidebar.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	parent.add_child(equipment_sidebar)
 	var sidebar := VBoxContainer.new()
 	sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sidebar.add_theme_constant_override("separation", 6)
-	sidebar_scroll.add_child(sidebar)
+	equipment_sidebar.add_child(sidebar)
 	var heading := Label.new()
 	heading.text = "CURRENT UPGRADABLE LOADOUT"
 	heading.add_theme_font_size_override("font_size", 12)
@@ -680,22 +955,22 @@ func _build_inventory_dock(parent: Control) -> void:
 		inventory_slot_buttons[slot] = button
 
 func _build_field_stat_overlay(parent: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.name = "FieldStatOverlay"
-	panel.z_index = 40
-	panel.set_anchor(SIDE_LEFT, 0.0)
-	panel.set_anchor(SIDE_TOP, 0.0)
-	panel.set_anchor(SIDE_RIGHT, 0.0)
-	panel.set_anchor(SIDE_BOTTOM, 0.0)
-	panel.offset_left = 10.0
-	panel.offset_top = 10.0
-	panel.offset_right = 252.0
-	panel.offset_bottom = 176.0
-	panel.modulate = Color(1.0, 1.0, 1.0, 0.88)
-	parent.add_child(panel)
+	field_stat_panel = PanelContainer.new()
+	field_stat_panel.name = "FieldStatOverlay"
+	field_stat_panel.z_index = 40
+	field_stat_panel.set_anchor(SIDE_LEFT, 0.0)
+	field_stat_panel.set_anchor(SIDE_TOP, 0.0)
+	field_stat_panel.set_anchor(SIDE_RIGHT, 0.0)
+	field_stat_panel.set_anchor(SIDE_BOTTOM, 0.0)
+	field_stat_panel.offset_left = 10.0
+	field_stat_panel.offset_top = 10.0
+	field_stat_panel.offset_right = 252.0
+	field_stat_panel.offset_bottom = 176.0
+	field_stat_panel.modulate = Color(1.0, 1.0, 1.0, 0.88)
+	parent.add_child(field_stat_panel)
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 1)
-	panel.add_child(stack)
+	field_stat_panel.add_child(stack)
 	var heading := Label.new()
 	heading.text = "LIVE THROW PROFILE"
 	heading.add_theme_font_size_override("font_size", 10)
@@ -814,9 +1089,11 @@ func _build_locker_dialog() -> void:
 	locker_dialog_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	locker_dialog_status_label.add_theme_font_size_override("font_size", 13)
 	stack.add_child(locker_dialog_status_label)
-	var slot_row := HBoxContainer.new()
-	slot_row.add_theme_constant_override("separation", 5)
-	stack.add_child(slot_row)
+	locker_slot_grid = GridContainer.new()
+	locker_slot_grid.columns = Content.LOOT_SLOTS.size()
+	locker_slot_grid.add_theme_constant_override("h_separation", 5)
+	locker_slot_grid.add_theme_constant_override("v_separation", 5)
+	stack.add_child(locker_slot_grid)
 	for definition in Content.LOOT_SLOTS:
 		var slot := str(definition.id)
 		var button := Button.new()
@@ -824,7 +1101,7 @@ func _build_locker_dialog() -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(_select_locker_slot.bind(slot))
-		slot_row.add_child(button)
+		locker_slot_grid.add_child(button)
 		locker_dialog_slot_buttons[slot] = button
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -843,7 +1120,16 @@ func _open_locker(slot: String) -> void:
 		return
 	selected_loot_slot = slot
 	_rebuild_locker_dialog()
-	locker_dialog.popup_centered(Vector2i(940, 700))
+	if mobile_layout:
+		var viewport_size := get_viewport_rect().size
+		locker_dialog.min_size = Vector2i(320, 440)
+		locker_dialog.popup_centered(Vector2i(
+			clampi(int(viewport_size.x) - 16, 320, 620),
+			clampi(int(viewport_size.y) - 24, 440, 760)
+		))
+	else:
+		locker_dialog.min_size = Vector2i(800, 560)
+		locker_dialog.popup_centered(Vector2i(940, 700))
 
 func _select_locker_slot(slot: String) -> void:
 	if not game.is_loot_slot_unlocked(slot):
@@ -966,11 +1252,11 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	equipment_labels[id] = {"value": value_label, "effect": effect_label}
 
 func _build_upgrade_area(parent: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size.x = 360.0
-	panel.size_flags_horizontal = Control.SIZE_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parent.add_child(panel)
+	upgrade_panel = PanelContainer.new()
+	upgrade_panel.custom_minimum_size.x = 360.0
+	upgrade_panel.size_flags_horizontal = Control.SIZE_FILL
+	upgrade_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(upgrade_panel)
 	# Every long child explicitly clips or wraps, so the TabContainer can own its
 	# real panel width. Its native overflow arrows then remain usable instead of
 	# being clipped by an intermediate viewport.
@@ -980,7 +1266,7 @@ func _build_upgrade_area(parent: Control) -> void:
 	upgrade_tabs.clip_tabs = true
 	upgrade_tabs.use_hidden_tabs_for_min_size = true
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 8)
-	panel.add_child(upgrade_tabs)
+	upgrade_panel.add_child(upgrade_tabs)
 	_build_training_tab(upgrade_tabs)
 	_build_pitch_tab(upgrade_tabs)
 	_build_ball_tab(upgrade_tabs)
@@ -1241,15 +1527,16 @@ func _upgrade_button(description: String) -> Button:
 	return button
 
 func _build_event_log(parent: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size.y = 72.0
-	parent.add_child(panel)
+	event_log_panel = PanelContainer.new()
+	event_log_panel.custom_minimum_size.y = 72.0
+	event_log_panel.size_flags_vertical = Control.SIZE_FILL
+	parent.add_child(event_log_panel)
 	event_log = RichTextLabel.new()
 	event_log.bbcode_enabled = true
 	event_log.fit_content = false
 	event_log.scroll_following = true
 	event_log.add_theme_font_size_override("normal_font_size", 14)
-	panel.add_child(event_log)
+	event_log_panel.add_child(event_log)
 
 func _build_confirmation_dialog() -> void:
 	_build_locker_dialog()
@@ -1449,7 +1736,7 @@ func _refresh_reveal_visibility() -> void:
 	var divine_revealed := _has_divine_reveal()
 	var reveal_mask := int(genetic_revealed) + int(eldritch_revealed) * 2 + int(divine_revealed) * 4
 
-	prestige_header_stack.visible = genetic_revealed
+	prestige_header_stack.visible = genetic_revealed and not mobile_layout
 	if genetic_revealed:
 		prestige_header_heading.text = "DNA • ARCANA" if eldritch_revealed else "DNA"
 		rings_label.text = (
@@ -1600,13 +1887,24 @@ func _refresh_interface() -> void:
 		next_button.text = "FINAL BOSS ACTIVE"
 	else:
 		next_button.text = "NEXT BATTER LOCKED"
+	if mobile_layout:
+		previous_button.text = "‹"
+		next_button.text = "›"
 	var distance := game.get_current_distance()
-	distance_label.text = "%s  •  %s  •  XP ×%s  •  BATTER THREAT +%.2f" % [
-		str(distance.name),
-		str(distance.label),
-		BaseballGameState.format_number(game.get_distance_xp_multiplier()),
-		game.get_distance_difficulty(),
-	]
+	distance_label.text = (
+		"%s  •  XP ×%s  •  THREAT +%.2f" % [
+			str(distance.label),
+			BaseballGameState.format_number(game.get_distance_xp_multiplier()),
+			game.get_distance_difficulty(),
+		]
+		if mobile_layout
+		else "%s  •  %s  •  XP ×%s  •  BATTER THREAT +%.2f" % [
+			str(distance.name),
+			str(distance.label),
+			BaseballGameState.format_number(game.get_distance_xp_multiplier()),
+			game.get_distance_difficulty(),
+		]
+	)
 	var mastery_value := game.opponent_mastery[game.current_opponent]
 	var mastery_required := float(opponent.mastery_required)
 	var overmastery_summary := game.get_overmastery_summary()

@@ -67,6 +67,11 @@ echo "Running progressive-interface and tab-layout tests..."
   --log-file "${OFPS_TEMP_DIR}/interface.log" \
   -s tests/ui_runner.gd -- --fresh
 
+echo "Running portrait browser-interface tests..."
+"${OFPS_GODOT_BIN}" --headless --path "${OFPS_ROOT}" \
+  --log-file "${OFPS_TEMP_DIR}/mobile-interface.log" \
+  -s tests/mobile_ui_runner.gd -- --fresh
+
 echo "Exporting macOS Universal..."
 "${OFPS_GODOT_BIN}" --headless --path "${OFPS_ROOT}" \
   --log-file "${OFPS_TEMP_DIR}/export-macos.log" \
@@ -164,6 +169,11 @@ OFPS_SOURCE_STAGE="${OFPS_TEMP_DIR}/${OFPS_TITLE} v${OFPS_VERSION} Source"
   --exclude '.godot/' \
   --exclude 'build/' \
   --exclude 'release/' \
+	--exclude 'sites-host/node_modules/' \
+	--exclude 'sites-host/.vinext/' \
+	--exclude 'sites-host/.wrangler/' \
+	--exclude 'sites-host/dist/' \
+	--exclude 'sites-host/public/game/' \
   --exclude 'SHA256SUMS.txt' \
   --exclude '*.log' \
   "${OFPS_ROOT}/" "${OFPS_SOURCE_STAGE}/"

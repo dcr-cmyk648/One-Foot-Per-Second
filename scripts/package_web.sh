@@ -45,6 +45,11 @@ if [[ "${OFPS_SKIP_TESTS:-false}" != "true" ]]; then
   "${OFPS_GODOT_BIN}" --headless --path "${OFPS_ROOT}" \
     --log-file "${OFPS_TEMP_DIR}/interface.log" \
     -s tests/ui_runner.gd -- --fresh
+
+  echo "Running portrait browser-interface tests..."
+  "${OFPS_GODOT_BIN}" --headless --path "${OFPS_ROOT}" \
+    --log-file "${OFPS_TEMP_DIR}/mobile-interface.log" \
+    -s tests/mobile_ui_runner.gd -- --fresh
 fi
 
 echo "Exporting the single-threaded Web build..."
