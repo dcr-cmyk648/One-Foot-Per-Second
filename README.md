@@ -2,14 +2,14 @@
 
 A top-down baseball idle game about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the playable **v0.10.7 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
+This repository contains the playable **v0.10.8 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
 
 ## Share or install on another computer
 
 Upload this single file to Google Drive (or any ordinary file host):
 
 ```text
-release/One Foot Per Second v0.10.7 All Platforms.zip
+release/One Foot Per Second v0.10.8 All Platforms.zip
 ```
 
 It contains a static browser-site ZIP, a Universal Mac DMG, separate Intel/AMD and ARM Windows ZIPs, separate Intel/AMD and ARM Linux archives, source code, instructions, a platform manifest, and SHA-256 checksums. Recipients can play from an uploaded browser build or choose the native package matching their computer. Godot is not needed to play.
@@ -26,7 +26,7 @@ The native packages are portable builds, not store submissions. The Mac app is a
 
 ## Play in a browser
 
-`release/One Foot Per Second v0.10.7/One Foot Per Second v0.10.7 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database or application server. On iPhone, its INSTALL menu explains Safari's Add to Home Screen flow; on Android, it opens the native install prompt when Chrome makes one available and otherwise gives the matching menu steps. Installed phone versions remain on the same five-minute Web update channel. While the game is visible, supported browsers also request a screen wake lock and reacquire it after returning to the tab. A running tab offers to save, activate a newly cached build, and reload; it never interrupts a pitch with a forced update.
+`release/One Foot Per Second v0.10.8/One Foot Per Second v0.10.8 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database or application server. On iPhone, its INSTALL menu explains Safari's Add to Home Screen flow; on Android, it opens the native install prompt when Chrome makes one available and otherwise gives the matching menu steps. Installed phone versions remain on the same five-minute Web update channel. While the game is visible, supported browsers also request a screen wake lock and reacquire it after returning to the tab. A running tab offers to save, activate a newly cached build, and reload; it never interrupts a pitch with a forced update.
 
 To build only the browser package, or serve the current build locally:
 
@@ -55,7 +55,7 @@ Commit the refreshed `web/` directory whenever gameplay source changes. The comp
 
 ## Play on macOS
 
-1. Open `release/One Foot Per Second v0.10.7 macOS Universal.dmg`.
+1. Open `release/One Foot Per Second v0.10.8 macOS Universal.dmg`.
 2. Drag **One Foot Per Second.app** to Applications, or run it from the disk image.
 3. If macOS asks for confirmation, Control-click the app, choose **Open**, and confirm.
 
@@ -72,7 +72,7 @@ Only a completed strikeout awards XP or opponent mastery. Partial strikes award 
 - Alien batters require four through nine strikes. Genetic count compression can reduce post-human requirements, never below three, while preserving the original larger payout.
 - Eldritch batters require 12, 18, 28, 42, and finally 64 strikes. Genetic fielders, mirror clones, and bullpen portals let ordinary hits preserve an unfinished count.
 
-The eight compact outcome cards show only the name, live probability, and added lineup delay for Grand Slam, Home Run, Triple, Double, Single, Foul, Ball, and Strike. A separate small line shows the XP paid by a completed strikeout. Desktop details live in tooltips; phones expose the same explanations in closable tap-inspection sheets, including opponent equipment and compact profile data.
+The eight compact outcome cards show only the name, live probability, and added lineup delay for Grand Slam, Home Run, Triple, Double, Single, Foul, Ball, and Strike. A separate small line shows the XP paid by a completed strikeout. Desktop details live in tooltips; phones expose the same explanations in closable tap-inspection sheets, including opponent equipment and compact profile data. Player-loot rows remain passive so mouse wheels and touch drags scroll normally. Separate Equip and Compare controls handle changes and open the bounded full-stat comparison.
 
 ## Campaign details (full spoilers)
 
@@ -82,7 +82,7 @@ The shipped interface reveals each layer only when its story encounter is reache
 <summary>Reveal the complete campaign and prestige rules</summary>
 
 
-There are 45 opponent classes and more than 100 rotating individual batter names.
+There are 45 opponent classes backed by era-specific, composable names and titles, producing thousands of readable individual batter identities.
 
 1. **Human baseball, levels 1–30:** backyard toddlers, youth leagues, school ball, college, the minors, and MLB. The first body reaches its hard limit at 211.6 mph—twice the 105.8 mph fastest pitch used as the real-world calibration—and faces Bambino Rex.
 2. **Xylophax, level 31:** a one-minute courtesy exhibition of guaranteed Grand Slams. Xylophax then offers prenatal genetic engineering and a Time Machine, because the modifications have to begin when you are a baby.
@@ -91,7 +91,7 @@ There are 45 opponent classes and more than 100 rotating individual batter names
 5. **Eldritch baseball, levels 41–45:** mirror-reality bullpens, time compression, portals, causal baseballs, Ball-rog the Unstrikeable, and Octathulhu, God of the Eightfold Swing. Octathulhu only accepts a pitch at exactly light speed.
 6. **Divine restoration:** after Octathulhu falls, God restores everything and offers one permanent blessing. All six can be collected across later universes; additional victories award stackable Halos.
 
-Genetic rebirth awards `floor((body XP / 10B)^(1/3))` DNA before multipliers. Eldritch ascension awards `floor((DNA earned in this reality)^0.60)` Arcana before multipliers. Genetic rebirth resets the body and Locker but preserves mutations; eldritch ascension also erases DNA and genetics but preserves magic; divine restoration erases both lower layers but preserves divine rewards and lifetime statistics. Reverse Terminator Wardrobe is the explicit exception: each rank carries one randomly selected equipped item through genetic time travel.
+Genetic rebirth awards `floor((body XP / 10B)^(1/3))` DNA before multipliers. Eldritch ascension awards `floor((DNA earned in this reality)^0.60)` Arcana before multipliers. Genetic rebirth resets the body and Locker but preserves mutations; eldritch ascension also erases DNA and genetics but preserves magic; divine restoration erases both lower layers but preserves divine rewards and lifetime statistics. Inherited Scorebook Cortex reduces each opponent's mastery target to 85% per rank, while excess farming begins at that same adjusted target. Reverse Terminator Wardrobe is the equipment exception: each rank carries one randomly selected equipped item through genetic time travel.
 
 </details>
 
@@ -101,11 +101,11 @@ The mound has 15 selectable distances, from 3 feet to 100,000 light-years. Farth
 
 Spend XP on eight additive fundamentals—speed, quality, recovery, offline efficiency, distance control, base lineup time, fair-hit delay, and pitch selection—fourteen pitch types, twenty-six evolving ball shells, and forty-two one-time facilities or increasingly indefensible interventions. Training unlocks gradually and keeps one ordinary purchase per displayed base stat. Facilities are rarer, expensive multipliers meant to feel consequential; several ask for a measured speed, a farther mound, or a strikeout achievement as well as a level. Every tab is ordered by unlock level, then cost, and its entries remain effect-hidden until all stated requirements are met. Costs are rounded to readable whole numbers, while descriptions state only the concrete arithmetic. Maximum ranks and body limits stay out of ordinary descriptions until they actually become relevant. Pitch, Ball, and Facility purchases have separate tabs. Every learned pitch enters the automatic arsenal, with Pitch Calling increasingly favoring stronger options. The field's subtle live profile exposes all eight trained stats, the left loadout shows the player's current ball, arsenal, body, and facilities, and the batter's body, bat, and later equipment appear vertically on the batter's side.
 
-Completed strikeouts also have a 12% chance to drop a wearable item; hits never do. The first career strikeout guarantees Little Timmy's Oversized Cap, and a pity roll guarantees a parcel by the tenth eligible dry roll. Six human slots—Hat, Jersey, Jock Strap, Glove, Pants, and Cleats—appear as compact letter squares at the field's lower-right. A seventh anonymous slot becomes a Relic after human baseball. An equipped square uses only its rarity color—Common gray, Magic blue, Rare gold, Legendary orange, or Unique purple—without a redundant icon. Clicking a square opens a roomy slot-by-slot Locker. Every item has an integer Power derived from its real affixes; lists sort highest-Power first. Each slot keeps 10 items, and overflow removes the lowest-Power eligible item while equipped and starred items are protected. Legendary and Unique rolls are genuinely rare rather than routine. The genetic Autonomic Wardrobe Lobe is an optional lazy-player upgrade that equips the highest-Power item in every unlocked slot.
+Completed strikeouts also have a 12% chance to drop a wearable item; hits never do. The first career strikeout guarantees Little Timmy's Oversized Cap, and a pity roll guarantees a parcel by the tenth eligible dry roll. Drops show a brief rarity-colored field callout and never equip themselves. Six human slots—Hat, Jersey, Jock Strap, Glove, Pants, and Cleats—appear as compact letter squares at the field's lower-right. A seventh anonymous slot becomes a Relic after human baseball. An equipped square uses only its rarity color—Common gray, Magic blue, Rare gold, Legendary orange, or Unique purple—without a redundant icon. Clicking a square opens a slot-by-slot Locker whose aggregate loadout is explicitly separated from each item's bonuses. Item text is passive for easy phone scrolling; every row has bounded Equip, Compare, and protection-star controls. Browser mouseover shows all stats and signed differences from the equipped piece; holding a phone item for 0.55 seconds opens the same phone-safe comparison window, while ordinary taps and drags remain available for scrolling. The comparison window has explicit Swap, two-step Trash, and Keep actions. Every item has an integer Power derived from its real affixes; lists sort highest-Power first. Each slot keeps 10 items, and overflow removes the lowest-Power eligible item while equipped and starred items are protected. Cleared gear becomes persistent Scrap equal to item level times rarity value; Scrap is saved but intentionally has no spend yet. Legendary and Unique rolls are genuinely rare rather than routine. The genetic Autonomic Wardrobe Lobe is the optional auto-equip-best upgrade.
 
 Mastery continues beyond an opponent's unlock target. Each doubling of excess mastery adds a small logarithmic strikeout-XP multiplier and improves rarity and affix-roll odds. The item level remains capped to the opponent being farmed, so an overmastered toddler can drop an unusually good level-one cap but never late-game gear.
 
-Gear is a capped sidegrade: a complete loadout can add at most 15% speed, 18% recovery, 0.50 quality, 25% strikeout XP, 20% mastery, and 15% distance XP. Training and prestige can clear the complete campaign with loot disabled. Gear speed is applied after the body's era cap, so a good outfit can exceed 211.6 mph, Mach 12, or 1c without being required to reach any gate. Mirror clones dilute aggregate equipment bonuses until One-Size-Fits-All-Realities Uniform teaches every clone how clothing works.
+Gear is a capped sidegrade: a complete loadout can add at most 15% speed, 18% recovery, 0.50 quality, 25% strikeout XP, 20% mastery, and 15% distance XP. Training and prestige can clear the complete campaign with loot disabled. Gear speed is applied after the body's era cap, so a good outfit can exceed 211.6 mph, Mach 12, or 1c without being required to reach any gate. Post-human Symbiotic Wardrobe Dermis multiplies item effects by 1.20 per rank before those aggregate caps. Mirror clones dilute aggregate equipment bonuses until One-Size-Fits-All-Realities Uniform teaches every clone how clothing works.
 
 Moving backward to farm an easier opponent is always allowed. Advancing is tactical: a high-reward alien with a long count can be worse XP per second than a reliable earlier strikeout. Genetic automation can advance, train, and select the best opponent/range pair while the game is running.
 
@@ -147,9 +147,9 @@ godot --headless --path . --script res://tests/ui_runner.gd -- --fresh
 godot --headless --path . --script res://tests/mobile_ui_runner.gd -- --fresh
 ```
 
-The regression suite covers all eight outcomes, strikeout-only rewards, Foul and Ball counts, walks, hit resets, protected counts, Grand Slam immunity, randomized pitch selection and exact speed snapshots, the release/flight/impact state machine, one-live-ball human rules, post-human 2,048-ball volleys, immutable projectiles, live mound/opponent controls, constant-speed misses, empty-plate suppression, both visible timers, replacement timing and direction, randomized opponent loadouts, all five loot tiers, Power sorting, rarity-colored slots, equipment caps and clone dilution, starred 10-item pruning, post-cap mastery farming, typed hard reset, save migration, offline-efficiency rewards, cosmic completion, and seven-day aggregate simulation. The desktop interface audit clicks every visible tab at every reveal layer and checks stable size, bounds, popup inventory, offline-return summary, tier catalogs, and spoiler gating; the portrait audit checks the rotated lane, phone overlays, compact controls, and lossless return to desktop layout.
+The regression suite covers all eight outcomes, strikeout-only rewards, Foul and Ball counts, walks, hit resets, protected counts, Grand Slam immunity, randomized pitch selection and exact speed snapshots, the release/flight/impact state machine, one-live-ball human rules, post-human 2,048-ball volleys, immutable projectiles, live mound/opponent controls, constant-speed misses, empty-plate suppression, both visible timers, replacement timing and direction, randomized opponent loadouts, deterministic high-variety era naming, all five loot tiers, Power sorting, rarity-colored slots, no-auto-equip drops, equipment caps/amplification/clone dilution, starred 10-item pruning, Scrap, adjusted mastery targets, post-cap mastery farming, typed hard reset, save migration, offline-efficiency rewards, cosmic completion, and seven-day aggregate simulation. The desktop interface audit clicks every visible tab at every reveal layer and checks stable size, bounds, hover comparison data, explicit item actions, offline-return summary, tier catalogs, and spoiler gating; the portrait audit checks the rotated lane, phone overlays, scroll-safe passive equipment rows, hold-to-inspect, touch-sized actions, compact controls, and lossless return to desktop layout.
 
-The deterministic greedy benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. The v0.10.7 human lifetime reaches the first alien exhibition after roughly 38 active hours, while the complete multi-reset audit reaches cosmic victory after roughly 72 days 9 hours. The full audit is documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
+The deterministic greedy benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. The v0.10.8 human lifetime reaches the first alien exhibition after roughly 38 active hours, while the complete multi-reset audit reaches cosmic victory after roughly 68 days 21 hours. The full audit is documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Save data
 
@@ -159,4 +159,4 @@ The game autosaves every ten seconds, saves on exit or browser focus loss, and s
 ~/Library/Application Support/Godot/app_userdata/One Foot Per Second/one_foot_per_second_save.json
 ```
 
-Save version 13 preserves the explicit pitch phase, its immutable sampled outcome, selected pitch, exact speed and duration, the generated batter, both Strike and Ball counts, the eight-axis Training model, all facilities, and Autonomic Wardrobe. Older v13 saves simply begin the new offline-efficiency training at rank zero. Version-12 saves convert their multiplicative training investments to equivalent additive ranks and split the former single batter-cooldown axis into base lineup time and fair-hit delay. Earlier saves retain all prior migration behavior, including quality-rank consolidation, Belt-to-Jock-Strap conversion, added outcomes, and retired prestige mappings.
+Save version 14 additionally preserves Scrap and the two new genetic ranks. Version-13 saves load with zero Scrap and both new ranks unpurchased; all older migration behavior remains intact, including offline-efficiency defaults, additive Training conversion, batter-cooldown splitting, quality-rank consolidation, Belt-to-Jock-Strap conversion, added outcomes, and retired prestige mappings.

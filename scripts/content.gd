@@ -493,6 +493,103 @@ const BATTER_NAME_POOLS := [
 	],
 ]
 
+# Replacement batters use these parts in sixteen different arrangements. The
+# authored pool above remains one possible arrangement, while the composable
+# forms provide thousands of era-appropriate identities per league without
+# storing cosmetic strings in the save file.
+const BATTER_NAME_COMPONENTS := [
+	{
+		"given": ["Timmy", "Nora", "Kevin", "Maddie", "Sam", "Sophie", "Ben", "Claire"],
+		"middle": ["Snack", "Crayon", "Juice", "Nap", "Biscuit", "Pajama", "Wiggle", "Bubbles"],
+		"family": ["McGee", "Crumb", "Juicebox", "Wobble", "Sprinkles", "Two-Socks", "Puddles", "Dinosaur"],
+		"nickname": ["No-Nap", "Sticky Hands", "Tiny", "Big Kid", "Snacktime", "Uh-Oh", "Fast Shoes", "Again!"],
+		"epithet": ["Breaker of Bedtime", "Keeper of the Juice Box", "Terror of the Sandbox", "Who Refuses Naps", "Champion of Sharing", "Bearer of the Blue Crayon", "Lord of the Playroom", "The Very Four-Year-Old"],
+		"mononym": ["Binky", "Sprout", "Scooter", "Muffin", "Pickles", "Button", "Noodle", "Tater"],
+		"title": ["Prince", "Princess", "Captain", "Doctor", "Big Kid", "Snack Boss", "Sir", "Lady"],
+		"origin": ["the Sandbox", "Snack Table", "the Blue Slide", "Quiet Time", "Backyardia", "the Toy Chest"],
+	},
+	{
+		"given": ["Brayden", "Kayleigh", "Jaxxon", "Trevor", "Riley", "Easton", "Harper", "Gabe"],
+		"middle": ["Elite", "Travel", "Launch", "Tournament", "Composite", "All-Star", "Select", "Weekend"],
+		"family": ["Batson", "Cleats", "Moonshot", "Dugout", "Rally", "Fencewell", "Gloveson", "Coachman"],
+		"nickname": ["Two Xs", "Tournament", "Helmet Hair", "The Ringer", "Bat Flip", "Early Practice", "Matching Socks", "Pool Play"],
+		"epithet": ["Crown of Little League", "Tyrant of Pool Play", "Destroyer of Orange Slices", "First of the Select Team", "Who Never Misses Practice", "Bearer of the Composite Bat", "Scourge of Saturday Mornings", "Champion of the Snack Stand"],
+		"mononym": ["Sluggo", "Rally", "Dinger", "Rocket", "Webgem", "Shortstop", "Acekid", "Moonshot"],
+		"title": ["Captain", "All-Star", "Coach's Favorite", "Tournament King", "Select", "Cleanup", "Leadoff", "District"],
+		"origin": ["Field Three", "the Travel Team", "Pool B", "District Seven", "the Batting Cage", "Saturday Bracket"],
+	},
+	{
+		"given": ["Seth", "Lola", "Gavin", "Vanessa", "Derek", "Casey", "Holly", "Stella"],
+		"middle": ["Varsity", "Detention", "Honor-Roll", "Aluminum", "Cafeteria", "Pep-Rally", "Study-Hall", "Late-Bus"],
+		"family": ["Lineup", "Lockermore", "Pepper", "Blacktop", "Bellringer", "Hallpass", "Scorebook", "Backstop"],
+		"nickname": ["JV", "Pop Quiz", "The Senior", "Extra Credit", "Lunch Period", "No Homework", "Bus Ride", "Coach's Nephew"],
+		"epithet": ["Sovereign of Varsity", "Dread of the Faculty Lot", "Keeper of the Hall Pass", "Who Bats After Detention", "Champion of Third Period", "Breaker of Aluminum", "First Name on the Lineup Card", "The Unbenched"],
+		"mononym": ["Yearbook", "Hallpass", "Prom", "Pepper", "Crammer", "Letterman", "Backstop", "Homeroom"],
+		"title": ["Captain", "Senior", "Prefect", "Valedictorian", "Cleanup", "Principal", "Coach", "Mascot"],
+		"origin": ["Homeroom", "the Late Bus", "Second Lunch", "Varsity Hill", "the Blacktop", "Study Hall"],
+	},
+	{
+		"given": ["Randy", "Tina", "Neil", "Stan", "Wanda", "Sheldon", "Cami", "Miranda"],
+		"middle": ["Redshirt", "Portal", "Scholarship", "Statistics", "Midterm", "NIL", "Walk-On", "Fifth-Year"],
+		"family": ["Slugworth", "Woodbat", "Campus", "Transfer", "Seminar", "Bursar", "Syllabus", "Alumni"],
+		"nickname": ["The Undeclared", "Office Hours", "Meal Plan", "Extra Semester", "Transfer Portal", "Lab Partner", "Tenured", "The Walk-On"],
+		"epithet": ["Eater of Aluminum", "Lord of the Transfer Portal", "Bearer of the NIL Deal", "Who Majors in Exit Velocity", "Champion of the College World", "The Permanently Eligible", "Destroyer of Office Hours", "First of the Redshirts"],
+		"mononym": ["Syllabus", "Redshirt", "Bursar", "Seminar", "Woodbat", "Campus", "Tenure", "Portal"],
+		"title": ["Professor", "Dean", "Captain", "Doctor", "Redshirt", "Chancellor", "Graduate", "Walk-On"],
+		"origin": ["the Quad", "State", "the Transfer Portal", "West Campus", "the Wood-Bat Lab", "Conference Play"],
+	},
+	{
+		"given": ["Bobby", "Penny", "Dave", "Pete", "Miguel", "Carla", "Oscar", "Olivia"],
+		"middle": ["Per-Diem", "Call-Up", "Option-Year", "Rehab", "Roster", "Bus-League", "Prospect", "Clubhouse"],
+		"family": ["Motel", "Callahan", "Transactions", "Coffee", "Waiver", "Doubleheader", "Farmhand", "Futures"],
+		"nickname": ["Player To Be Named", "The Call-Up", "Forty-Man", "Cash Considerations", "Long Bus", "Rehab Start", "Options Left", "Organizational Depth"],
+		"epithet": ["Awaiting Judgment", "Rider of the Fourteen-Hour Bus", "Keeper of the Meal Money", "Who Survived Double-A", "Last of the Options", "The Per-Diem Crowned", "Lord of Future Considerations", "Summoned to the Show"],
+		"mononym": ["Callup", "Waivers", "Perdiem", "Prospect", "Rehab", "Options", "Clubhouse", "Futures"],
+		"title": ["Prospect", "Veteran", "Call-Up", "Captain", "Organizational", "Taxi-Squad", "Rehab", "Roster"],
+		"origin": ["the Farm", "Triple-A", "the Motel Bullpen", "Waiver Wire", "the Forty-Man", "Bus League"],
+	},
+	{
+		"given": ["Connor", "Alice", "Walter", "Larry", "Evelyn", "Arnie", "Freddie", "Emma"],
+		"middle": ["Contract-Year", "Arbitration", "Launch-Angle", "Exit-Velo", "October", "Franchise", "No-Trade", "Endorsement"],
+		"family": ["Winslow", "Statcast", "Luxurytax", "Pennant", "Walkoff", "Dugout", "Clubhouse", "Cooperstown"],
+		"nickname": ["WARlord", "Mr. October-ish", "The Franchise", "No-Trade", "Exit Velo", "Press Conference", "Walk-Off", "Club Option"],
+		"epithet": ["Last of the Mortals", "Lord of Launch Angle", "Arbiter of Arbitration", "Bearer of the No-Trade Clause", "King Beneath the Luxury Tax", "Who Walks Off October", "The Five-Tool Crowned", "First Ballot of the Old Order"],
+		"mononym": ["Walkoff", "Statcast", "October", "Franchise", "Cooperstown", "Pennant", "WARlord", "Slugger"],
+		"title": ["MVP", "All-Star", "Captain", "Commissioner", "Franchise", "Derby King", "October", "Gold Glove"],
+		"origin": ["Cooperstown", "the Show", "October", "the Luxury-Tax Realm", "Statcast", "the Home Run Derby"],
+	},
+	{
+		"given": ["Henry", "Marla", "Chris", "Betty", "Florence", "Gary", "Derek", "C.A.S.E.Y."],
+		"middle": ["CRISPR", "Firmware", "Bionic", "Four-Armed", "Gene-Doped", "Patch-Notes", "Clone", "Compliance"],
+		"family": ["Prime", "Genome", "Chromosome", "Veincrown", "Patchwork", "Quadgrip", "Mechason", "Protocol"],
+		"nickname": ["HGHenry", "Trenjamin", "Legal Gray Area", "Version Seven", "The Compliance Incident", "Hotfix", "Clone Number", "Unlicensed"],
+		"epithet": ["The Vein-Crowned", "Reader of Seams", "Hands Unnumbered", "Who Passed No Drug Test", "Bearer of Forbidden Alleles", "First of the Hotfixes", "The Patched Beyond Recognition", "Commissioner of New Flesh"],
+		"mononym": ["Trenbolus", "Mechandra", "Crisprax", "Genome-9", "Patchlord", "Quadra", "Bion", "Compliance"],
+		"title": ["Doctor", "Clone", "Prototype", "Commissioner", "Version", "Gene-Lord", "Patch", "Specimen"],
+		"origin": ["Vat Nine", "the Genome League", "Patch 7.4", "the Cloning Annex", "New Flesh", "the Compliance Hearing"],
+	},
+	{
+		"given": ["Mookie", "Vera", "Marvin", "Eunice", "Sol", "Tina", "Carla", "Jones"],
+		"middle": ["Moonbase", "Low-G", "Venusian", "Martian", "Europa", "Solar-Flare", "Comet-Tail", "Orbital"],
+		"family": ["Quasar", "Moonshot", "Ringwalker", "Starfall", "Nebula", "Sunward", "Crater", "Aphelion"],
+		"nickname": ["Low-G", "Red Planet", "Ring Runner", "Quick Mercury", "Vacuum Swing", "Solar Flare", "Three Legs", "Moonball"],
+		"epithet": ["Champion Beneath All Suns", "Queen of the Warning Track", "Wielder of Plasma", "Who Bats Before Dawn", "Lord of Low Gravity", "Bearer of the Solar Crown", "The Tripodal Contact", "Scourge of Nine Moons"],
+		"mononym": ["Lunara", "Tripodus", "Solus", "Jovus", "Andromedax", "Nebulon", "Xylax", "Glorbo"],
+		"title": ["Solar", "Lunar", "Jovian", "Orbital", "Captain", "Admiral", "Tripodal", "Plasma"],
+		"origin": ["Nine Moons", "the Jovian Diamond", "Low Orbit", "Andromeda", "the Solar League", "Europa"],
+	},
+	{
+		"given": ["Zorp", "Xylax", "Glorbo", "Nebulon", "Vrrt", "Kragulus", "N'Kthra", "Dave"],
+		"middle": ["Aeon", "Phase", "Void", "Ninefold", "Unfixed", "Moonless", "Causal", "Unscouted"],
+		"family": ["Nightglass", "Worldend", "Gravemoon", "Starless", "Between-Seconds", "Blackdiamond", "Lastlight", "Outer-Inning"],
+		"nickname": ["The Patient", "Ominous", "Unpronounceable", "The Unfixed", "Nine Bodies", "No Reflection", "Before Time", "The Final Rookie"],
+		"epithet": ["Rookie of the Last Aeon", "The Unstrikeable", "God of the Eightfold Swing", "Who Bats Between Seconds", "Bearer of the Shared Eye", "Last Witness of Causality", "Champion Beyond Geometry", "Devourer of Called Strikes"],
+		"mononym": ["Octathulhu", "Ball-rog", "N'Kthra", "Andromedax", "Q'Bert", "Vrrt", "Kragulus", "Nullslug"],
+		"title": ["Elder", "Void", "Aeon", "Ninefold", "Last", "Unfixed", "Moonless", "Causal"],
+		"origin": ["the Outer Dark", "the Last Aeon", "Between Seconds", "Nine Dead Moons", "the Unplayed Inning", "Beyond the Scorebook"],
+	},
+]
+
 # The first member of important classes gets a deliberately authored title;
 # replacements still rotate through the era pools above. This keeps reusable
 # ladder classes separate from the increasingly Elden-Ring-ish individuals.
@@ -1472,6 +1569,22 @@ const GENETIC_UPGRADES := [
 		"max_level": 1,
 		"description": "Automatically equip the highest-Power item in every unlocked slot.",
 	},
+	{
+		"id": "inherited_scorebook",
+		"name": "Inherited Scorebook Cortex",
+		"base_cost": 3.0,
+		"growth": 4.0,
+		"max_level": 3,
+		"description": "Opponent mastery requirements ×0.85 per rank.",
+	},
+	{
+		"id": "symbiotic_wardrobe",
+		"name": "Symbiotic Wardrobe Dermis",
+		"base_cost": 4.0,
+		"growth": 4.0,
+		"max_level": 4,
+		"description": "Equipment effects ×1.20 per rank.",
+	},
 ]
 
 const ELDRITCH_UPGRADES := [
@@ -1650,14 +1763,63 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 	if generation <= 0 and SIGNATURE_BATTER_NAMES.has(opponent_index):
 		return str(SIGNATURE_BATTER_NAMES[opponent_index])
 	var era_index := clampi(int(opponent_index / 5), 0, BATTER_NAME_POOLS.size() - 1)
-	var pool: Array = BATTER_NAME_POOLS[era_index]
-	if pool.is_empty():
+	var legacy_pool: Array = BATTER_NAME_POOLS[era_index]
+	var parts: Dictionary = BATTER_NAME_COMPONENTS[era_index]
+	if legacy_pool.is_empty() or parts.is_empty():
 		return "Unnamed Batter"
-	# Seven is coprime with the twelve-name pools, so a class visits every name
-	# before repeating. The opponent offset prevents adjacent classes from
-	# opening with the same person while preserving Little Timmy at level one.
-	var name_index := (maxi(generation, 0) * 7 + maxi(opponent_index, 0) * 3) % pool.size()
-	return str(pool[name_index])
+	var bounded_generation := maxi(generation, 0)
+	var bounded_opponent := maxi(opponent_index, 0)
+	var seed := bounded_generation * 104729 + bounded_opponent * 15485863 + era_index * 32452843
+	var style := posmod(seed, 16)
+	var first := _batter_name_component(parts, "given", seed, 1)
+	var middle := _batter_name_component(parts, "middle", seed, 2)
+	var family := _batter_name_component(parts, "family", seed, 3)
+	var nickname := _batter_name_component(parts, "nickname", seed, 4)
+	var epithet := _batter_name_component(parts, "epithet", seed, 5)
+	var mononym := _batter_name_component(parts, "mononym", seed, 6)
+	var title := _batter_name_component(parts, "title", seed, 7)
+	var origin := _batter_name_component(parts, "origin", seed, 8)
+	match style:
+		0:
+			return str(legacy_pool[posmod(int(seed / 11), legacy_pool.size())])
+		1:
+			return first
+		2:
+			return mononym
+		3:
+			return "%s %s" % [first, family]
+		4:
+			return "%s %s %s" % [first, middle, family]
+		5:
+			return "%s %s. %s" % [first, middle.left(1).to_upper(), family]
+		6:
+			return "%s \"%s\" %s" % [first, nickname, family]
+		7:
+			return "%s %s, %s" % [first, family, epithet]
+		8:
+			return "%s %s %s" % [title, first, family]
+		9:
+			return "The %s" % epithet
+		10:
+			return "%s %s" % [nickname, family]
+		11:
+			return "%s \"%s\"" % [first, nickname]
+		12:
+			return "%s %s." % [first, middle.left(1).to_upper()]
+		13:
+			return family
+		14:
+			return "%s of %s" % [first, origin]
+		_:
+			return "%s %s, %s" % [title, mononym, epithet]
+
+static func _batter_name_component(parts: Dictionary, key: String, seed: int, salt: int) -> String:
+	var pool: Array = parts.get(key, [])
+	if pool.is_empty():
+		return "Unknown"
+	var divisor := salt * 13 + 7
+	var index := posmod(int(seed / divisor) + salt * 17, pool.size())
+	return str(pool[index])
 
 static func _trait_for_index(index: int) -> String:
 	match index:

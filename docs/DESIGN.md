@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.7 Design
+# One Foot Per Second — v0.10.8 Design
 
 ## Product shape
 
@@ -99,7 +99,7 @@ Within a revealed story tier, its full catalog is visible and every tab is order
 
 Ordinary Training offers one additive purchase per base stat, unlocked gradually in this order: Speed, Quality, Recovery, Offline XP, Distance Control, base Lineup time, fair-hit Delay, and Pitch Calling. The field's compact profile shows all eight values with hover explanations. One-time Facilities provide the separate multiplicative layer, so a new building or questionable intervention is a larger event than pumping another Training rank. There are no same-operation quality buttons with cosmetic names.
 
-Eight outcome cards contain only name, probability, and compact added delay. Hover text explains count/terminal behavior. Strikeout payout sits on its own small line. Player equipment is six compact rarity-colored squares at the field's lower-right; clicking a square opens its sorted slot inventory. Opponent equipment mirrors that language in a vertical strip on the batter's side.
+Eight outcome cards contain only name, probability, and compact added delay. Hover or phone tap details explain count/terminal behavior. Strikeout payout sits on its own small line. Player equipment is six compact rarity-colored squares at the field's lower-right; clicking a square opens its sorted slot inventory. Passive item text leaves phone scrolling free, while explicit Equip and Compare controls prevent accidental swaps. Opponent equipment mirrors the square language in a vertical strip on the batter's side.
 
 The interface targets a 1600×1000 logical canvas, opens maximized, and supports a 1280×800 minimum. Every tab has an independent scroll viewport inside a fixed panel footprint, preventing the field from resizing when tabs change. A typed uppercase `RESET` confirmation is required before permanent progress can be erased.
 
@@ -128,6 +128,8 @@ A genetic rebirth resets XP, Training, pitches, balls, facilities, opponent acce
 | Autonomic Coaching Lobe | Auto-coach | 1 |
 | Predator Scouting Reflex | Auto-scout | 1 |
 | Autonomic Wardrobe Lobe | equip the highest-Power item in every unlocked slot | 1 |
+| Inherited Scorebook Cortex | opponent mastery requirement ×0.85 | 3 |
+| Symbiotic Wardrobe Dermis | equipment effects ×1.20 before aggregate caps | 4 |
 
 After rebirth, Xylophax becomes a normal four-Strike opponent. Alien biology raises the body ceiling to Mach 12; Solus requires Mach 3 for the championship gate.
 
@@ -161,13 +163,15 @@ The eldritch body can reach exactly the speed of light. Octathulhu's causality a
 
 Only completed strikeouts can drop clothing. The ordinary chance is 12%; the first career K guarantees Little Timmy's Oversized Cap and ten dry eligible rolls trigger pity. Hits, walks, Fouls, saved hits, and partial Strikes never roll loot.
 
-Human slots are Hat, Jersey, Jock Strap, Glove, Pants, and Cleats. A seventh post-human slot is Relic. Each item has opponent-capped level, rarity, randomized affixes, and an integer Power calculated from its actual bonuses. Slot inventories sort highest-Power first and hold ten items. Overflow removes the lowest-Power eligible item, with rarity and level as tie-breakers; equipped and starred items are protected.
+Human slots are Hat, Jersey, Jock Strap, Glove, Pants, and Cleats. A seventh post-human slot is Relic. Each item has opponent-capped level, rarity, randomized affixes, and an integer Power calculated from its actual bonuses. Fresh drops show a short rarity-colored field callout but never equip themselves. Slot inventories sort highest-Power first and hold ten items. Overflow removes the lowest-Power eligible item, with rarity and level as tie-breakers; equipped and starred items are protected. Every cleared item yields persistent Scrap equal to `item level × rarity value`, where Common/Magic/Rare/Legendary/Unique use `1/3/8/20/50`. Scrap is saved for a later system and currently has no cost sink.
 
-Rarities are Common, Magic, Rare, Legendary, and Unique. Before overmastery adjustments, parcel rarity is 78% Common, 18% Magic, 3.7% Rare, 0.27% Legendary, and 0.03% Unique. The equipped square uses a bright rarity-colored border and checkmark, and the Locker explicitly labels the equipped row. A complete outfit is capped at +15% speed, +18% recovery, +0.50 quality, +25% strikeout XP, +20% mastery, and +15% distance XP. Speed gear applies after the biological cap, so clothing may exceed a body's nominal maximum without being required to pass a progression gate. All campaign audits disable loot.
+Rarities are Common, Magic, Rare, Legendary, and Unique. Before overmastery adjustments, parcel rarity is 78% Common, 18% Magic, 3.7% Rare, 0.27% Legendary, and 0.03% Unique. The equipped square uses a bright rarity-colored border without a redundant icon. The Locker labels `EQUIPPED ITEM`, `TOTAL LOADOUT BONUSES`, `THIS ITEM`, and Scrap separately. Passive row text preserves wheel and touch scrolling; bounded Equip, Compare, and protection controls perform actions. Browser hover exposes the complete six-stat candidate-versus-equipped comparison. A 0.55-second phone hold opens the bounded comparison window, while movement beyond eight pixels cancels the hold so ordinary scrolling stays natural. That window offers explicit Swap, two-step Trash, and Keep choices. A complete outfit is capped at +15% speed, +18% recovery, +0.50 quality, +25% strikeout XP, +20% mastery, and +15% distance XP. Symbiotic Wardrobe Dermis amplifies each item by `1.20` per rank before those caps. Speed gear applies after the biological cap, so clothing may exceed a body's nominal maximum without being required to pass a progression gate. All campaign audits disable loot.
 
-Mastery continues past an opponent's unlock target. Each logarithmic excess-mastery doubling adds a small XP multiplier and improves rarity/affix quality, while item level remains capped to that opponent. An overmastered toddler can drop an excellent level-one cap, not cosmic pants.
+Replacement batters use a deterministic, era-aware name generator rather than a short loop. Eight component pools per era feed sixteen formats: single names, first/last, first/middle/last, middle initials, quoted nicknames, origins, titles, and epithets. The same opponent index and batter generation always produce the same identity across save/load, while authored signature opponents such as Little Timmy, Ball-rog, and Octathulhu remain fixed for their first appearance.
 
-Ordinary time travel erases the Locker. Each Reverse Terminator Wardrobe rank carries one randomly selected equipped item through a genetic rebirth. Autonomic Wardrobe Lobe automatically equips the highest-Power surviving or newly dropped item in every unlocked slot. Mirror clones initially dilute aggregate gear bonuses until One-Size-Fits-All-Realities Uniform equips the entire bullpen conceptually.
+Mastery continues past an opponent's unlock target. Inherited Scorebook Cortex multiplies every actual target by `0.85` per rank; bars, unlock checks, cosmic completion, and the start of overmastery all use that adjusted threshold. Each logarithmic excess-mastery doubling adds a small XP multiplier and improves rarity/affix quality, while item level remains capped to that opponent. An overmastered toddler can drop an excellent level-one cap, not cosmic pants.
+
+Ordinary time travel erases the Locker. Each Reverse Terminator Wardrobe rank carries one randomly selected equipped item through a genetic rebirth. Autonomic Wardrobe Lobe is the only normal mechanism that automatically equips the highest-Power surviving or newly dropped item in every unlocked slot. Mirror clones initially dilute aggregate gear bonuses until One-Size-Fits-All-Realities Uniform equips the entire bullpen conceptually.
 
 ## Prestige III: divine restoration
 
@@ -202,7 +206,7 @@ Human simultaneous capacity is exactly one. Post-human throwing sources are `arm
 
 ## Save and completion contract
 
-Save version 13 persists the explicit pitch phase, hidden pending outcome, selected pitch ID, exact sampled speed, release distance, original and remaining duration, generated batter identity/loadout, live Strike and Ball counts, eight additive Training axes, forty-two Facilities, cooldown, eight result totals, strikeouts, currencies, upgrades, mastery, automation, loot, favorites, equipment, pity, and lifetime statistics. Saves created before v0.10.6 default the new Scorebook Study rank to zero without a schema conversion.
+Save version 14 persists the explicit pitch phase, hidden pending outcome, selected pitch ID, exact sampled speed, release distance, original and remaining duration, generated batter identity/loadout, live Strike and Ball counts, eight additive Training axes, forty-two Facilities, cooldown, eight result totals, strikeouts, currencies, upgrades, mastery, automation, loot, favorites, equipment, Scrap, pity, and lifetime statistics. Version-13 saves default Scrap and both new genetic ranks to zero while retaining every earlier migration.
 
 Version-12 multiplicative Training ranks migrate to equivalent additive ranks; its single lineup modifier becomes the new base-lineup investment while fair-hit recovery starts cleanly. Legacy Command, Spin, and Deception ranks migrate into one additive Command investment. Older saves retain the Belt-to-Jock-Strap migration, ten-item pruning, added outcome slots, count-compression mapping, portal mapping, and conversion of retired prestige systems.
 

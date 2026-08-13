@@ -21,6 +21,8 @@ const WEB_LAYOUT_HYSTERESIS := 24.0
 const WEB_DENSE_MAX_HEIGHT := 860.0
 const MOBILE_TAB_ARROW_TOUCH_SIZE := 44
 const MOBILE_PORTRAIT_FIELD_MIN_HEIGHT := 270.0
+const LOCKER_ITEM_HOLD_SECONDS := 0.55
+const LOCKER_ITEM_DRAG_CANCEL_DISTANCE := 8.0
 
 var game: BaseballGameState
 var pitch_field
@@ -97,6 +99,20 @@ var locker_dialog_status_label: Label
 var locker_dialog_items: VBoxContainer
 var locker_dialog_slot_buttons := {}
 var selected_loot_slot := "hat"
+var loot_item_dialog: Window
+var loot_item_name_label: Label
+var loot_item_meta_label: Label
+var loot_item_equipped_label: Label
+var loot_item_stats: VBoxContainer
+var loot_item_status_label: Label
+var loot_item_equip_button: Button
+var loot_item_trash_button: Button
+var selected_loot_item_id := ""
+var armed_loot_trash_id := ""
+var held_locker_item_control: Control
+var held_locker_item_id := ""
+var held_locker_item_elapsed := 0.0
+var held_locker_item_drag_distance := 0.0
 var last_loot_revision := -1
 var last_loot_ui_signature := ""
 var genetic_confirmation: ConfirmationDialog
@@ -222,6 +238,7 @@ func _size_initial_window() -> void:
 func _process(delta: float) -> void:
 	if game == null:
 		return
+	_update_locker_item_hold(delta)
 	if is_web_build:
 		_update_browser_release_status(delta)
 	if is_web_build and web_backgrounded_at > 0.0:
@@ -509,6 +526,9 @@ func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
 			int(summary.get("loot_kept", 0)),
 			int(summary.get("loot_discarded", 0)),
 		]
+		var scrap_gained := float(summary.get("loot_scrap_gained", 0.0))
+		if scrap_gained > 0.0:
+			loot_note += " Scrap recovered: %s." % BaseballGameState.format_number(scrap_gained, 0)
 	_log_event(
 		"%s — %s produced %s pitches and %s XP.%s"
 		% [
@@ -535,6 +555,9 @@ func _show_offline_progress(summary: Dictionary, prefix: String) -> void:
 	var loot_found := int(summary.get("loot_found", 0))
 	if loot_found > 0:
 		detail_lines.append("Locker parcels found: %d" % loot_found)
+	var scrap_gained := float(summary.get("loot_scrap_gained", 0.0))
+	if scrap_gained > 0.0:
+		detail_lines.append("Scrap recovered: %s" % BaseballGameState.format_number(scrap_gained, 0))
 	offline_progress_dialog.title = prefix.to_upper()
 	offline_progress_dialog.dialog_text = (
 		"+%s XP\n\n%s"
@@ -1681,7 +1704,107 @@ func _build_locker_dialog() -> void:
 	locker_dialog_items.add_theme_constant_override("separation", 5)
 	scroll.add_child(locker_dialog_items)
 
+func _build_loot_item_dialog() -> void:
+	loot_item_dialog = Window.new()
+	loot_item_dialog.name = "EquipmentItemWindow"
+	loot_item_dialog.title = "EQUIPMENT COMPARISON"
+	loot_item_dialog.visible = false
+	loot_item_dialog.borderless = true
+	loot_item_dialog.unresizable = true
+	loot_item_dialog.transient = true
+	loot_item_dialog.min_size = Vector2i(330, 520)
+	loot_item_dialog.size = Vector2i(650, 650)
+	loot_item_dialog.close_requested.connect(_close_loot_item_dialog)
+	add_child(loot_item_dialog)
+	loot_item_dialog.hide()
+
+	var surface := PanelContainer.new()
+	surface.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	surface.add_theme_stylebox_override("panel", _compact_panel_style(14.0, 12.0))
+	loot_item_dialog.add_child(surface)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 9)
+	surface.add_child(stack)
+
+	var heading_row := HBoxContainer.new()
+	heading_row.add_theme_constant_override("separation", 8)
+	stack.add_child(heading_row)
+	var heading := Label.new()
+	heading.text = "ITEM COMPARISON"
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_theme_font_size_override("font_size", 17)
+	heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	heading_row.add_child(heading)
+	var close_button := Button.new()
+	close_button.text = "CLOSE  X"
+	close_button.custom_minimum_size = Vector2(110.0, 48.0)
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.pressed.connect(_close_loot_item_dialog)
+	heading_row.add_child(close_button)
+
+	loot_item_name_label = Label.new()
+	loot_item_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loot_item_name_label.add_theme_font_size_override("font_size", 20)
+	stack.add_child(loot_item_name_label)
+	loot_item_meta_label = Label.new()
+	loot_item_meta_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loot_item_meta_label.add_theme_font_size_override("font_size", 14)
+	stack.add_child(loot_item_meta_label)
+	loot_item_equipped_label = Label.new()
+	loot_item_equipped_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loot_item_equipped_label.add_theme_font_size_override("font_size", 14)
+	loot_item_equipped_label.add_theme_color_override("font_color", COLOR_MUTED)
+	stack.add_child(loot_item_equipped_label)
+
+	var stats_heading := Label.new()
+	stats_heading.text = "THIS ITEM  vs  CURRENTLY EQUIPPED"
+	stats_heading.add_theme_font_size_override("font_size", 12)
+	stats_heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	stack.add_child(stats_heading)
+	var stats_scroll := ScrollContainer.new()
+	stats_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	stats_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(stats_scroll)
+	loot_item_stats = VBoxContainer.new()
+	loot_item_stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	loot_item_stats.add_theme_constant_override("separation", 5)
+	stats_scroll.add_child(loot_item_stats)
+
+	loot_item_status_label = Label.new()
+	loot_item_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loot_item_status_label.custom_minimum_size.y = 40.0
+	loot_item_status_label.add_theme_font_size_override("font_size", 13)
+	loot_item_status_label.add_theme_color_override("font_color", COLOR_MUTED)
+	stack.add_child(loot_item_status_label)
+
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 8)
+	stack.add_child(action_row)
+	loot_item_equip_button = Button.new()
+	loot_item_equip_button.custom_minimum_size = Vector2(100.0, 50.0)
+	loot_item_equip_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	loot_item_equip_button.focus_mode = Control.FOCUS_NONE
+	loot_item_equip_button.pressed.connect(_equip_selected_loot_item)
+	action_row.add_child(loot_item_equip_button)
+	loot_item_trash_button = Button.new()
+	loot_item_trash_button.text = "TRASH"
+	loot_item_trash_button.custom_minimum_size = Vector2(100.0, 50.0)
+	loot_item_trash_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	loot_item_trash_button.focus_mode = Control.FOCUS_NONE
+	loot_item_trash_button.add_theme_color_override("font_color", COLOR_BAD)
+	loot_item_trash_button.pressed.connect(_trash_selected_loot_item)
+	action_row.add_child(loot_item_trash_button)
+	var keep_button := Button.new()
+	keep_button.text = "KEEP"
+	keep_button.custom_minimum_size = Vector2(100.0, 50.0)
+	keep_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	keep_button.focus_mode = Control.FOCUS_NONE
+	keep_button.pressed.connect(_close_loot_item_dialog)
+	action_row.add_child(keep_button)
+
 func _close_locker_dialog() -> void:
+	_cancel_locker_item_hold()
+	_close_loot_item_dialog()
 	locker_dialog.hide()
 
 func _open_locker(slot: String) -> void:
@@ -1740,16 +1863,22 @@ func _rebuild_locker_dialog() -> void:
 	if game.get_equipment_inheritance_factor() < 0.999:
 		clone_note = "×%.3f after clone inheritance" % game.get_equipment_inheritance_factor()
 	locker_dialog_status_label.text = (
-		"%s  •  %d / %d KEPT  •  EQUIPPED: %s\n%s\n"
-		+ "Click an item to equip it. Filled-star items are never auto-scrapped; the lowest-Power unstarred item is removed above capacity.  •  %s"
+		"%s  •  %d / %d KEPT  •  SCRAP %s\n"
+		+ "EQUIPPED ITEM: %s\n"
+		+ "TOTAL LOADOUT BONUSES: %s\n"
+		+ "Use EQUIP directly or COMPARE for every stat and explicit swap/trash choices. Filled stars prevent automatic clearing.  •  %s"
 	) % [
 		str(definition.name),
 		items.size(),
 		BaseballGameState.LOOT_ITEMS_PER_SLOT,
+		BaseballGameState.format_number(game.scrap, 0),
 		equipped_name,
 		game.get_equipment_bonus_summary(),
 		clone_note,
 	]
+	locker_dialog_status_label.tooltip_text = (
+		"Overflow Scrap equals item level × rarity value: Common ×1, Magic ×3, Rare ×8, Legendary ×20, Unique ×50. Scrap has no use yet."
+	)
 	for child in locker_dialog_items.get_children():
 		locker_dialog_items.remove_child(child)
 		child.queue_free()
@@ -1763,21 +1892,26 @@ func _rebuild_locker_dialog() -> void:
 		var rarity := Content.loot_rarity(int(item.rarity))
 		var is_equipped := str(game.equipped_loot.get(selected_loot_slot, "")) == str(item.id)
 		var row_panel := PanelContainer.new()
-		row_panel.custom_minimum_size.y = 68.0
+		row_panel.custom_minimum_size.y = 112.0
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		row_panel.add_theme_stylebox_override("panel", _loot_item_row_style(Color(rarity.color), is_equipped))
+		row_panel.set_meta("loot_item_id", str(item.id))
+		var inspection_text := _get_loot_item_inspection_text(item)
+		row_panel.tooltip_text = inspection_text
+		row_panel.gui_input.connect(_on_locker_item_inspection_input.bind(row_panel, str(item.id)))
 		locker_dialog_items.add_child(row_panel)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 5)
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row_panel.add_child(row)
-		var item_button := Button.new()
-		item_button.custom_minimum_size = Vector2(0.0, 60.0)
-		item_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		item_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		item_button.clip_text = true
-		item_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		item_button.text = "%sPOWER %d  •  %s  •  ILVL %d  •  %s\n%s" % [
+		var row_stack := VBoxContainer.new()
+		row_stack.add_theme_constant_override("separation", 4)
+		row_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_stack.mouse_filter = Control.MOUSE_FILTER_PASS
+		row_stack.tooltip_text = inspection_text
+		row_panel.add_child(row_stack)
+		var item_label := Label.new()
+		item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		item_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		item_label.text = "%sPOWER %d  •  %s  •  ILVL %d\n%s\nTHIS ITEM: %s" % [
 			"EQUIPPED  •  " if is_equipped else "",
 			game.get_loot_item_power(item),
 			str(rarity.name),
@@ -1785,13 +1919,32 @@ func _rebuild_locker_dialog() -> void:
 			str(item.name),
 			game.get_loot_item_description(item),
 		]
-		item_button.tooltip_text = item_button.text
-		item_button.flat = true
-		item_button.add_theme_color_override("font_color", Color(rarity.color))
-		item_button.pressed.connect(_toggle_loot_item.bind(str(item.id)))
-		row.add_child(item_button)
+		item_label.add_theme_font_size_override("font_size", 13)
+		item_label.add_theme_color_override("font_color", Color(rarity.color))
+		row_stack.add_child(item_label)
+		var actions := HBoxContainer.new()
+		actions.add_theme_constant_override("separation", 6)
+		row_stack.add_child(actions)
+		var equip_button := Button.new()
+		equip_button.text = "UNEQUIP" if is_equipped else "EQUIP"
+		equip_button.custom_minimum_size = Vector2(92.0, 44.0)
+		equip_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		equip_button.focus_mode = Control.FOCUS_NONE
+		equip_button.set_meta("loot_action", "equip")
+		equip_button.set_meta("loot_item_id", str(item.id))
+		equip_button.pressed.connect(_toggle_loot_item.bind(str(item.id)))
+		actions.add_child(equip_button)
+		var compare_button := Button.new()
+		compare_button.text = "COMPARE"
+		compare_button.custom_minimum_size = Vector2(110.0, 44.0)
+		compare_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compare_button.focus_mode = Control.FOCUS_NONE
+		compare_button.set_meta("loot_action", "compare")
+		compare_button.set_meta("loot_item_id", str(item.id))
+		compare_button.pressed.connect(_open_loot_item_dialog.bind(str(item.id)))
+		actions.add_child(compare_button)
 		var favorite_button := Button.new()
-		favorite_button.custom_minimum_size = Vector2(52.0, 60.0)
+		favorite_button.custom_minimum_size = Vector2(52.0, 44.0)
 		favorite_button.size_flags_horizontal = Control.SIZE_SHRINK_END
 		_ensure_favorite_icons()
 		favorite_button.text = ""
@@ -1802,8 +1955,262 @@ func _rebuild_locker_dialog() -> void:
 			"font_color",
 			COLOR_GOLD if bool(item.get("favorite", false)) else COLOR_MUTED
 		)
+		favorite_button.set_meta("loot_action", "favorite")
+		favorite_button.set_meta("loot_item_id", str(item.id))
 		favorite_button.pressed.connect(_toggle_loot_favorite.bind(str(item.id)))
-		row.add_child(favorite_button)
+		actions.add_child(favorite_button)
+
+func _get_loot_item_inspection_text(item: Dictionary) -> String:
+	if item.is_empty():
+		return ""
+	var rarity := Content.loot_rarity(int(item.get("rarity", 0)))
+	var equipped := game.get_equipped_loot_item(str(item.get("slot", "")))
+	var same_item := (
+		not equipped.is_empty()
+		and str(equipped.get("id", "")) == str(item.get("id", ""))
+	)
+	var candidate_power := game.get_loot_item_power(item)
+	var equipped_power := 0 if equipped.is_empty() else game.get_loot_item_power(equipped)
+	var lines: Array[String] = [
+		str(item.get("name", "Unnamed equipment")),
+		"Power %d • %s • Item level %d" % [
+			candidate_power,
+			str(rarity.name),
+			int(item.get("item_level", 1)),
+		],
+	]
+	if same_item:
+		lines.append("Currently equipped")
+	elif equipped.is_empty():
+		lines.append("Compared with empty slot • Power change +%d" % candidate_power)
+	else:
+		lines.append("Compared with %s • Power %d • Change %s%d" % [
+			str(equipped.name),
+			equipped_power,
+			"+" if candidate_power - equipped_power >= 0 else "",
+			candidate_power - equipped_power,
+		])
+	var item_stats: Dictionary = item.get("stats", {})
+	var equipped_stats: Dictionary = equipped.get("stats", {}) if not equipped.is_empty() else {}
+	var effectiveness := game.get_equipment_effectiveness_multiplier()
+	for stat_definition in Content.LOOT_STATS:
+		var stat_id := str(stat_definition.id)
+		var candidate_value := float(item_stats.get(stat_id, 0.0)) * effectiveness
+		var equipped_value := float(equipped_stats.get(stat_id, 0.0)) * effectiveness
+		var delta := candidate_value - equipped_value
+		if str(stat_definition.format) == "additive":
+			lines.append("%s: +%.3f vs +%.3f (%+.3f)" % [
+				str(stat_definition.name), candidate_value, equipped_value, delta,
+			])
+		else:
+			lines.append("%s: ×%.3f vs ×%.3f (%+.3f)" % [
+				str(stat_definition.name), 1.0 + candidate_value, 1.0 + equipped_value, delta,
+			])
+	lines.append("Hold to inspect" if mobile_layout else "Click COMPARE for equip and trash actions")
+	return "\n".join(lines)
+
+func _on_locker_item_inspection_input(
+	event: InputEvent,
+	control: Control,
+	item_id: String
+) -> void:
+	if not mobile_layout or loot_item_dialog == null:
+		return
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			_begin_locker_item_hold(control, item_id)
+		else:
+			_cancel_locker_item_hold(control)
+	elif event is InputEventScreenDrag:
+		if held_locker_item_control == control:
+			held_locker_item_drag_distance += (event as InputEventScreenDrag).relative.length()
+			if held_locker_item_drag_distance > LOCKER_ITEM_DRAG_CANCEL_DISTANCE:
+				_cancel_locker_item_hold(control)
+	elif event is InputEventMouseButton:
+		var mouse_button := event as InputEventMouseButton
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse_button.pressed:
+			_begin_locker_item_hold(control, item_id)
+		else:
+			_cancel_locker_item_hold(control)
+	elif event is InputEventMouseMotion:
+		var mouse_motion := event as InputEventMouseMotion
+		if held_locker_item_control == control and mouse_motion.button_mask & MOUSE_BUTTON_MASK_LEFT:
+			held_locker_item_drag_distance += mouse_motion.relative.length()
+			if held_locker_item_drag_distance > LOCKER_ITEM_DRAG_CANCEL_DISTANCE:
+				_cancel_locker_item_hold(control)
+
+func _begin_locker_item_hold(control: Control, item_id: String) -> void:
+	if control == null or item_id.is_empty() or game.get_loot_item(item_id).is_empty():
+		return
+	held_locker_item_control = control
+	held_locker_item_id = item_id
+	held_locker_item_elapsed = 0.0
+	held_locker_item_drag_distance = 0.0
+
+func _cancel_locker_item_hold(control: Control = null) -> void:
+	if control != null and held_locker_item_control != control:
+		return
+	held_locker_item_control = null
+	held_locker_item_id = ""
+	held_locker_item_elapsed = 0.0
+	held_locker_item_drag_distance = 0.0
+
+func _update_locker_item_hold(delta: float) -> void:
+	if held_locker_item_control == null or held_locker_item_id.is_empty():
+		return
+	if not mobile_layout or not locker_dialog.visible or not is_instance_valid(held_locker_item_control):
+		_cancel_locker_item_hold()
+		return
+	held_locker_item_elapsed += delta
+	if held_locker_item_elapsed < LOCKER_ITEM_HOLD_SECONDS:
+		return
+	var item_id := held_locker_item_id
+	_cancel_locker_item_hold()
+	_open_loot_item_dialog(item_id)
+
+func _open_loot_item_dialog(item_id: String) -> void:
+	if game.get_loot_item(item_id).is_empty():
+		return
+	selected_loot_item_id = item_id
+	armed_loot_trash_id = ""
+	_rebuild_loot_item_dialog()
+	var viewport_size := _get_responsive_viewport_size()
+	var popup_size := (
+		Vector2i(
+			clampi(int(viewport_size.x) - 20, 330, 620),
+			clampi(int(viewport_size.y) - 28, 520, 690)
+		)
+		if mobile_layout
+		else Vector2i(650, 650)
+	)
+	loot_item_dialog.popup_centered(popup_size)
+	if mobile_layout:
+		loot_item_dialog.position = Vector2i(
+			maxi((int(viewport_size.x) - popup_size.x) / 2, 0),
+			maxi((int(viewport_size.y) - popup_size.y) / 2, 0)
+		)
+
+func _close_loot_item_dialog() -> void:
+	selected_loot_item_id = ""
+	armed_loot_trash_id = ""
+	if loot_item_dialog != null:
+		loot_item_dialog.hide()
+
+func _rebuild_loot_item_dialog() -> void:
+	if loot_item_dialog == null:
+		return
+	var item := game.get_loot_item(selected_loot_item_id)
+	if item.is_empty():
+		_close_loot_item_dialog()
+		return
+	var rarity := Content.loot_rarity(int(item.get("rarity", 0)))
+	var equipped := game.get_equipped_loot_item(str(item.get("slot", "")))
+	var same_item := (
+		not equipped.is_empty()
+		and str(equipped.get("id", "")) == selected_loot_item_id
+	)
+	var candidate_power := game.get_loot_item_power(item)
+	var equipped_power := 0 if equipped.is_empty() else game.get_loot_item_power(equipped)
+	var power_delta := candidate_power - equipped_power
+	loot_item_name_label.text = str(item.get("name", "Unnamed equipment"))
+	loot_item_name_label.add_theme_color_override("font_color", Color(rarity.color))
+	loot_item_meta_label.text = "THIS ITEM  •  POWER %d  •  %s  •  ITEM LEVEL %d  •  POWER CHANGE %s%d" % [
+		candidate_power,
+		str(rarity.name),
+		int(item.get("item_level", 1)),
+		"+" if power_delta >= 0 else "",
+		power_delta,
+	]
+	if same_item:
+		loot_item_equipped_label.text = "CURRENTLY EQUIPPED: this item"
+	elif equipped.is_empty():
+		loot_item_equipped_label.text = "CURRENTLY EQUIPPED: EMPTY"
+	else:
+		loot_item_equipped_label.text = "CURRENTLY EQUIPPED: %s  •  POWER %d" % [
+			str(equipped.name), equipped_power,
+		]
+	for child in loot_item_stats.get_children():
+		loot_item_stats.remove_child(child)
+		child.queue_free()
+	var item_stats: Dictionary = item.get("stats", {})
+	var equipped_stats: Dictionary = equipped.get("stats", {}) if not equipped.is_empty() else {}
+	var effectiveness := game.get_equipment_effectiveness_multiplier()
+	for stat_definition in Content.LOOT_STATS:
+		var stat_id := str(stat_definition.id)
+		var candidate_value := float(item_stats.get(stat_id, 0.0)) * effectiveness
+		var equipped_value := float(equipped_stats.get(stat_id, 0.0)) * effectiveness
+		var delta := candidate_value - equipped_value
+		var row_panel := PanelContainer.new()
+		row_panel.add_theme_stylebox_override("panel", _compact_panel_style(7.0, 5.0))
+		loot_item_stats.add_child(row_panel)
+		var row_stack := VBoxContainer.new()
+		row_stack.add_theme_constant_override("separation", 1)
+		row_panel.add_child(row_stack)
+		var name_label := Label.new()
+		name_label.text = str(stat_definition.name).to_upper()
+		name_label.add_theme_font_size_override("font_size", 11)
+		name_label.add_theme_color_override("font_color", COLOR_ACCENT)
+		row_stack.add_child(name_label)
+		var value_label := Label.new()
+		value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		value_label.add_theme_font_size_override("font_size", 14)
+		if str(stat_definition.format) == "additive":
+			value_label.text = "THIS +%.3f   •   EQUIPPED +%.3f   •   CHANGE %+.3f" % [
+				candidate_value, equipped_value, delta,
+			]
+		else:
+			value_label.text = "THIS ×%.3f   •   EQUIPPED ×%.3f   •   CHANGE %+.3f" % [
+				1.0 + candidate_value, 1.0 + equipped_value, delta,
+			]
+		value_label.add_theme_color_override(
+			"font_color",
+			COLOR_GOOD if delta > 0.000001 else (COLOR_BAD if delta < -0.000001 else COLOR_MUTED)
+		)
+		row_stack.add_child(value_label)
+	var effectiveness_note := ""
+	if effectiveness > 1.000001:
+		effectiveness_note = " Post-human item effectiveness ×%.3f is included." % effectiveness
+	loot_item_status_label.text = "Trash value: %s Scrap.%s Total-loadout caps apply after item bonuses.%s" % [
+		BaseballGameState.format_number(game.get_loot_scrap_value(item), 0),
+		" This item is star-protected from automatic clearing." if bool(item.get("favorite", false)) else "",
+		effectiveness_note,
+	]
+	loot_item_status_label.add_theme_color_override("font_color", COLOR_MUTED)
+	loot_item_equip_button.text = (
+		"UNEQUIP" if same_item else ("EQUIP" if equipped.is_empty() else "SWAP")
+	)
+	loot_item_trash_button.text = "CONFIRM TRASH" if armed_loot_trash_id == selected_loot_item_id else "TRASH"
+
+func _equip_selected_loot_item() -> void:
+	if selected_loot_item_id.is_empty():
+		return
+	game.equip_loot(selected_loot_item_id)
+	_close_loot_item_dialog()
+	_rebuild_locker_dialog()
+	_refresh_interface()
+
+func _trash_selected_loot_item() -> void:
+	var item := game.get_loot_item(selected_loot_item_id)
+	if item.is_empty():
+		_close_loot_item_dialog()
+		return
+	if armed_loot_trash_id != selected_loot_item_id:
+		armed_loot_trash_id = selected_loot_item_id
+		loot_item_trash_button.text = "CONFIRM TRASH"
+		loot_item_status_label.text = "This permanently destroys %s for %s Scrap%s. Press CONFIRM TRASH to continue." % [
+			str(item.name),
+			BaseballGameState.format_number(game.get_loot_scrap_value(item), 0),
+			"; it is currently equipped" if str(game.equipped_loot.get(str(item.slot), "")) == selected_loot_item_id else ("; it is star-protected" if bool(item.get("favorite", false)) else ""),
+		]
+		loot_item_status_label.add_theme_color_override("font_color", COLOR_BAD)
+		return
+	game.trash_loot_item(selected_loot_item_id)
+	_close_loot_item_dialog()
+	_rebuild_locker_dialog()
+	_refresh_interface()
 
 func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	var card := PanelContainer.new()
@@ -2171,6 +2578,7 @@ func _build_event_log(parent: Control) -> void:
 
 func _build_confirmation_dialog() -> void:
 	_build_locker_dialog()
+	_build_loot_item_dialog()
 	_build_hard_reset_dialog()
 	_build_save_transfer_dialogs()
 	_build_mobile_install_dialog()
@@ -2590,7 +2998,7 @@ func _refresh_interface() -> void:
 		]
 	)
 	var mastery_value := game.opponent_mastery[game.current_opponent]
-	var mastery_required := float(opponent.mastery_required)
+	var mastery_required := game.get_mastery_requirement()
 	var overmastery_summary := game.get_overmastery_summary()
 	mastery_label.tooltip_text = "Strikeouts build opponent mastery. Complete the displayed target to unlock progression; excess mastery adds logarithmic farming bonuses."
 	if game.is_alien_exhibition_blocked():
@@ -3180,15 +3588,34 @@ func _on_batch_resolved(summary: Dictionary) -> void:
 	if loot_found > 0:
 		var drops: Array = summary.get("loot_drops", [])
 		var drop_text := "%d loot parcels" % loot_found
+		var popup_heading := "LOOT AUTO-SCRAPPED"
+		var popup_detail := "%d PARCEL%s" % [loot_found, "" if loot_found == 1 else "S"]
+		var popup_color := COLOR_GOLD
 		if not drops.is_empty():
 			var featured: Dictionary = drops[0]
 			var rarity: Dictionary = Content.loot_rarity(int(featured.rarity))
 			drop_text = "%s %s" % [rarity.name, featured.name]
+			var slot_definition := Content.loot_slot_by_id(str(featured.slot))
+			popup_heading = "%s %s DROP" % [
+				str(rarity.name),
+				str(slot_definition.get("name", "ITEM")),
+			]
+			var popup_name := str(featured.name)
+			if popup_name.length() > 30:
+				popup_name = popup_name.left(29) + "…"
+			popup_detail = "%s • POWER %d" % [popup_name, game.get_loot_item_power(featured)]
+			popup_color = Color(rarity.color)
 			if loot_found > 1:
 				drop_text += " + %d more" % (loot_found - 1)
+				popup_detail += " • +%d MORE" % (loot_found - 1)
 		var discarded := int(summary.get("loot_discarded", 0))
 		if discarded > 0:
 			drop_text += " • %d lowest items cleared" % discarded
+		var scrap_gained := float(summary.get("loot_scrap_gained", 0.0))
+		if scrap_gained > 0.0:
+			drop_text += " • +%s Scrap" % BaseballGameState.format_number(scrap_gained, 0)
+			popup_detail += " • +%s SCRAP" % BaseballGameState.format_number(scrap_gained, 0)
+		pitch_field.show_loot_popup(popup_heading, popup_detail, popup_color)
 		_log_event("STRIKEOUT LOOT: %s." % drop_text)
 	var has_impact := false
 	for event_value in summary.get("pitch_events", []):

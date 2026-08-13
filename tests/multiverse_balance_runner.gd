@@ -16,7 +16,7 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 303003
 	game.loot_drops_enabled = false
-	print("One Foot Per Second — v0.10.7 multiverse pacing simulation")
+	print("One Foot Per Second — v0.10.8 multiverse pacing simulation")
 	_log_checkpoint("BEGIN")
 	while elapsed < MAX_SECONDS and not game.cosmos_conquered:
 		_purchase_meta_upgrades()
@@ -140,7 +140,7 @@ func _purchase_meta_upgrades() -> void:
 		"fast_twitch_everything", "compound_pitching_eye", "ancestral_memory",
 		"extra_arms", "parallel_pitching_lobes", "compressed_strike_genome", "prehensile_outfield",
 		"elastic_ucl_colony", "ball_gland",
-		"migratory_instinct", "autonomic_coach", "predator_scouting", "autonomic_wardrobe",
+		"inherited_scorebook", "migratory_instinct", "autonomic_coach", "predator_scouting", "autonomic_wardrobe", "symbiotic_wardrobe",
 	]
 	var eldritch_priority := [
 		"mirror_clones", "non_euclidean_bullpen", "portal_outfield", "velocity_without_distance", "time_compression",

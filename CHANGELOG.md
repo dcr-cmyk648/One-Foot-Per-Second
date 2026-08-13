@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.8 — The pants demand informed consent
+
+- Loot no longer auto-equips into empty slots. New drops produce a compact rarity-colored field callout; automatic highest-Power equipment remains available only through Autonomic Wardrobe Lobe.
+- Rebuilt Locker rows as passive, scroll-friendly item text with separate touch-sized Equip, Compare, and protection-star controls. Desktop hover shows the complete stat comparison; a deliberate 0.55-second phone hold opens the same comparison window, while short taps and drags remain available for scrolling.
+- Added a borderless, phone-contained item comparison window showing all six candidate stats beside the currently equipped piece with signed changes, full names, Power, rarity, level, and explicit Equip/Swap, Keep, and two-step Trash actions.
+- Separated `EQUIPPED ITEM`, `THIS ITEM`, and `TOTAL LOADOUT BONUSES` throughout the Locker so aggregate effects cannot be mistaken for one piece's affixes.
+- Added persistent Scrap. Automatic overflow clearing and manual Trash award item level multiplied by Common/Magic/Rare/Legendary/Unique values of 1/3/8/20/50; the saved bank is visible in the Locker and deliberately has no spend yet.
+- Added Inherited Scorebook Cortex, a three-rank genetic upgrade that multiplies actual mastery requirements by 0.85 per rank. Bars, unlock checks, cosmic completion, and overmastery farming share the adjusted threshold.
+- Added Symbiotic Wardrobe Dermis, a four-rank post-human node that multiplies equipment effects by 1.20 per rank before the existing moderate aggregate caps.
+- Replaced the short repeating batter-name loop with deterministic era-aware component pools and sixteen formats, covering mononyms, initials, nicknames, origins, ordinary names, and increasingly absurd titles without destabilizing save files.
+- Replaced the short repeating batter-name rotation with a deterministic, era-aware combinatorial generator. Sixteen formats mix single names, first/last names, middle names or initials, nicknames, origins, titles, and Elden-Ring-style epithets while preserving every authored signature boss.
+- Extended offline summaries and live loot calls with recovered Scrap, advanced the save schema to version 14, and added migration, loot, prestige, comparison-window, and phone-scroll regression coverage.
+
 ## 0.10.7 — The dugout has thumbs now
 
 - Browser flight impacts now resolve on the exact rendered arrival frame instead of waiting as long as one coarse idle-simulation tick after the visible ball reaches the plate.

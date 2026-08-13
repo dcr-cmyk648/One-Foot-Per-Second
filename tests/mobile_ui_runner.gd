@@ -1,6 +1,8 @@
 extends SceneTree
 
 const MainScene = preload("res://main.tscn")
+const MainScript = preload("res://scripts/main.gd")
+const Content = preload("res://scripts/content.gd")
 
 var failures: Array[String] = []
 
@@ -20,6 +22,7 @@ func _run() -> void:
 	main.set_process(false)
 	main.pitch_field.set_process(false)
 	main.game.reset_fresh()
+	main.offline_progress_dialog.hide()
 	main._refresh_interface()
 	main._set_mobile_layout(true, true)
 	await process_frame
@@ -158,6 +161,17 @@ func _run() -> void:
 	_expect(main.mobile_inspection_dialog.visible, "Phone mastery should expose its full desktop explanation on tap")
 	main.mobile_inspection_dialog.hide()
 
+	main.game._add_loot_item({
+		"id": "phone_equipped_hat", "slot": "hat", "item_level": 1, "rarity": 0,
+		"name": "Phone Test Cap", "stats": {"quality_bonus": 0.01},
+		"roll_quality": 1.0, "color": "a9b6c5", "favorite": false,
+	})
+	main.game._add_loot_item({
+		"id": "phone_compare_hat", "slot": "hat", "item_level": 2, "rarity": 1,
+		"name": "Readable Comparison Cap", "stats": {"quality_bonus": 0.02, "speed_bonus": 0.01},
+		"roll_quality": 1.0, "color": "66a6ff", "favorite": false,
+	})
+	main.game.equip_loot("phone_equipped_hat")
 	main._open_locker("hat")
 	await process_frame
 	await process_frame
@@ -167,6 +181,46 @@ func _run() -> void:
 	_expect(main.locker_dialog_close_button.get_combined_minimum_size().y >= 44.0, "The equipment Close button should be touch-sized")
 	_expect(main.locker_dialog.position.y >= 0, "The phone equipment browser should remain below the usable viewport edge")
 	_expect(main.locker_dialog.position.y + main.locker_dialog.size.y <= 844, "The phone equipment browser should fit inside the usable viewport")
+	var phone_compare_button: Button
+	var phone_compare_panel: PanelContainer
+	for row_index in main.locker_dialog_items.get_child_count():
+		var phone_item_panel := main.locker_dialog_items.get_child(row_index) as PanelContainer
+		var phone_item_stack := phone_item_panel.get_child(0) as VBoxContainer
+		var phone_item_label := phone_item_stack.get_child(0) as Label
+		var phone_actions := phone_item_stack.get_child(1) as HBoxContainer
+		if str(phone_item_panel.get_meta("loot_item_id", "")) == "phone_compare_hat":
+			phone_compare_panel = phone_item_panel
+			phone_compare_button = phone_actions.get_child(1) as Button
+			_expect(phone_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone item text should not intercept vertical scrolling")
+			_expect((phone_actions.get_child(0) as Button).text == "EQUIP", "Phone rows should expose an explicit Equip action")
+	_expect(phone_compare_button != null, "The phone locker should retain the comparison item")
+	var hold_press := InputEventScreenTouch.new()
+	hold_press.pressed = true
+	main._on_locker_item_inspection_input(hold_press, phone_compare_panel, "phone_compare_hat")
+	var hold_drag := InputEventScreenDrag.new()
+	hold_drag.relative = Vector2(0.0, MainScript.LOCKER_ITEM_DRAG_CANCEL_DISTANCE + 1.0)
+	main._on_locker_item_inspection_input(hold_drag, phone_compare_panel, "phone_compare_hat")
+	main._update_locker_item_hold(MainScript.LOCKER_ITEM_HOLD_SECONDS + 0.1)
+	_expect(not main.loot_item_dialog.visible, "Scrolling a phone item should cancel hold-to-inspect")
+	main._on_locker_item_inspection_input(hold_press, phone_compare_panel, "phone_compare_hat")
+	main._update_locker_item_hold(MainScript.LOCKER_ITEM_HOLD_SECONDS - 0.01)
+	_expect(not main.loot_item_dialog.visible, "A short phone press should not interrupt locker scrolling")
+	main._update_locker_item_hold(0.02)
+	await process_frame
+	_expect(main.loot_item_dialog.visible, "Holding a phone item should open its full comparison")
+	main._close_loot_item_dialog()
+	phone_compare_button.pressed.emit()
+	await process_frame
+	await process_frame
+	_expect(main.loot_item_dialog.visible, "Tapping phone equipment should open a dedicated, legible comparison")
+	_expect(main.loot_item_dialog.position.y >= 0 and main.loot_item_dialog.position.y + main.loot_item_dialog.size.y <= 844, "The item comparison must remain entirely inside the phone viewport")
+	_expect(main.loot_item_name_label.text == "Readable Comparison Cap", "The item comparison should show the complete item name")
+	_expect(main.loot_item_equipped_label.text.contains("Phone Test Cap"), "The phone comparison should identify the equipped item")
+	_expect(main.loot_item_stats.get_child_count() == Content.LOOT_STATS.size(), "The phone comparison should expose all item stats without hover")
+	_expect(main.loot_item_equip_button.get_combined_minimum_size().y >= 44.0 and main.loot_item_trash_button.get_combined_minimum_size().y >= 44.0, "Phone comparison actions should be touch-sized")
+	main.loot_item_trash_button.pressed.emit()
+	_expect(main.loot_item_trash_button.text == "CONFIRM TRASH", "Phone Trash should require a second deliberate press")
+	main._close_loot_item_dialog()
 	main.locker_dialog_close_button.pressed.emit()
 	await process_frame
 	_expect(not main.locker_dialog.visible, "The in-content equipment Close button should dismiss the browser")

@@ -20,10 +20,11 @@ func _run() -> void:
 	main.set_process(false)
 	main.pitch_field.set_process(false)
 	main.game.reset_fresh()
+	main.offline_progress_dialog.hide()
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.7 progressive-interface audit")
+	print("One Foot Per Second — v0.10.8 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -158,6 +159,22 @@ func _run() -> void:
 		"favorite": false,
 	})
 	main._refresh_interface()
+	_expect(str(main.game.equipped_loot.hat).is_empty(), "A field loot drop should never auto-equip without Autonomic Wardrobe")
+	var unequipped_hat_style := main.inventory_slot_buttons.hat.get_theme_stylebox("normal") as StyleBoxFlat
+	_expect(unequipped_hat_style.border_width_left == 1, "An owned but unequipped slot should remain visually empty")
+	main.game.equip_loot("ui_rare_hat")
+	main.game._add_loot_item({
+		"id": "ui_compare_hat",
+		"slot": "hat",
+		"item_level": 2,
+		"rarity": 1,
+		"name": "Comparative Test Cap",
+		"stats": {"quality_bonus": 0.03, "speed_bonus": 0.01},
+		"roll_quality": 1.0,
+		"color": "66a6ff",
+		"favorite": false,
+	})
+	main._refresh_interface()
 	var hat_style := main.inventory_slot_buttons.hat.get_theme_stylebox("normal") as StyleBoxFlat
 	var expected_equipped_border := Color.WHITE.lerp(Color(Content.LOOT_RARITIES[2].color), 0.55)
 	_expect(hat_style.border_color.is_equal_approx(expected_equipped_border) and hat_style.border_width_left == 3, "An equipped slot should use a thick, bright version of its rarity color")
@@ -166,14 +183,58 @@ func _run() -> void:
 	await process_frame
 	_expect(main.locker_dialog.visible, "Clicking a field equipment square should open the equipment popup")
 	_expect(main.locker_dialog_slot_buttons.size() == 7, "The equipment popup should preserve every slot selector")
-	var first_item_panel: PanelContainer = main.locker_dialog_items.get_child(0)
-	var first_item_row: HBoxContainer = first_item_panel.get_child(0)
-	var first_item_button: Button = first_item_row.get_child(0)
-	var first_star_button: Button = first_item_row.get_child(1)
-	_expect(first_item_button.text.contains("POWER") and first_item_button.text.contains("EQUIPPED"), "Locker rows should expose Power and make the equipped item unmistakable")
-	_expect(not first_item_button.text.contains("✓") and first_star_button.text.is_empty() and first_star_button.icon != null, "Equipment controls should use browser-safe drawn icons instead of unsupported font glyphs")
-	_expect(first_star_button.position.x + first_star_button.size.x <= first_item_row.size.x + 1.0, "The favorite star must remain inside the item row")
+	var equipped_item_label: Label
+	var comparison_item_label: Label
+	var comparison_item_panel: PanelContainer
+	var comparison_item_button: Button
+	var first_star_button: Button
+	var first_action_row: HBoxContainer
+	for row_index in main.locker_dialog_items.get_child_count():
+		var item_panel := main.locker_dialog_items.get_child(row_index) as PanelContainer
+		var item_stack := item_panel.get_child(0) as VBoxContainer
+		var item_label := item_stack.get_child(0) as Label
+		var action_row := item_stack.get_child(1) as HBoxContainer
+		var compare_button := action_row.get_child(1) as Button
+		if row_index == 0:
+			first_action_row = action_row
+			first_star_button = action_row.get_child(2) as Button
+		if item_label.text.contains("EQUIPPED"):
+			equipped_item_label = item_label
+		else:
+			comparison_item_label = item_label
+			comparison_item_panel = item_panel
+			comparison_item_button = compare_button
+	_expect(equipped_item_label != null and equipped_item_label.text.contains("POWER"), "Locker rows should expose Power and make the equipped item unmistakable")
+	_expect(comparison_item_button != null and comparison_item_button.text == "COMPARE", "Each item should expose an explicit Compare action")
+	_expect(comparison_item_panel != null and comparison_item_panel.tooltip_text.contains("Compared with Golden Test Cap"), "Browser item hover should expose the complete equipped-item comparison")
+	_expect(comparison_item_panel.tooltip_text.contains("(+0.010)"), "Browser item hover should include signed stat deltas")
+	_expect(comparison_item_label.text.contains("THIS ITEM:"), "Each row should explicitly distinguish its own bonuses from the aggregate loadout")
+	_expect(comparison_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Passive item text should leave touch drags available for scrolling")
+	_expect(not equipped_item_label.text.contains("✓") and first_star_button.text.is_empty() and first_star_button.icon != null, "Equipment controls should use browser-safe drawn icons instead of unsupported font glyphs")
+	_expect(first_star_button.position.x + first_star_button.size.x <= first_action_row.size.x + 1.0, "The favorite star must remain inside the item row")
+	_expect(main.locker_dialog_status_label.text.contains("SCRAP 0"), "The equipment browser should display the saved Scrap bank")
+	_expect(main.locker_dialog_status_label.text.contains("TOTAL LOADOUT BONUSES:"), "Aggregate bonuses should be explicitly labeled instead of appearing to belong to the equipped item")
 	_expect(main.locker_dialog.min_size.x >= 800 and main.locker_dialog.min_size.y >= 560, "The equipment popup should enforce enough room for complete item rows")
+	comparison_item_button.pressed.emit()
+	await process_frame
+	_expect(main.loot_item_dialog.visible, "Clicking an item should open the explicit comparison window instead of equipping immediately")
+	_expect(str(main.game.equipped_loot.hat) == "ui_rare_hat", "Opening a comparison must not alter the equipped item")
+	_expect(main.loot_item_equipped_label.text.contains("Golden Test Cap"), "The comparison should name the currently equipped item")
+	_expect(main.loot_item_stats.get_child_count() == Content.LOOT_STATS.size(), "The comparison should show every equipment stat, including zero values")
+	_expect(main.loot_item_equip_button.text == "SWAP", "An unequipped item should offer an explicit Swap action")
+	main.loot_item_trash_button.pressed.emit()
+	_expect(main.loot_item_trash_button.text == "CONFIRM TRASH", "Trash should require an explicit second confirmation")
+	_expect(not main.game.get_loot_item("ui_compare_hat").is_empty(), "The first Trash press must not destroy equipment")
+	main._close_loot_item_dialog()
+	var loot_popup_summary: Dictionary = main.game._empty_resolution_summary()
+	loot_popup_summary.loot_found = 1
+	loot_popup_summary.loot_kept = 1
+	loot_popup_summary.loot_scrap_gained = 6.0
+	loot_popup_summary.loot_drops = [main.game.get_loot_item("ui_compare_hat")]
+	main._on_batch_resolved(loot_popup_summary)
+	_expect(not main.pitch_field.loot_popups.is_empty(), "A live loot drop should create a field popup")
+	_expect(str(main.pitch_field.loot_popups[0].heading).contains("MAGIC HAT DROP"), "The field loot popup should name rarity and slot")
+	_expect(str(main.pitch_field.loot_popups[0].detail).contains("+6 SCRAP"), "The field loot popup should include auto-scrap recovered in the same batch")
 	main.locker_dialog.close_requested.emit()
 	await process_frame
 	_expect(not main.locker_dialog.visible, "Closing the equipment popup should hide it")

@@ -7,7 +7,7 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.7 multiverse regression suite")
+	print("One Foot Per Second — v0.10.8 multiverse regression suite")
 	_test_content()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()
@@ -93,7 +93,7 @@ func _test_content() -> void:
 	_expect(Content.MILESTONES.size() == 42, "Expected forty-two interstitial facilities and interventions")
 	_expect(Content.DISTANCE_TIERS.size() == 15, "Expected the 3-foot-to-galaxy range ladder")
 	_expect(Content.SCALE_UPGRADES.is_empty(), "Physical scale must live in prestige layers, not ordinary XP")
-	_expect(Content.GENETIC_UPGRADES.size() == 13, "Expected thirteen genetic enhancements")
+	_expect(Content.GENETIC_UPGRADES.size() == 15, "Expected fifteen genetic enhancements")
 	_expect(Content.ELDRITCH_UPGRADES.size() == 11, "Expected eleven eldritch abilities")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
 	_expect(Content.LOOT_SLOTS.size() == 7, "Expected six human equipment slots and one post-human Relic")
@@ -111,6 +111,7 @@ func _test_content() -> void:
 	_expect(Content.BAT_NAMES.size() == opponents.size(), "Every opponent needs a distinct bat")
 	_expect(Content.OPPONENT_DIFFICULTY_ANCHORS.size() == Content.ERA_NAMES.size() + 1, "Difficulty anchors must include the final boss")
 	_expect(Content.BATTER_NAME_POOLS.size() == Content.ERA_NAMES.size(), "Every era needs a rotating name pool")
+	_expect(Content.BATTER_NAME_COMPONENTS.size() == Content.ERA_NAMES.size(), "Every era needs composable batter-name parts")
 	_expect(Content.OUTCOME_NAMES.size() == 8, "Fair hits, Foul, Ball, and Strike should produce eight outcomes")
 	_expect(Content.OUTCOME_XP == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "No individual pitch outcome may pay XP")
 	for index in Content.HUMAN_FINAL_INDEX + 1:
@@ -123,8 +124,33 @@ func _test_content() -> void:
 	_expect(int(Content.ball_upgrade_by_id("railgun_jacket").required_level) > Content.HUMAN_FINAL_INDEX, "Railgun equipment must remain post-human")
 	for pool in Content.BATTER_NAME_POOLS:
 		_expect(pool.size() >= 10, "Every era needs enough rotating names")
+	for parts_value in Content.BATTER_NAME_COMPONENTS:
+		var parts: Dictionary = parts_value
+		for key in ["given", "middle", "family", "nickname", "epithet", "mononym", "title", "origin"]:
+			_expect((parts.get(key, []) as Array).size() >= 6, "Every era needs a broad %s name pool" % key)
 	_expect(Content.batter_display_name(0, 0) == "Little Timmy", "The first batter should be Little Timmy")
 	_expect(Content.batter_display_name(0, 1) != Content.batter_display_name(0, 0), "Replacement batters need distinct names")
+	_expect(Content.batter_display_name(17, 777) == Content.batter_display_name(17, 777), "Generated batter names must be deterministic")
+	var generated_names := {}
+	var saw_mononym := false
+	var saw_two_part := false
+	var saw_three_part := false
+	var saw_initial := false
+	var saw_nickname := false
+	var saw_epithet := false
+	for generation in 2048:
+		var generated_name := Content.batter_display_name(18, generation + 1)
+		generated_names[generated_name] = true
+		var words := generated_name.split(" ", false)
+		saw_mononym = saw_mononym or words.size() == 1
+		saw_two_part = saw_two_part or words.size() == 2
+		saw_three_part = saw_three_part or words.size() >= 3
+		saw_initial = saw_initial or generated_name.contains(". ") or generated_name.ends_with(".")
+		saw_nickname = saw_nickname or generated_name.contains("\"")
+		saw_epithet = saw_epithet or generated_name.contains(", ") or generated_name.begins_with("The ")
+	_expect(generated_names.size() >= 900, "Composable naming should provide broad variation across a long farm session")
+	_expect(saw_mononym and saw_two_part and saw_three_part, "The generator should mix single, two-part, and longer names")
+	_expect(saw_initial and saw_nickname and saw_epithet, "The generator should mix initials, nicknames, and titled names")
 	var unique_bats := {}
 	for bat_name in Content.BAT_NAMES:
 		unique_bats[str(bat_name)] = true
@@ -364,6 +390,22 @@ func _test_overmastery_farming() -> void:
 	var capped_item := game._generate_loot_item(7, 0, 4)
 	_expect(int(capped_item.item_level) == 8, "Loot item level must remain capped to the batter being farmed")
 	_expect(not game.get_overmastery_summary().is_empty(), "The active farming bonus should have a visible summary")
+	var inherited_game: BaseballGameState = GameStateScript.new()
+	var authored_requirement := float(inherited_game.opponents[0].mastery_required)
+	inherited_game.genetic_levels.inherited_scorebook = 1
+	_expect_close(
+		inherited_game.get_mastery_requirement(),
+		authored_requirement * BaseballGameState.MASTERY_REQUIREMENT_FACTOR_PER_RANK,
+		"Inherited Scorebook should reduce the actual unlock target by fifteen percent per rank"
+	)
+	inherited_game.genetic_levels.inherited_scorebook = 3
+	var reduced_requirement := authored_requirement * pow(BaseballGameState.MASTERY_REQUIREMENT_FACTOR_PER_RANK, 3)
+	_expect_close(inherited_game.get_mastery_requirement(), reduced_requirement, "Mastery requirement reductions should stack multiplicatively")
+	inherited_game.opponent_mastery[0] = reduced_requirement - 0.001
+	_expect(inherited_game._check_opponent_unlock().is_empty(), "Progression must not unlock just below the prestige-adjusted mastery target")
+	inherited_game.opponent_mastery[0] = reduced_requirement
+	_expect(not inherited_game._check_opponent_unlock().is_empty(), "Progression should unlock exactly at the prestige-adjusted mastery target")
+	inherited_game.free()
 	baseline_game.free()
 	game.free()
 
@@ -553,7 +595,7 @@ func _test_strikeout_loot_and_equipment() -> void:
 	var tutorial_hat: Dictionary = first_drop_game.loot_items[0]
 	_expect(str(tutorial_hat.name) == "Little Timmy's Oversized Cap", "The first loot item should be the named tutorial cap")
 	_expect(str(tutorial_hat.slot) == "hat" and int(tutorial_hat.rarity) == 0, "The tutorial cap should be a Common hat")
-	_expect(str(first_drop_game.equipped_loot.hat) == str(tutorial_hat.id), "An empty slot should auto-equip its first drop")
+	_expect(str(first_drop_game.equipped_loot.hat).is_empty(), "Fresh loot should wait for the player instead of auto-equipping")
 
 	var hit_game: BaseballGameState = GameStateScript.new()
 	var hit_summary := hit_game._empty_resolution_summary()
@@ -596,10 +638,18 @@ func _test_strikeout_loot_and_equipment() -> void:
 	}
 	for slot_index in Content.LOOT_SLOTS.size():
 		var slot := str(Content.LOOT_SLOTS[slot_index].id)
-		cap_game._add_loot_item(_test_loot_item("cap_%d" % slot_index, slot, 45, 4, excessive_stats))
+		var item_id := "cap_%d" % slot_index
+		cap_game._add_loot_item(_test_loot_item(item_id, slot, 45, 4, excessive_stats))
+		cap_game.equip_loot(item_id)
 	var capped := cap_game.get_raw_equipment_bonuses()
 	for stat_id in BaseballGameState.EQUIPMENT_CAPS:
 		_expect_close(float(capped[stat_id]), float(BaseballGameState.EQUIPMENT_CAPS[stat_id]), "Total equipment %s should stop at its moderate cap" % str(stat_id))
+	var amplified_game: BaseballGameState = GameStateScript.new()
+	amplified_game._add_loot_item(_test_loot_item("amplified", "hat", 1, 0, {"quality_bonus": 0.01}))
+	amplified_game.equip_loot("amplified")
+	_expect_close(float(amplified_game.get_raw_equipment_bonuses().quality_bonus), 0.01, "Equipment should begin at its authored strength")
+	amplified_game.genetic_levels.symbiotic_wardrobe = 1
+	_expect_close(float(amplified_game.get_raw_equipment_bonuses().quality_bonus), 0.012, "Symbiotic Wardrobe should amplify item effects by twenty percent per rank")
 	cap_game.genetic_rebirths = 1
 	cap_game.eldritch_ascensions = 1
 	cap_game.training_levels.velocity = 1000
@@ -622,6 +672,7 @@ func _test_strikeout_loot_and_equipment() -> void:
 
 	var capacity_game: BaseballGameState = GameStateScript.new()
 	capacity_game._add_loot_item(_test_loot_item("protected", "hat", 1, 0, {"quality_bonus": 0.01}))
+	capacity_game.equip_loot("protected")
 	capacity_game._add_loot_item(_test_loot_item("favorite", "hat", 1, 0, {"quality_bonus": 0.01}))
 	_expect(capacity_game.toggle_loot_favorite("favorite"), "A stored item should be star-protectable")
 	capacity_game._add_loot_item(_test_loot_item("weak_common", "hat", 1, 0, {"quality_bonus": 0.010}))
@@ -633,13 +684,24 @@ func _test_strikeout_loot_and_equipment() -> void:
 	_expect(not capacity_game.get_loot_item("favorite").is_empty(), "A starred item must be protected from automatic pruning")
 	_expect(capacity_game.get_loot_item("weak_common").is_empty(), "Overflow should remove a low-Power unstarred item")
 	_expect(capacity_game.get_loot_item("weak_magic").is_empty(), "Rarity must not protect the lowest-Power unstarred item")
+	_expect(capacity_game.scrap > 0.0, "Every capacity-pruned item should add to the Scrap bank")
+	_expect_close(capacity_game.get_loot_scrap_value_for_level(10, 0), 10.0, "Common Scrap should equal item level")
+	_expect_close(capacity_game.get_loot_scrap_value_for_level(10, 4), 500.0, "Unique Scrap should scale strongly with rarity")
 	var sorted_hats := capacity_game.get_loot_items_for_slot("hat")
 	_expect(capacity_game.get_loot_item_power(sorted_hats[0]) >= capacity_game.get_loot_item_power(sorted_hats.back()), "Locker items should sort from highest Power to lowest")
+	var manual_trash_game: BaseballGameState = GameStateScript.new()
+	manual_trash_game._add_loot_item(_test_loot_item("trash_me", "hat", 10, 2, {"quality_bonus": 0.02}))
+	manual_trash_game.equip_loot("trash_me")
+	manual_trash_game.toggle_loot_favorite("trash_me")
+	var trash_result: Dictionary = manual_trash_game.trash_loot_item("trash_me")
+	_expect(bool(trash_result.ok), "Explicit trash should remove a selected item")
+	_expect(manual_trash_game.get_loot_item("trash_me").is_empty() and str(manual_trash_game.equipped_loot.hat).is_empty(), "Trashing equipped gear should clear both the item and slot")
+	_expect_close(manual_trash_game.scrap, 80.0, "Manual trash should use the same item-level × rarity Scrap value")
 
 	var auto_gear_game: BaseballGameState = GameStateScript.new()
 	auto_gear_game._add_loot_item(_test_loot_item("auto_weak", "hat", 1, 0, {"quality_bonus": 0.01}))
 	auto_gear_game._add_loot_item(_test_loot_item("auto_strong", "hat", 1, 0, {"quality_bonus": 0.03}))
-	_expect(str(auto_gear_game.equipped_loot.hat) == "auto_weak", "Without the prestige upgrade, a new sidegrade should not silently replace equipment")
+	_expect(str(auto_gear_game.equipped_loot.hat).is_empty(), "Without the prestige upgrade, no drop should silently equip itself")
 	auto_gear_game.genetic_offer_unlocked = true
 	auto_gear_game.dna = 5
 	_expect(auto_gear_game.buy_genetic("autonomic_wardrobe"), "Autonomic Wardrobe should be purchasable after genetic prestige")
@@ -662,7 +724,9 @@ func _test_strikeout_loot_and_equipment() -> void:
 	wardrobe_game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
 	for slot_index in Content.LOOT_SLOTS.size():
 		var slot := str(Content.LOOT_SLOTS[slot_index].id)
-		wardrobe_game._add_loot_item(_test_loot_item("wardrobe_%d" % slot_index, slot, 20, 2, {str(Content.LOOT_SLOTS[slot_index].primary_stat): 0.02}))
+		var item_id := "wardrobe_%d" % slot_index
+		wardrobe_game._add_loot_item(_test_loot_item(item_id, slot, 20, 2, {str(Content.LOOT_SLOTS[slot_index].primary_stat): 0.02}))
+		wardrobe_game.equip_loot(item_id)
 	wardrobe_game.run_xp = BaseballGameState.DNA_XP_THRESHOLD
 	wardrobe_game.perform_genetic_rebirth()
 	_expect(wardrobe_game.loot_items.size() == 2 and wardrobe_game.get_equipped_loot_count() == 2, "Reverse Terminator rank two should preserve exactly two equipped pieces")
@@ -679,14 +743,17 @@ func _test_strikeout_loot_and_equipment() -> void:
 
 	var saved_game: BaseballGameState = GameStateScript.new()
 	saved_game._add_loot_item(_test_loot_item("saved_cleats", "cleats", 17, 3, {"distance_bonus": 0.04, "speed_bonus": 0.02}))
+	saved_game.equip_loot("saved_cleats")
 	saved_game.toggle_loot_favorite("saved_cleats")
 	saved_game.lifetime_loot_found = 12.0
+	saved_game.scrap = 4321.0
 	var loaded_game: BaseballGameState = GameStateScript.new()
 	loaded_game.apply_save_data(saved_game.to_save_data())
 	_expect(not loaded_game.get_loot_item("saved_cleats").is_empty(), "Locker contents should survive a save round-trip")
 	_expect(str(loaded_game.equipped_loot.cleats) == "saved_cleats", "Equipped slots should survive a save round-trip")
 	_expect(bool(loaded_game.get_loot_item("saved_cleats").favorite), "Star protection should survive a save round-trip")
 	_expect_close(loaded_game.lifetime_loot_found, 12.0, "Lifetime loot statistics should survive saves")
+	_expect_close(loaded_game.scrap, 4321.0, "Scrap should survive a save round-trip")
 
 	var slot_gate_game: BaseballGameState = GameStateScript.new()
 	_expect(not slot_gate_game.is_loot_slot_unlocked("relic"), "The Relic slot should start locked")
@@ -704,7 +771,9 @@ func _test_strikeout_loot_and_equipment() -> void:
 	pity_game.free()
 	tier_game.free()
 	cap_game.free()
+	amplified_game.free()
 	capacity_game.free()
+	manual_trash_game.free()
 	auto_gear_game.free()
 	wipe_game.free()
 	wardrobe_game.free()
@@ -1340,7 +1409,7 @@ func _test_cosmic_completion_and_magnitude() -> void:
 	_expect(game.get_volley_size() == 2048, "Maximum arms, clones, time layers, and capacity should produce 2,048 simultaneous balls")
 	_expect(rate > 10000.0 and rate <= BaseballGameState.MAX_PHYSICAL_PITCH_RATE, "Final physical throughput should be enormous without exceeding its safety budget")
 	_expect(game.get_pitch_potency() >= 1.0e18, "Late absurdity should live in ball payload as well as projectile count")
-	game.opponent_mastery[44] = float(game.get_current_opponent().mastery_required)
+	game.opponent_mastery[44] = game.get_mastery_requirement()
 	var victory := game._check_opponent_unlock()
 	_expect(game.cosmos_conquered and victory.begins_with("COSMOS CONQUERED"), "Mastering Octathulhu should trigger cosmic victory")
 	_expect(game._check_opponent_unlock().is_empty(), "Cosmic victory should fire only once")

@@ -7,7 +7,7 @@ signal save_status_changed(message: String)
 
 const Content = preload("res://scripts/content.gd")
 const SAVE_PATH := "user://one_foot_per_second_save.json"
-const SAVE_VERSION := 13
+const SAVE_VERSION := 14
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -54,8 +54,11 @@ const LOOT_PITY_ROLLS := 10
 const LOOT_ROLL_INTERVAL_SECONDS := 5.0
 const LOOT_ITEMS_PER_SLOT := 10
 const LOOT_EXACT_ROLL_LIMIT := 120
+const LOOT_SCRAP_RARITY_MULTIPLIERS := [1.0, 3.0, 8.0, 20.0, 50.0]
 const OVERMASTERY_XP_PER_DOUBLING := 0.0125
 const OVERMASTERY_LOOT_LUCK_PER_DOUBLING := 0.05
+const MASTERY_REQUIREMENT_FACTOR_PER_RANK := 0.85
+const EQUIPMENT_EFFECT_FACTOR_PER_RANK := 1.20
 const EQUIPMENT_CAPS := {
 	"speed_bonus": 0.15,
 	"rate_bonus": 0.18,
@@ -117,6 +120,8 @@ var genetic_levels := {
 	"autonomic_coach": 0,
 	"predator_scouting": 0,
 	"autonomic_wardrobe": 0,
+	"inherited_scorebook": 0,
+	"symbiotic_wardrobe": 0,
 }
 var eldritch_levels := {
 	"mirror_clones": 0,
@@ -164,6 +169,7 @@ var loot_roll_cooldown_remaining := 0.0
 var lifetime_loot_found := 0.0
 var current_body_loot_found := 0.0
 var loot_overflow_discarded := 0.0
+var scrap := 0.0
 var loot_revision := 0
 var equipment_bonus_cache_revision := -1
 var equipment_bonus_cache_unlock_state := ""
@@ -344,6 +350,8 @@ func _reset_genetic_levels() -> void:
 		"autonomic_coach": 0,
 		"predator_scouting": 0,
 		"autonomic_wardrobe": 0,
+		"inherited_scorebook": 0,
+		"symbiotic_wardrobe": 0,
 	}
 
 func _reset_eldritch_levels() -> void:
@@ -484,6 +492,7 @@ func reset_fresh() -> void:
 	lifetime_loot_found = 0.0
 	current_body_loot_found = 0.0
 	loot_overflow_discarded = 0.0
+	scrap = 0.0
 	loot_revision += 1
 	last_time_travel_retained_slots.clear()
 	consecutive_home_runs = 0
@@ -645,6 +654,7 @@ func _empty_resolution_summary() -> Dictionary:
 		"loot_found": 0,
 		"loot_kept": 0,
 		"loot_discarded": 0,
+		"loot_scrap_gained": 0.0,
 		"loot_drops": [],
 		"unlocked_message": "",
 	}
@@ -1078,6 +1088,7 @@ func _roll_loot_success_count(opportunities: int, guarantee_first: bool) -> int:
 
 func _generate_bulk_loot(successes: int, opponent_index: int, summary: Dictionary) -> void:
 	var generated := 0
+	var prefiltered_scrap := 0.0
 	var available_slots := _available_loot_slot_indices(opponent_index)
 	var slot_count := available_slots.size()
 	if slot_count <= 0:
@@ -1103,6 +1114,9 @@ func _generate_bulk_loot(successes: int, opponent_index: int, summary: Dictionar
 		# omitted is necessarily lower-level/equal-level and lower-tier than a
 		# retained candidate, so it is the same loot the 10-item cap would remove.
 		var slot_generation_budget := mini(drops_for_slot, LOOT_ITEMS_PER_SLOT)
+		var generated_counts: Array[int] = []
+		generated_counts.resize(Content.LOOT_RARITIES.size())
+		generated_counts.fill(0)
 		for rarity_index in range(Content.LOOT_RARITIES.size() - 1, -1, -1):
 			var count_to_generate := mini(rarity_counts[rarity_index], slot_generation_budget)
 			for _candidate in count_to_generate:
@@ -1111,13 +1125,25 @@ func _generate_bulk_loot(successes: int, opponent_index: int, summary: Dictionar
 					summary
 				)
 			generated += count_to_generate
+			generated_counts[rarity_index] = count_to_generate
 			slot_generation_budget -= count_to_generate
 			if slot_generation_budget <= 0:
 				break
+		for rarity_index in Content.LOOT_RARITIES.size():
+			var discarded_for_rarity := rarity_counts[rarity_index] - generated_counts[rarity_index]
+			prefiltered_scrap += float(discarded_for_rarity) * get_loot_scrap_value_for_level(
+				opponent_index + 1,
+				rarity_index
+			)
 	var prefiltered := maxi(successes - generated, 0)
 	if prefiltered > 0:
 		summary.loot_discarded = int(summary.get("loot_discarded", 0)) + prefiltered
 		loot_overflow_discarded = minf(MAX_NUMBER, loot_overflow_discarded + float(prefiltered))
+		scrap = minf(MAX_NUMBER, scrap + prefiltered_scrap)
+		summary.loot_scrap_gained = minf(
+			MAX_NUMBER,
+			float(summary.get("loot_scrap_gained", 0.0)) + prefiltered_scrap
+		)
 
 func _sample_loot_rarity(opponent_index: int = current_opponent) -> int:
 	var roll := rng.randf()
@@ -1238,28 +1264,38 @@ func _store_generated_loot(item: Dictionary, summary: Dictionary) -> void:
 		var drops: Array = summary.get("loot_drops", [])
 		if drops.size() < 12:
 			drops.append(item.duplicate(true))
-	var removed: Array = result.removed
+	var removed: Array = result.get("removed", [])
 	if not removed.is_empty():
 		summary.loot_discarded = int(summary.get("loot_discarded", 0)) + removed.size()
+	var scrap_gained := float(result.get("scrap", 0.0))
+	if scrap_gained > 0.0:
+		summary.loot_scrap_gained = minf(
+			MAX_NUMBER,
+			float(summary.get("loot_scrap_gained", 0.0)) + scrap_gained
+		)
 
 func _add_loot_item(item: Dictionary) -> Dictionary:
 	var stored: Dictionary = item.duplicate(true)
 	stored["favorite"] = bool(stored.get("favorite", false))
 	loot_items.append(stored)
 	var slot := str(stored.slot)
-	if is_loot_slot_unlocked(slot) and str(equipped_loot.get(slot, "")).is_empty():
-		equipped_loot[slot] = str(stored.id)
-	var removed := _enforce_loot_slot_capacity(slot)
+	var capacity_result := _enforce_loot_slot_capacity(slot)
+	var removed: Array = capacity_result.get("removed", [])
 	var kept := not get_loot_item(str(stored.id)).is_empty()
 	if has_genetic_upgrade("autonomic_wardrobe"):
 		auto_equip_highest_power(false)
 	loot_overflow_discarded = minf(MAX_NUMBER, loot_overflow_discarded + float(removed.size()))
 	loot_revision += 1
-	return {"kept": kept, "removed": removed}
+	return {
+		"kept": kept,
+		"removed": removed,
+		"scrap": float(capacity_result.get("scrap", 0.0)),
+	}
 
-func _enforce_loot_slot_capacity(slot: String) -> Array[String]:
+func _enforce_loot_slot_capacity(slot: String) -> Dictionary:
 	var slot_items := get_loot_items_for_slot(slot, false)
 	var removed: Array[String] = []
+	var scrap_gained := 0.0
 	while slot_items.size() > LOOT_ITEMS_PER_SLOT:
 		var candidates: Array[Dictionary] = []
 		var equipped_id := str(equipped_loot.get(slot, ""))
@@ -1269,14 +1305,28 @@ func _enforce_loot_slot_capacity(slot: String) -> Array[String]:
 		if candidates.is_empty():
 			break
 		candidates.sort_custom(Callable(self, "_loot_is_worse"))
-		var doomed_id := str(candidates[0].id)
+		var doomed: Dictionary = candidates[0]
+		var doomed_id := str(doomed.id)
+		scrap_gained += get_loot_scrap_value(doomed)
 		for index in range(loot_items.size() - 1, -1, -1):
 			if str(loot_items[index].id) == doomed_id:
 				loot_items.remove_at(index)
 				break
 		removed.append(doomed_id)
 		slot_items = get_loot_items_for_slot(slot, false)
-	return removed
+	if scrap_gained > 0.0:
+		scrap = minf(MAX_NUMBER, scrap + scrap_gained)
+	return {"removed": removed, "scrap": scrap_gained}
+
+func get_loot_scrap_value(item: Dictionary) -> float:
+	return get_loot_scrap_value_for_level(
+		int(item.get("item_level", 1)),
+		int(item.get("rarity", 0))
+	)
+
+func get_loot_scrap_value_for_level(item_level: int, rarity_index: int) -> float:
+	var bounded_rarity := clampi(rarity_index, 0, LOOT_SCRAP_RARITY_MULTIPLIERS.size() - 1)
+	return float(maxi(item_level, 1)) * float(LOOT_SCRAP_RARITY_MULTIPLIERS[bounded_rarity])
 
 func _loot_is_worse(left: Dictionary, right: Dictionary) -> bool:
 	var left_power := get_loot_item_power(left)
@@ -1384,6 +1434,33 @@ func toggle_loot_favorite(item_id: String) -> bool:
 		return true
 	return false
 
+func trash_loot_item(item_id: String) -> Dictionary:
+	for index in loot_items.size():
+		if str(loot_items[index].id) != item_id:
+			continue
+		var item: Dictionary = loot_items[index].duplicate(true)
+		var slot := str(item.slot)
+		var was_equipped := str(equipped_loot.get(slot, "")) == item_id
+		var scrap_gained := get_loot_scrap_value(item)
+		if was_equipped:
+			equipped_loot[slot] = ""
+		loot_items.remove_at(index)
+		scrap = minf(MAX_NUMBER, scrap + scrap_gained)
+		loot_revision += 1
+		if has_genetic_upgrade("autonomic_wardrobe"):
+			auto_equip_highest_power(false)
+		progression_changed.emit("SCRAPPED: %s for %s Scrap." % [
+			str(item.name),
+			format_number(scrap_gained, 0),
+		])
+		return {
+			"ok": true,
+			"item": item,
+			"scrap": scrap_gained,
+			"was_equipped": was_equipped,
+		}
+	return {"ok": false, "scrap": 0.0, "was_equipped": false}
+
 func get_loot_item_power(item: Dictionary) -> int:
 	# A single integer for quick comparisons. It is derived from the item's real
 	# affix values rather than rarity or item level, so "equip highest Power" is
@@ -1413,10 +1490,11 @@ func get_loot_item_description(item: Dictionary) -> String:
 	return " • ".join(get_loot_item_stat_lines(item))
 
 func get_raw_equipment_bonuses() -> Dictionary:
-	var unlock_state := "%d:%d:%d" % [
+	var unlock_state := "%d:%d:%d:%d" % [
 		highest_unlocked,
 		int(genetic_offer_unlocked or genetic_rebirths > 0),
 		int(eldritch_offer_unlocked or eldritch_ascensions > 0),
+		int(genetic_levels.get("symbiotic_wardrobe", 0)),
 	]
 	if equipment_bonus_cache_revision == loot_revision and equipment_bonus_cache_unlock_state == unlock_state:
 		return equipment_bonus_cache.duplicate(true)
@@ -1437,12 +1515,22 @@ func get_raw_equipment_bonuses() -> Dictionary:
 		var stats: Dictionary = item.get("stats", {})
 		for stat_id in result:
 			result[stat_id] = float(result[stat_id]) + float(stats.get(stat_id, 0.0))
+	var effectiveness := get_equipment_effectiveness_multiplier()
 	for stat_id in result:
-		result[stat_id] = minf(float(result[stat_id]), float(EQUIPMENT_CAPS[stat_id]))
+		result[stat_id] = minf(
+			float(result[stat_id]) * effectiveness,
+			float(EQUIPMENT_CAPS[stat_id])
+		)
 	equipment_bonus_cache_revision = loot_revision
 	equipment_bonus_cache_unlock_state = unlock_state
 	equipment_bonus_cache = result.duplicate(true)
 	return result
+
+func get_equipment_effectiveness_multiplier() -> float:
+	return pow(
+		EQUIPMENT_EFFECT_FACTOR_PER_RANK,
+		int(genetic_levels.get("symbiotic_wardrobe", 0))
+	)
 
 func get_equipment_inheritance_factor() -> float:
 	var clones := maxf(get_clone_count(), 1.0)
@@ -2244,7 +2332,7 @@ func set_current_opponent(index: int) -> bool:
 func _check_opponent_unlock() -> String:
 	if current_opponent != highest_unlocked:
 		return ""
-	var requirement := float(opponents[current_opponent].mastery_required)
+	var requirement := get_mastery_requirement(current_opponent)
 	if opponent_mastery[current_opponent] < requirement:
 		return ""
 	if highest_unlocked >= opponents.size() - 1:
@@ -2268,14 +2356,24 @@ func _check_opponent_unlock() -> String:
 	return message
 
 func get_mastery_ratio(index: int = current_opponent) -> float:
-	var requirement := float(opponents[index].mastery_required)
+	var bounded_index := clampi(index, 0, opponents.size() - 1)
+	var requirement := get_mastery_requirement(bounded_index)
 	if requirement <= 0.0:
 		return 1.0
-	return clampf(opponent_mastery[index] / requirement, 0.0, 1.0)
+	return clampf(opponent_mastery[bounded_index] / requirement, 0.0, 1.0)
+
+func get_mastery_requirement(index: int = current_opponent) -> float:
+	var bounded_index := clampi(index, 0, opponents.size() - 1)
+	var prestige_rank := int(genetic_levels.get("inherited_scorebook", 0))
+	return maxf(
+		float(opponents[bounded_index].mastery_required)
+		* pow(MASTERY_REQUIREMENT_FACTOR_PER_RANK, prestige_rank),
+		0.000001
+	)
 
 func get_overmastery_doublings(index: int = current_opponent) -> float:
 	var bounded_index := clampi(index, 0, opponents.size() - 1)
-	var requirement := maxf(float(opponents[bounded_index].mastery_required), 0.000001)
+	var requirement := get_mastery_requirement(bounded_index)
 	var ratio := maxf(opponent_mastery[bounded_index] / requirement, 1.0)
 	return maxf(log(ratio) / log(2.0), 0.0)
 
@@ -2856,6 +2954,7 @@ func to_save_data() -> Dictionary:
 		"lifetime_loot_found": lifetime_loot_found,
 		"current_body_loot_found": current_body_loot_found,
 		"loot_overflow_discarded": loot_overflow_discarded,
+		"scrap": scrap,
 		"loot_dry_streak": loot_dry_streak,
 		"loot_roll_cooldown_remaining": loot_roll_cooldown_remaining,
 		"next_loot_id": next_loot_id,
@@ -2921,6 +3020,7 @@ func apply_save_data(data: Dictionary) -> void:
 	lifetime_loot_found = clampf(float(data.get("lifetime_loot_found", 0.0)), 0.0, MAX_NUMBER)
 	current_body_loot_found = clampf(float(data.get("current_body_loot_found", 0.0)), 0.0, MAX_NUMBER)
 	loot_overflow_discarded = clampf(float(data.get("loot_overflow_discarded", 0.0)), 0.0, MAX_NUMBER)
+	scrap = clampf(float(data.get("scrap", 0.0)), 0.0, MAX_NUMBER)
 	loot_dry_streak = clampi(int(data.get("loot_dry_streak", 0)), 0, LOOT_PITY_ROLLS - 1)
 	loot_roll_cooldown_remaining = clampf(float(data.get("loot_roll_cooldown_remaining", 0.0)), 0.0, LOOT_ROLL_INTERVAL_SECONDS)
 	next_loot_id = maxi(int(data.get("next_loot_id", 1)), 1)
@@ -3119,7 +3219,8 @@ func apply_save_data(data: Dictionary) -> void:
 			equipped_loot[slot] = item_id
 	for definition in Content.LOOT_SLOTS:
 		var slot := str(definition.id)
-		var removed := _enforce_loot_slot_capacity(slot)
+		var capacity_result := _enforce_loot_slot_capacity(slot)
+		var removed: Array = capacity_result.get("removed", [])
 		loot_overflow_discarded = minf(MAX_NUMBER, loot_overflow_discarded + float(removed.size()))
 	if has_genetic_upgrade("autonomic_wardrobe"):
 		auto_equip_highest_power(false)
@@ -3149,7 +3250,7 @@ func apply_save_data(data: Dictionary) -> void:
 	if not opponent_mastery.is_empty():
 		cosmos_conquered = cosmos_conquered or (
 			highest_unlocked == opponents.size() - 1
-			and opponent_mastery.back() >= float(opponents.back().mastery_required)
+			and opponent_mastery.back() >= get_mastery_requirement(opponents.size() - 1)
 		)
 
 func _sanitize_loot_item(value: Variant) -> Dictionary:

@@ -25,6 +25,7 @@ const BASE_PITCHER_INTRINSIC_SIZE := 1.08
 const RANGE_CONTROL_TOUCH_SIZE := 44.0
 const BATTER_CONTACT_HOLD := 0.18
 const BATTER_ENTRY_DURATION := 0.25
+const LOOT_POPUP_DURATION := 2.40
 const BATTER_EXIT_DURATIONS := [1.00, 0.72, 0.55, 0.42, 0.30, 0.20, 0.26, 0.12]
 # Total contact + exit + empty plate + entrance closely matches the authoritative
 # downtime in BaseballGameState: Grand Slams make the player wait twelve full
@@ -104,6 +105,7 @@ var impact_strength := 0.0
 var pending_results: Array[Dictionary] = []
 var return_balls: Array[Dictionary] = []
 var result_popups: Array[Dictionary] = []
+var loot_popups: Array[Dictionary] = []
 var last_result_scheduled_at := -100.0
 var result_sequence := 0
 var configured_opponent_index := -1
@@ -171,6 +173,7 @@ func reset_visual_state() -> void:
 	pending_results.clear()
 	return_balls.clear()
 	result_popups.clear()
+	loot_popups.clear()
 	last_result_scheduled_at = -100.0
 	result_sequence = 0
 	configured_opponent_index = -1
@@ -961,6 +964,10 @@ func _update_result_visuals(delta: float) -> void:
 		result_popups[index].age = float(result_popups[index].age) + delta
 		if float(result_popups[index].age) >= float(result_popups[index].duration):
 			result_popups.remove_at(index)
+	for index in range(loot_popups.size() - 1, -1, -1):
+		loot_popups[index].age = float(loot_popups[index].age) + delta
+		if float(loot_popups[index].age) >= float(loot_popups[index].duration):
+			loot_popups.remove_at(index)
 	var due_results: Array[Dictionary] = []
 	for index in range(pending_results.size() - 1, -1, -1):
 		pending_results[index].delay = float(pending_results[index].delay) - delta
@@ -1030,6 +1037,17 @@ func _trigger_result_visual(result: Dictionary) -> void:
 	var return_count := mini(ball_count, return_ball_capacity)
 	for ball_index in return_count:
 		_create_return_ball(outcome, salvo, saved, ball_index, return_count)
+
+func show_loot_popup(heading: String, detail: String, color: Color) -> void:
+	loot_popups.clear()
+	loot_popups.append({
+		"heading": heading,
+		"detail": detail,
+		"color": color,
+		"age": 0.0,
+		"duration": LOOT_POPUP_DURATION,
+	})
+	queue_redraw()
 
 func _reset_batter_for_opponent(opponent_index: int, preserve_released_ball := false) -> void:
 	configured_opponent_index = opponent_index
@@ -1429,6 +1447,7 @@ func _draw() -> void:
 		var radius := 12.0 + (1.0 - impact_strength) * 60.0
 		draw_arc(plate, radius, 0.0, TAU, 48, Color(impact_color, impact_strength * 0.75), 3.0)
 	_draw_result_popups()
+	_draw_loot_popups()
 
 func _draw_lifecycle_batter() -> void:
 	var visual := _get_batter_transition_visual()
@@ -1808,6 +1827,43 @@ func _draw_result_popups() -> void:
 		var baseline := _get_batter_position() + Vector2(-117.0, -58.0 - rise)
 		draw_string(font, baseline + Vector2(2.0, 2.0), str(popup.text), HORIZONTAL_ALIGNMENT_CENTER, 235.0, 20, Color(0.0, 0.0, 0.0, fade * 0.85))
 		draw_string(font, baseline, str(popup.text), HORIZONTAL_ALIGNMENT_CENTER, 235.0, 20, Color(color, fade))
+
+func _draw_loot_popups() -> void:
+	var font := ThemeDB.fallback_font
+	var width := minf(300.0, maxf(size.x - 20.0, 120.0))
+	for popup in loot_popups:
+		var progress := clampf(float(popup.age) / maxf(float(popup.duration), 0.001), 0.0, 1.0)
+		var fade := 1.0 - smoothstep(0.70, 1.0, progress)
+		var rise := progress * 28.0
+		var color: Color = popup.color
+		var baseline := get_pitcher_position() + Vector2(-width * 0.5, -58.0 - rise)
+		draw_string(
+			font,
+			baseline + Vector2(2.0, 2.0),
+			str(popup.heading),
+			HORIZONTAL_ALIGNMENT_CENTER,
+			width,
+			16,
+			Color(0.0, 0.0, 0.0, fade * 0.90)
+		)
+		draw_string(
+			font,
+			baseline,
+			str(popup.heading),
+			HORIZONTAL_ALIGNMENT_CENTER,
+			width,
+			16,
+			Color(color, fade)
+		)
+		draw_string(
+			font,
+			baseline + Vector2(1.0, 19.0),
+			str(popup.detail),
+			HORIZONTAL_ALIGNMENT_CENTER,
+			width,
+			12,
+			Color(0.88, 0.93, 1.0, fade)
+		)
 
 func _quadratic_bezier(start: Vector2, control: Vector2, finish: Vector2, progress: float) -> Vector2:
 	var inverse := 1.0 - progress
