@@ -3,7 +3,7 @@
 ## 0.10.8 — The pants demand informed consent
 
 - Loot no longer auto-equips into empty slots. New drops produce a compact rarity-colored field callout; automatic highest-Power equipment remains available only through Autonomic Wardrobe Lobe.
-- Rebuilt Locker rows as passive, scroll-friendly item text with separate touch-sized Equip, Compare, and protection-star controls. Desktop hover shows the complete stat comparison; a deliberate 0.55-second phone hold opens the same comparison window, while short taps and drags remain available for scrolling.
+- Rebuilt Locker rows as passive, scroll-friendly item text with separate touch-sized Equip, Compare, and protection-star controls. Rows no longer act as screen-covering buttons or invoke native hover overlays.
 - Added a borderless, phone-contained item comparison window showing all six candidate stats beside the currently equipped piece with signed changes, full names, Power, rarity, level, and explicit Equip/Swap, Keep, and two-step Trash actions.
 - Separated `EQUIPPED ITEM`, `THIS ITEM`, and `TOTAL LOADOUT BONUSES` throughout the Locker so aggregate effects cannot be mistaken for one piece's affixes.
 - Added persistent Scrap. Automatic overflow clearing and manual Trash award item level multiplied by Common/Magic/Rare/Legendary/Unique values of 1/3/8/20/50; the saved bank is visible in the Locker and deliberately has no spend yet.

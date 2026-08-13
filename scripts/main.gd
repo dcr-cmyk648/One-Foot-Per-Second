@@ -21,8 +21,6 @@ const WEB_LAYOUT_HYSTERESIS := 24.0
 const WEB_DENSE_MAX_HEIGHT := 860.0
 const MOBILE_TAB_ARROW_TOUCH_SIZE := 44
 const MOBILE_PORTRAIT_FIELD_MIN_HEIGHT := 270.0
-const LOCKER_ITEM_HOLD_SECONDS := 0.55
-const LOCKER_ITEM_DRAG_CANCEL_DISTANCE := 8.0
 
 var game: BaseballGameState
 var pitch_field
@@ -109,10 +107,6 @@ var loot_item_equip_button: Button
 var loot_item_trash_button: Button
 var selected_loot_item_id := ""
 var armed_loot_trash_id := ""
-var held_locker_item_control: Control
-var held_locker_item_id := ""
-var held_locker_item_elapsed := 0.0
-var held_locker_item_drag_distance := 0.0
 var last_loot_revision := -1
 var last_loot_ui_signature := ""
 var genetic_confirmation: ConfirmationDialog
@@ -238,7 +232,6 @@ func _size_initial_window() -> void:
 func _process(delta: float) -> void:
 	if game == null:
 		return
-	_update_locker_item_hold(delta)
 	if is_web_build:
 		_update_browser_release_status(delta)
 	if is_web_build and web_backgrounded_at > 0.0:
@@ -1803,7 +1796,6 @@ func _build_loot_item_dialog() -> void:
 	action_row.add_child(keep_button)
 
 func _close_locker_dialog() -> void:
-	_cancel_locker_item_hold()
 	_close_loot_item_dialog()
 	locker_dialog.hide()
 
@@ -1897,15 +1889,11 @@ func _rebuild_locker_dialog() -> void:
 		row_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		row_panel.add_theme_stylebox_override("panel", _loot_item_row_style(Color(rarity.color), is_equipped))
 		row_panel.set_meta("loot_item_id", str(item.id))
-		var inspection_text := _get_loot_item_inspection_text(item)
-		row_panel.tooltip_text = inspection_text
-		row_panel.gui_input.connect(_on_locker_item_inspection_input.bind(row_panel, str(item.id)))
 		locker_dialog_items.add_child(row_panel)
 		var row_stack := VBoxContainer.new()
 		row_stack.add_theme_constant_override("separation", 4)
 		row_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row_stack.mouse_filter = Control.MOUSE_FILTER_PASS
-		row_stack.tooltip_text = inspection_text
 		row_panel.add_child(row_stack)
 		var item_label := Label.new()
 		item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1959,117 +1947,6 @@ func _rebuild_locker_dialog() -> void:
 		favorite_button.set_meta("loot_item_id", str(item.id))
 		favorite_button.pressed.connect(_toggle_loot_favorite.bind(str(item.id)))
 		actions.add_child(favorite_button)
-
-func _get_loot_item_inspection_text(item: Dictionary) -> String:
-	if item.is_empty():
-		return ""
-	var rarity := Content.loot_rarity(int(item.get("rarity", 0)))
-	var equipped := game.get_equipped_loot_item(str(item.get("slot", "")))
-	var same_item := (
-		not equipped.is_empty()
-		and str(equipped.get("id", "")) == str(item.get("id", ""))
-	)
-	var candidate_power := game.get_loot_item_power(item)
-	var equipped_power := 0 if equipped.is_empty() else game.get_loot_item_power(equipped)
-	var lines: Array[String] = [
-		str(item.get("name", "Unnamed equipment")),
-		"Power %d • %s • Item level %d" % [
-			candidate_power,
-			str(rarity.name),
-			int(item.get("item_level", 1)),
-		],
-	]
-	if same_item:
-		lines.append("Currently equipped")
-	elif equipped.is_empty():
-		lines.append("Compared with empty slot • Power change +%d" % candidate_power)
-	else:
-		lines.append("Compared with %s • Power %d • Change %s%d" % [
-			str(equipped.name),
-			equipped_power,
-			"+" if candidate_power - equipped_power >= 0 else "",
-			candidate_power - equipped_power,
-		])
-	var item_stats: Dictionary = item.get("stats", {})
-	var equipped_stats: Dictionary = equipped.get("stats", {}) if not equipped.is_empty() else {}
-	var effectiveness := game.get_equipment_effectiveness_multiplier()
-	for stat_definition in Content.LOOT_STATS:
-		var stat_id := str(stat_definition.id)
-		var candidate_value := float(item_stats.get(stat_id, 0.0)) * effectiveness
-		var equipped_value := float(equipped_stats.get(stat_id, 0.0)) * effectiveness
-		var delta := candidate_value - equipped_value
-		if str(stat_definition.format) == "additive":
-			lines.append("%s: +%.3f vs +%.3f (%+.3f)" % [
-				str(stat_definition.name), candidate_value, equipped_value, delta,
-			])
-		else:
-			lines.append("%s: ×%.3f vs ×%.3f (%+.3f)" % [
-				str(stat_definition.name), 1.0 + candidate_value, 1.0 + equipped_value, delta,
-			])
-	lines.append("Hold to inspect" if mobile_layout else "Click COMPARE for equip and trash actions")
-	return "\n".join(lines)
-
-func _on_locker_item_inspection_input(
-	event: InputEvent,
-	control: Control,
-	item_id: String
-) -> void:
-	if not mobile_layout or loot_item_dialog == null:
-		return
-	if event is InputEventScreenTouch:
-		var touch := event as InputEventScreenTouch
-		if touch.pressed:
-			_begin_locker_item_hold(control, item_id)
-		else:
-			_cancel_locker_item_hold(control)
-	elif event is InputEventScreenDrag:
-		if held_locker_item_control == control:
-			held_locker_item_drag_distance += (event as InputEventScreenDrag).relative.length()
-			if held_locker_item_drag_distance > LOCKER_ITEM_DRAG_CANCEL_DISTANCE:
-				_cancel_locker_item_hold(control)
-	elif event is InputEventMouseButton:
-		var mouse_button := event as InputEventMouseButton
-		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
-			return
-		if mouse_button.pressed:
-			_begin_locker_item_hold(control, item_id)
-		else:
-			_cancel_locker_item_hold(control)
-	elif event is InputEventMouseMotion:
-		var mouse_motion := event as InputEventMouseMotion
-		if held_locker_item_control == control and mouse_motion.button_mask & MOUSE_BUTTON_MASK_LEFT:
-			held_locker_item_drag_distance += mouse_motion.relative.length()
-			if held_locker_item_drag_distance > LOCKER_ITEM_DRAG_CANCEL_DISTANCE:
-				_cancel_locker_item_hold(control)
-
-func _begin_locker_item_hold(control: Control, item_id: String) -> void:
-	if control == null or item_id.is_empty() or game.get_loot_item(item_id).is_empty():
-		return
-	held_locker_item_control = control
-	held_locker_item_id = item_id
-	held_locker_item_elapsed = 0.0
-	held_locker_item_drag_distance = 0.0
-
-func _cancel_locker_item_hold(control: Control = null) -> void:
-	if control != null and held_locker_item_control != control:
-		return
-	held_locker_item_control = null
-	held_locker_item_id = ""
-	held_locker_item_elapsed = 0.0
-	held_locker_item_drag_distance = 0.0
-
-func _update_locker_item_hold(delta: float) -> void:
-	if held_locker_item_control == null or held_locker_item_id.is_empty():
-		return
-	if not mobile_layout or not locker_dialog.visible or not is_instance_valid(held_locker_item_control):
-		_cancel_locker_item_hold()
-		return
-	held_locker_item_elapsed += delta
-	if held_locker_item_elapsed < LOCKER_ITEM_HOLD_SECONDS:
-		return
-	var item_id := held_locker_item_id
-	_cancel_locker_item_hold()
-	_open_loot_item_dialog(item_id)
 
 func _open_loot_item_dialog(item_id: String) -> void:
 	if game.get_loot_item(item_id).is_empty():
