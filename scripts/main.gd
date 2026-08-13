@@ -148,11 +148,13 @@ var header_metric_headings: Array[Label] = []
 func _ready() -> void:
 	is_web_build = OS.has_feature("web") or OS.has_feature("browser_build")
 	if is_web_build:
-		# Browser layouts should use CSS-sized pixels directly. Keeping the desktop
-		# 1600×1000 content scale would letterbox the whole game into a tiny landscape
-		# strip on a portrait phone before the responsive UI could participate.
+		# Browser layouts use a fluid canvas rather than the desktop 1600×1000 base.
+		# The canvas backing store is still rendered in device pixels, so a Retina
+		# phone also needs its display scale applied to the logical 2D content. Without
+		# that second step, a 3× iPhone makes every label and model one-third size.
 		get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
 		get_window().content_scale_size = Vector2i.ZERO
+		_sync_browser_content_scale()
 	else:
 		get_window().min_size = Vector2i(1280, 800)
 	theme = _build_theme()
@@ -642,7 +644,26 @@ func _close_mobile_overlay() -> void:
 		mobile_overlay_panel.visible = false
 
 func _on_root_resized() -> void:
+	if is_web_build:
+		_sync_browser_content_scale()
 	call_deferred("_apply_responsive_layout")
+
+func _sync_browser_content_scale(reported_scale := -1.0) -> void:
+	if not is_web_build:
+		return
+	var display_scale := reported_scale
+	if display_scale <= 0.0:
+		display_scale = DisplayServer.screen_get_scale()
+	if display_scale <= 0.0:
+		var browser_ratio = JavaScriptBridge.eval("window.devicePixelRatio || 1", true)
+		if browser_ratio != null:
+			display_scale = float(browser_ratio)
+	display_scale = _normalize_browser_content_scale(display_scale)
+	if not is_equal_approx(get_window().content_scale_factor, display_scale):
+		get_window().content_scale_factor = display_scale
+
+func _normalize_browser_content_scale(reported_scale: float) -> float:
+	return clampf(reported_scale, 1.0, 4.0)
 
 func _get_responsive_viewport_size() -> Vector2:
 	var viewport_size := get_viewport_rect().size
@@ -731,7 +752,9 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	strikeout_payout_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
 	field_stat_panel.offset_left = 6.0 if mobile_layout else 10.0
 	field_stat_panel.offset_top = 6.0 if mobile_layout else 10.0
-	field_stat_panel.offset_right = 168.0 if mobile_layout else 252.0
+	# The phone readout only needs enough room for a short label and value. Keeping
+	# it clear of the centered pitcher matters more than preserving desktop width.
+	field_stat_panel.offset_right = 138.0 if mobile_layout else 252.0
 	field_stat_panel.offset_bottom = 150.0 if mobile_layout else 176.0
 	inventory_dock.offset_left = -248.0 if mobile_layout else -310.0
 	inventory_dock.offset_top = -40.0 if mobile_layout else -48.0

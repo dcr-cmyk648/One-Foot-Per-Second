@@ -528,7 +528,9 @@ func _get_throw_arm_geometry(arm_index: int, arm_count: int, motion: float) -> D
 		if arm_count > 1
 		else 0.0
 	)
-	var resting_angle := -0.58 if arm_count == 1 else spread_position * 1.30
+	# The opening pitcher is right-handed: below the body when facing right on a
+	# desktop field, which rotates to screen-right when facing up on a phone.
+	var resting_angle := 0.58 if arm_count == 1 else spread_position * 1.30
 	var release_angle := 0.0 if arm_count == 1 else spread_position * 0.62
 	var angle := lerp_angle(resting_angle, release_angle, bounded_motion)
 	var direction := Vector2(cos(angle), sin(angle))
