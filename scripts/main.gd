@@ -15,8 +15,10 @@ const COLOR_GOOD := Color("6ee7a8")
 const COLOR_BAD := Color("ff667d")
 const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
-const WEB_COMPACT_MAX_WIDTH := 1180.0
-const WEB_COMPACT_MAX_HEIGHT := 720.0
+const WEB_WIDE_MIN_WIDTH := 1280.0
+const WEB_WIDE_MIN_HEIGHT := 720.0
+const WEB_LAYOUT_HYSTERESIS := 24.0
+const WEB_DENSE_MAX_HEIGHT := 860.0
 
 var game: BaseballGameState
 var pitch_field
@@ -124,6 +126,8 @@ var update_now_button: Button
 var update_later_button: Button
 var mobile_layout := false
 var mobile_portrait_layout := false
+var web_dense_layout := false
+var responsive_layout_initialized := false
 var mobile_overlay_panel: Control
 var mobile_overlay_surface: PanelContainer
 var mobile_overlay_content: VBoxContainer
@@ -142,6 +146,7 @@ var header_title_stack: VBoxContainer
 var header_title: Label
 var header_spacer: Control
 var save_stack: VBoxContainer
+var save_action_row: HBoxContainer
 var play_panel: PanelContainer
 var play_stack: VBoxContainer
 var opponent_row: HBoxContainer
@@ -482,6 +487,21 @@ func _build_theme() -> Theme:
 	result.set_stylebox("fill", "ProgressBar", progress_fill)
 	return result
 
+func _compact_panel_style(horizontal_margin: float, vertical_margin: float, radius := 8) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = COLOR_PANEL
+	style.border_color = Color("263750")
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = horizontal_margin
+	style.content_margin_right = horizontal_margin
+	style.content_margin_top = vertical_margin
+	style.content_margin_bottom = vertical_margin
+	return style
+
 func _build_interface() -> void:
 	var background := ColorRect.new()
 	background.color = COLOR_BG
@@ -562,6 +582,7 @@ func _build_update_banner() -> void:
 
 func _build_header(parent: Control) -> void:
 	header_panel = PanelContainer.new()
+	header_panel.add_theme_stylebox_override("panel", _compact_panel_style(10.0, 6.0))
 	parent.add_child(header_panel)
 	header_row = HBoxContainer.new()
 	header_row.add_theme_constant_override("separation", 20)
@@ -588,40 +609,42 @@ func _build_header(parent: Control) -> void:
 	prestige_header_stack = rings_label.get_parent() as VBoxContainer
 	prestige_header_heading = prestige_header_stack.get_child(0) as Label
 	save_stack = VBoxContainer.new()
+	save_stack.add_theme_constant_override("separation", 1)
 	header_row.add_child(save_stack)
+	save_action_row = HBoxContainer.new()
+	save_action_row.add_theme_constant_override("separation", 3)
+	save_stack.add_child(save_action_row)
 	save_button = Button.new()
 	save_button.text = "SAVE"
-	save_button.custom_minimum_size = Vector2(78.0, 34.0)
+	save_button.custom_minimum_size = Vector2(54.0, 32.0)
+	save_button.add_theme_font_size_override("font_size", 11)
 	save_button.pressed.connect(_save_now)
-	save_stack.add_child(save_button)
-	var transfer_row := HBoxContainer.new()
-	transfer_row.add_theme_constant_override("separation", 4)
-	save_stack.add_child(transfer_row)
+	save_action_row.add_child(save_button)
 	export_save_button = Button.new()
 	export_save_button.text = "EXPORT"
-	export_save_button.custom_minimum_size = Vector2(54.0, 26.0)
+	export_save_button.custom_minimum_size = Vector2(58.0, 32.0)
 	export_save_button.add_theme_font_size_override("font_size", 10)
 	export_save_button.tooltip_text = "Write a portable JSON backup of this run."
 	export_save_button.pressed.connect(_request_export_save)
-	transfer_row.add_child(export_save_button)
+	save_action_row.add_child(export_save_button)
 	load_save_button = Button.new()
 	load_save_button.text = "LOAD"
-	load_save_button.custom_minimum_size = Vector2(54.0, 26.0)
+	load_save_button.custom_minimum_size = Vector2(48.0, 32.0)
 	load_save_button.add_theme_font_size_override("font_size", 10)
 	load_save_button.tooltip_text = "Load a portable JSON backup after confirmation."
 	load_save_button.pressed.connect(_request_load_save)
-	transfer_row.add_child(load_save_button)
+	save_action_row.add_child(load_save_button)
 	hard_reset_button = Button.new()
 	hard_reset_button.text = "RESET PROGRESS"
-	hard_reset_button.custom_minimum_size = Vector2(112.0, 28.0)
-	hard_reset_button.add_theme_font_size_override("font_size", 11)
+	hard_reset_button.custom_minimum_size = Vector2(104.0, 32.0)
+	hard_reset_button.add_theme_font_size_override("font_size", 9)
 	hard_reset_button.tooltip_text = "Permanently erase this save. Requires typing RESET in a confirmation window."
 	hard_reset_button.pressed.connect(_request_hard_reset)
-	save_stack.add_child(hard_reset_button)
+	save_action_row.add_child(hard_reset_button)
 	save_label = Label.new()
 	save_label.text = "autosave on"
 	save_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	save_label.add_theme_font_size_override("font_size", 12)
+	save_label.add_theme_font_size_override("font_size", 10)
 	save_label.add_theme_color_override("font_color", COLOR_MUTED)
 	save_stack.add_child(save_label)
 
@@ -805,27 +828,40 @@ func _apply_responsive_layout() -> void:
 		return
 	var viewport_size := _get_responsive_viewport_size()
 	var portrait := _is_portrait_viewport(viewport_size)
-	var should_use_mobile := is_web_build and _should_use_compact_layout(viewport_size)
-	_set_mobile_layout(should_use_mobile, portrait)
+	var should_use_mobile := is_web_build and _should_use_compact_layout(
+		viewport_size,
+		mobile_layout,
+		responsive_layout_initialized
+	)
+	var should_use_dense := is_web_build and viewport_size.y < WEB_DENSE_MAX_HEIGHT
+	responsive_layout_initialized = true
+	_set_mobile_layout(should_use_mobile, portrait, should_use_dense)
 
 func _is_portrait_viewport(viewport_size: Vector2) -> bool:
 	return viewport_size.y > viewport_size.x * 1.08
 
-func _should_use_compact_layout(viewport_size: Vector2) -> bool:
-	# Width and height are independent constraints in a resizable browser window.
-	# The former min-dimension check left both desktop sidebars active in many
-	# ordinary landscape windows, clipping controls with no way to reach them.
-	return (
-		_is_portrait_viewport(viewport_size)
-		or viewport_size.x < WEB_COMPACT_MAX_WIDTH
-		or viewport_size.y < WEB_COMPACT_MAX_HEIGHT
-	)
+func _should_use_compact_layout(
+	viewport_size: Vector2,
+	current_compact := false,
+	apply_hysteresis := false
+) -> bool:
+	if _is_portrait_viewport(viewport_size):
+		return true
+	var minimum_width := WEB_WIDE_MIN_WIDTH
+	var minimum_height := WEB_WIDE_MIN_HEIGHT
+	if apply_hysteresis:
+		var threshold_shift := WEB_LAYOUT_HYSTERESIS if current_compact else -WEB_LAYOUT_HYSTERESIS
+		minimum_width += threshold_shift
+		minimum_height += threshold_shift
+	return viewport_size.x < minimum_width or viewport_size.y < minimum_height
 
-func _set_mobile_layout(enabled: bool, portrait := true) -> void:
+func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void:
 	var layout_changed := enabled != mobile_layout
 	var portrait_changed := enabled and portrait != mobile_portrait_layout
-	if not layout_changed and not portrait_changed:
+	var density_changed := dense != web_dense_layout
+	if not layout_changed and not portrait_changed and not density_changed:
 		return
+	web_dense_layout = dense
 	if not enabled:
 		mobile_layout = false
 		mobile_portrait_layout = false
@@ -835,10 +871,11 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 		mobile_portrait_layout = portrait
 		_close_mobile_overlay()
 
-	root_margin.add_theme_constant_override("margin_left", 5 if mobile_layout else 14)
-	root_margin.add_theme_constant_override("margin_right", 5 if mobile_layout else 14)
-	root_margin.add_theme_constant_override("margin_top", 5 if mobile_layout else 12)
-	root_margin.add_theme_constant_override("margin_bottom", 5 if mobile_layout else 12)
+	var dense_wide := web_dense_layout and not mobile_layout
+	root_margin.add_theme_constant_override("margin_left", 5 if mobile_layout else (10 if dense_wide else 14))
+	root_margin.add_theme_constant_override("margin_right", 5 if mobile_layout else (10 if dense_wide else 14))
+	root_margin.add_theme_constant_override("margin_top", 5 if mobile_layout else (6 if dense_wide else 12))
+	root_margin.add_theme_constant_override("margin_bottom", 5 if mobile_layout else (6 if dense_wide else 12))
 	update_banner.offset_left = -185.0 if mobile_layout else -280.0
 	update_banner.offset_right = 185.0 if mobile_layout else 280.0
 	update_banner.offset_top = 5.0 if mobile_layout else 10.0
@@ -849,20 +886,20 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	update_now_button.text = "UPDATE" if mobile_layout else "SAVE & UPDATE"
 	update_now_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
 	update_later_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
-	page_container.add_theme_constant_override("separation", 4 if mobile_layout else 10)
-	body_container.add_theme_constant_override("separation", 0 if mobile_layout else 10)
-	header_row.add_theme_constant_override("separation", 7 if mobile_layout else 20)
-	header_title.add_theme_font_size_override("font_size", 17 if mobile_layout else 27)
+	page_container.add_theme_constant_override("separation", 4 if mobile_layout else (6 if dense_wide else 10))
+	body_container.add_theme_constant_override("separation", 0 if mobile_layout else (8 if dense_wide else 10))
+	header_row.add_theme_constant_override("separation", 7 if mobile_layout else (12 if dense_wide else 20))
+	header_title.add_theme_font_size_override("font_size", 17 if mobile_layout else (23 if dense_wide else 27))
 	header_title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL if mobile_layout else Control.SIZE_FILL
 	header_spacer.visible = not mobile_layout
 	header_subtitle.visible = true
 	header_subtitle.custom_minimum_size.x = 175.0 if mobile_layout else 0.0
-	header_subtitle.add_theme_font_size_override("font_size", 9 if mobile_layout else 13)
+	header_subtitle.add_theme_font_size_override("font_size", 9 if mobile_layout else (11 if dense_wide else 13))
 	for index in header_metric_stacks.size():
-		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else 126.0
-		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 12)
+		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else (96.0 if dense_wide else 126.0)
+		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else (10 if dense_wide else 12))
 		var value_label := header_metric_stacks[index].get_child(1) as Label
-		value_label.add_theme_font_size_override("font_size", 15 if mobile_layout else 21)
+		value_label.add_theme_font_size_override("font_size", 15 if mobile_layout else (18 if dense_wide else 21))
 	if header_metric_headings.size() >= 3:
 		header_metric_headings[1].text = "XP / S" if mobile_layout else "XP / SECOND"
 		header_metric_headings[2].text = "DNA • ARCANA"
@@ -872,32 +909,43 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	upgrade_panel.visible = not mobile_layout
 	equipment_sidebar.visible = not mobile_layout
 	event_log_panel.visible = not mobile_layout
-	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else 360.0
-	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else 215.0
+	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (330.0 if dense_wide else 360.0)
+	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (190.0 if dense_wide else 215.0)
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
-	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else 8)
-	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else 12)
-	previous_button.custom_minimum_size.x = 42.0 if mobile_layout else 140.0
-	next_button.custom_minimum_size.x = 42.0 if mobile_layout else 140.0
+	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else (5 if dense_wide else 8))
+	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else (8 if dense_wide else 12))
+	previous_button.custom_minimum_size.x = 42.0 if mobile_layout else (116.0 if dense_wide else 140.0)
+	next_button.custom_minimum_size.x = 42.0 if mobile_layout else (116.0 if dense_wide else 140.0)
 	previous_button.text = "‹" if mobile_layout else "‹ PREVIOUS BATTER"
 	if mobile_layout:
 		next_button.text = "›"
-	opponent_label.add_theme_font_size_override("font_size", 18 if mobile_layout else 25)
-	quirk_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 14)
-	era_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 13)
-	distance_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
-	field_stack.add_theme_constant_override("separation", 4 if mobile_layout else 7)
-	pitch_field.custom_minimum_size = Vector2(0.0, 320.0) if mobile_layout else Vector2(450.0, 360.0)
+	opponent_label.add_theme_font_size_override("font_size", 18 if mobile_layout else (21 if dense_wide else 25))
+	quirk_label.add_theme_font_size_override("font_size", 11 if mobile_layout else (12 if dense_wide else 14))
+	era_label.add_theme_font_size_override("font_size", 10 if mobile_layout else (11 if dense_wide else 13))
+	distance_label.add_theme_font_size_override("font_size", 11 if mobile_layout else (12 if dense_wide else 13))
+	field_stack.add_theme_constant_override("separation", 3 if mobile_layout or dense_wide else 7)
+	if mobile_layout:
+		pitch_field.custom_minimum_size = Vector2(0.0, 320.0 if mobile_portrait_layout else 220.0)
+	elif dense_wide:
+		pitch_field.custom_minimum_size = Vector2(400.0, 250.0)
+	else:
+		pitch_field.custom_minimum_size = Vector2(450.0, 360.0)
 	pitch_field.set_portrait_layout(mobile_layout and mobile_portrait_layout)
 	visual_weight_label.visible = not mobile_layout
-	last_result_label.add_theme_font_size_override("font_size", 12 if mobile_layout else 18)
-	mastery_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
-	outcomes_grid.columns = 4 if mobile_layout else Content.OUTCOME_NAMES.size()
+	visual_weight_label.custom_minimum_size.x = 190.0 if dense_wide else 245.0
+	last_result_label.add_theme_font_size_override("font_size", 12 if mobile_layout else (14 if dense_wide else 18))
+	mastery_label.add_theme_font_size_override("font_size", 11 if mobile_layout or dense_wide else 13)
+	outcomes_grid.columns = 4 if mobile_layout and mobile_portrait_layout else Content.OUTCOME_NAMES.size()
 	for index in outcome_panels.size():
-		outcome_name_labels[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 11)
-		outcome_probability_labels[index].add_theme_font_size_override("font_size", 13 if mobile_layout else 16)
-		outcome_delay_labels[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 10)
-	strikeout_payout_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
+		outcome_name_labels[index].add_theme_font_size_override("font_size", 8 if mobile_layout and mobile_portrait_layout else (9 if web_dense_layout else 11))
+		outcome_probability_labels[index].add_theme_font_size_override("font_size", 12 if mobile_layout else (14 if dense_wide else 16))
+		outcome_delay_labels[index].add_theme_font_size_override("font_size", 8 if mobile_layout else (9 if dense_wide else 10))
+	strikeout_payout_label.add_theme_font_size_override("font_size", 9 if mobile_layout else (10 if dense_wide else 11))
+	mobile_nav.custom_minimum_size.y = 44.0 if mobile_portrait_layout else 34.0
+	for mobile_button in mobile_nav.get_children():
+		(mobile_button as Button).custom_minimum_size.y = 44.0 if mobile_portrait_layout else 34.0
+	event_log_panel.custom_minimum_size.y = 44.0 if dense_wide else 72.0
+	event_log.add_theme_font_size_override("normal_font_size", 12 if dense_wide else 14)
 	field_stat_panel.offset_left = 6.0 if mobile_layout else 10.0
 	field_stat_panel.offset_top = 6.0 if mobile_layout else 10.0
 	# The phone readout only needs enough room for a short label and value. Keeping
@@ -919,6 +967,7 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 
 func _build_play_area(parent: Control) -> void:
 	play_panel = PanelContainer.new()
+	play_panel.add_theme_stylebox_override("panel", _compact_panel_style(10.0, 7.0))
 	play_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	play_panel.size_flags_stretch_ratio = 1.85
@@ -1030,30 +1079,36 @@ func _build_play_area(parent: Control) -> void:
 	for index in Content.OUTCOME_NAMES.size():
 		var outcome_panel := PanelContainer.new()
 		outcome_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		outcome_panel.add_theme_stylebox_override("panel", _compact_panel_style(5.0, 3.0, 6))
 		outcomes_grid.add_child(outcome_panel)
 		outcome_panels.append(outcome_panel)
 		var outcome_stack := VBoxContainer.new()
+		outcome_stack.add_theme_constant_override("separation", 0)
 		outcome_panel.add_child(outcome_stack)
+		var outcome_heading := HBoxContainer.new()
+		outcome_heading.add_theme_constant_override("separation", 2)
+		outcome_stack.add_child(outcome_heading)
 		var name_label := Label.new()
 		name_label.text = str(Content.OUTCOME_NAMES[index])
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_label.add_theme_font_size_override("font_size", 11)
 		name_label.add_theme_color_override("font_color", Content.OUTCOME_COLORS[index])
-		outcome_stack.add_child(name_label)
+		outcome_heading.add_child(name_label)
 		outcome_name_labels.append(name_label)
+		var delay_label := Label.new()
+		delay_label.text = "+0s"
+		delay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		delay_label.add_theme_font_size_override("font_size", 10)
+		delay_label.add_theme_color_override("font_color", COLOR_MUTED)
+		outcome_heading.add_child(delay_label)
+		outcome_delay_labels.append(delay_label)
 		var probability_label := Label.new()
 		probability_label.text = "0.00%"
 		probability_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		probability_label.add_theme_font_size_override("font_size", 16)
 		outcome_stack.add_child(probability_label)
 		outcome_probability_labels.append(probability_label)
-		var delay_label := Label.new()
-		delay_label.text = "+0s"
-		delay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		delay_label.add_theme_font_size_override("font_size", 10)
-		delay_label.add_theme_color_override("font_color", COLOR_MUTED)
-		outcome_stack.add_child(delay_label)
-		outcome_delay_labels.append(delay_label)
 	strikeout_payout_label = Label.new()
 	strikeout_payout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	strikeout_payout_label.add_theme_font_size_override("font_size", 11)
@@ -1699,6 +1754,7 @@ func _upgrade_button(description: String) -> Button:
 
 func _build_event_log(parent: Control) -> void:
 	event_log_panel = PanelContainer.new()
+	event_log_panel.add_theme_stylebox_override("panel", _compact_panel_style(8.0, 5.0))
 	event_log_panel.custom_minimum_size.y = 72.0
 	event_log_panel.size_flags_vertical = Control.SIZE_FILL
 	parent.add_child(event_log_panel)

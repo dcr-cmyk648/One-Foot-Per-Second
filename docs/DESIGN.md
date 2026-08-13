@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.2 Design
+# One Foot Per Second — v0.10.3 Design
 
 ## Product shape
 

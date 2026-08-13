@@ -32,9 +32,9 @@ func _run() -> void:
 	_expect(main.mobile_nav.visible, "Phone navigation should remain visible below the field")
 	_expect(main.header_subtitle.visible, "The milestone subtitle should remain visible beneath the title on phone")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Phone and desktop should share the same milestone subtitle")
-	_expect(main._should_use_compact_layout(Vector2(1024.0, 768.0)), "A resized narrow browser window should use overlay navigation")
+	_expect(main._should_use_compact_layout(Vector2(1279.0, 800.0)), "A resized browser just below the wide boundary should use overlay navigation")
 	_expect(main._should_use_compact_layout(Vector2(1366.0, 680.0)), "A resized short browser window should use overlay navigation")
-	_expect(not main._should_use_compact_layout(Vector2(1280.0, 800.0)), "A roomy browser window should preserve the full interface")
+	_expect(not main._should_use_compact_layout(Vector2(1280.0, 720.0)), "The complete wide interface should fit at its declared boundary")
 	_expect(not main.upgrade_panel.visible, "Upgrade panel should not squeeze the phone field")
 	_expect(not main.equipment_sidebar.visible, "Loadout sidebar should not squeeze the phone field")
 	_expect(not main.event_log_panel.visible, "Event log should live behind the phone menu")
@@ -78,12 +78,34 @@ func _run() -> void:
 	await process_frame
 	_expect(main.equipment_sidebar.get_parent() == main.mobile_overlay_content, "Loadout should open in the same phone overlay")
 	main._close_mobile_overlay()
-	main._set_mobile_layout(false, false)
+	root.size = Vector2i(1179, 720)
+	main._set_mobile_layout(true, false, true)
+	await process_frame
+	await process_frame
+	_expect(main.outcomes_grid.columns == 8, "Compact landscape outcomes should stay on one short row")
+	_expect(main.mobile_nav.custom_minimum_size.y <= 34.0, "Compact landscape navigation should not waste vertical space")
+	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "A 1179×720 compact browser should keep the complete play view in-frame")
+	root.size = Vector2i(1256, 696)
+	main._set_mobile_layout(false, false, true)
+	await process_frame
 	await process_frame
 	_expect(not main.mobile_layout, "Desktop layout did not restore")
 	_expect(not main.pitch_field.is_portrait_layout(), "Desktop field should return to its horizontal lane")
 	_expect(main.upgrade_panel.visible and main.equipment_sidebar.visible and main.event_log_panel.visible, "Desktop panels did not restore")
 	_expect(main.outcomes_grid.columns == 8, "Desktop outcome row should return to one line")
+	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "The narrowest hysteresis-allowed wide view should fit without page scrolling")
+	_expect(main.body_container.get_combined_minimum_size().x <= main.page_scroll.size.x + 1.0, "The narrowest hysteresis-allowed wide view should not clip its right panel")
+	main.game.genetic_offer_unlocked = true
+	main.game.eldritch_offer_unlocked = true
+	main.game.highest_unlocked = 44
+	main.game.current_opponent = 44
+	main.game._reset_batter_identity()
+	main._refresh_interface()
+	await process_frame
+	await process_frame
+	_expect(main.prestige_header_stack.visible, "The wide-layout audit must include its late-game prestige metric")
+	_expect(main.header_row.get_combined_minimum_size().x <= main.header_panel.size.x + 1.0, "Late-game header controls should fit at the narrowest retained wide width")
+	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "A long final-boss name should not reintroduce page scrolling at the wide boundary")
 	var desktop_arm: Dictionary = main.pitch_field._get_throw_arm_geometry(0, 1, 0.0)
 	_expect(Vector2(desktop_arm.end).y > 0.0, "A right-handed desktop pitcher should rest the arm below the throwing line")
 

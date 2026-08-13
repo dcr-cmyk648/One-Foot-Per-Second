@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.3 — Everything fits in the ballpark
+
+- Replaced the one-pixel wide/compact switch with measured-safe width and height thresholds plus a small hysteresis band, eliminating clipped right panels and resize flicker at the boundary.
+- Added a dense wide-browser layout that keeps the full loadout, field, upgrades, outcomes, and event log visible in one viewport down to the smallest width that is allowed to retain wide mode.
+- Flattened the save, export, load, and reset controls into one compact header row and removed unused header height.
+- Compressed every outcome card to two lines by placing its lineup-delay time beside the outcome name. Compact landscape mode now keeps all eight probabilities in one row, while phones retain the readable four-by-two grid.
+- Added edge-case layout coverage for both sides of the breakpoint, the full hysteresis range, late-game prestige metrics, and the longest final-boss presentation.
+
 ## 0.10.2 — The browser remembers it is a window
 
 - Made resized browser windows switch to the compact overlay interface whenever width or height can no longer hold the desktop panels. The whole page now has vertical overflow access as a final safety net, so controls cannot become permanently cropped below a short window.

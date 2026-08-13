@@ -2,14 +2,14 @@
 
 A top-down baseball idle game about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the playable **v0.10.2 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
+This repository contains the playable **v0.10.3 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
 
 ## Share or install on another computer
 
 Upload this single file to Google Drive (or any ordinary file host):
 
 ```text
-release/One Foot Per Second v0.10.2 All Platforms.zip
+release/One Foot Per Second v0.10.3 All Platforms.zip
 ```
 
 It contains a static browser-site ZIP, a Universal Mac DMG, separate Intel/AMD and ARM Windows ZIPs, separate Intel/AMD and ARM Linux archives, source code, instructions, a platform manifest, and SHA-256 checksums. Recipients can play from an uploaded browser build or choose the native package matching their computer. Godot is not needed to play.
@@ -26,7 +26,7 @@ The native packages are portable builds, not store submissions. The Mac app is a
 
 ## Play in a browser
 
-`release/One Foot Per Second v0.10.2/One Foot Per Second v0.10.2 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database, application server, special cross-origin headers, or installation step. A running tab checks for releases every five minutes and offers to save, activate the new cached build, and reload; it never interrupts a pitch with a forced update.
+`release/One Foot Per Second v0.10.3/One Foot Per Second v0.10.3 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database, application server, special cross-origin headers, or installation step. A running tab checks for releases every five minutes and offers to save, activate the new cached build, and reload; it never interrupts a pitch with a forced update.
 
 To build only the browser package, or serve the current build locally:
 
@@ -55,7 +55,7 @@ Commit the refreshed `web/` directory whenever gameplay source changes. The comp
 
 ## Play on macOS
 
-1. Open `release/One Foot Per Second v0.10.2 macOS Universal.dmg`.
+1. Open `release/One Foot Per Second v0.10.3 macOS Universal.dmg`.
 2. Drag **One Foot Per Second.app** to Applications, or run it from the disk image.
 3. If macOS asks for confirmation, Control-click the app, choose **Open**, and confirm.
 

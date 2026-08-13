@@ -23,7 +23,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.2 progressive-interface audit")
+	print("One Foot Per Second — v0.10.3 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -34,9 +34,12 @@ func _run() -> void:
 	var body: HBoxContainer = page.get_child(1)
 	_expect(page_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "The page must never hide content behind horizontal scrolling")
 	_expect(page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Short browser windows need vertical access to every control")
-	_expect(main._should_use_compact_layout(Vector2(1024.0, 768.0)), "A narrow landscape browser should move sidebars into overlays")
+	_expect(main._should_use_compact_layout(Vector2(1279.0, 800.0)), "A browser one pixel below the wide boundary should move sidebars into overlays")
 	_expect(main._should_use_compact_layout(Vector2(1366.0, 680.0)), "A short landscape browser should move tall panels into overlays")
-	_expect(not main._should_use_compact_layout(Vector2(1280.0, 800.0)), "A roomy 1280×800 browser should retain the desktop layout")
+	_expect(not main._should_use_compact_layout(Vector2(1280.0, 720.0)), "The complete wide interface should fit at its declared boundary")
+	_expect(not main._should_use_compact_layout(Vector2(1256.0, 696.0), false, true), "Wide-mode hysteresis must remain safe at its smallest allowed viewport")
+	_expect(main._should_use_compact_layout(Vector2(1303.0, 743.0), true, true), "Compact mode should not flicker wide inside the hysteresis band")
+	_expect(not main._should_use_compact_layout(Vector2(1304.0, 744.0), true, true), "Compact mode should leave only after clearing both hysteresis thresholds")
 	_expect(body.size.x <= main.size.x + 1.0, "Primary interface width %.1f exceeds the %.1f px canvas" % [body.size.x, main.size.x])
 	for child in body.get_children():
 		_expect(
@@ -92,8 +95,10 @@ func _run() -> void:
 	if outcome_row != null:
 		for outcome_panel in outcome_row.get_children():
 			var outcome_stack: VBoxContainer = outcome_panel.get_child(0)
-			_expect(outcome_stack.get_child_count() == 3, "Outcome cards should contain only a name, percentage, and compact timer delta")
-			_expect(str((outcome_stack.get_child(2) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus")
+			_expect(outcome_stack.get_child_count() == 2, "Outcome cards should use a two-line name/timer and probability layout")
+			var outcome_heading: HBoxContainer = outcome_stack.get_child(0)
+			_expect(outcome_heading.get_child_count() == 2, "Outcome names and lineup-delay bonuses should share one compact row")
+			_expect(str((outcome_heading.get_child(1) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus beside its name")
 			_expect(not outcome_panel.tooltip_text.is_empty(), "Detailed outcome rules should live in hover text")
 	_expect(not main.strikeout_payout_label.text.begins_with("0 XP"), "The separate strikeout payout should not repeat zero-XP clutter")
 	_expect(main.strikeout_payout_label.text.begins_with("COMPLETED STRIKEOUT:"), "Strikeout XP should appear in one small separate readout")
