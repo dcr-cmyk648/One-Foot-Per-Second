@@ -1,0 +1,3 @@
+web/*.pck -diff
+web/*.png -diff
+web/*.wasm -diff

@@ -1,0 +1,35 @@
+; Engine configuration file.
+; Edit through the Godot editor when possible.
+config_version=5
+
+[application]
+
+config/name="One Foot Per Second"
+config/description="A minimalist baseball idle game about becoming cosmically overqualified."
+config/version="0.9.0"
+config/icon="res://assets/icon.svg"
+run/main_scene="res://main.tscn"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=1000
+window/size/window_width_override=1680
+window/size/window_height_override=1050
+window/size/resizable=true
+window/stretch/mode="canvas_items"
+
+[gui]
+
+theme/default_font_multichannel_signed_distance_field=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+renderer/rendering_method.web="gl_compatibility"
+renderer/rendering_method.mobile.web="gl_compatibility"
+renderer/rendering_method.browser_build="gl_compatibility"
+renderer/rendering_method.mobile.browser_build="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.018, 0.023, 0.035, 1)

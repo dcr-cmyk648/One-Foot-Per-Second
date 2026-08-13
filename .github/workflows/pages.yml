@@ -1,0 +1,56 @@
+name: Deploy browser game to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/pages.yml
+      - assets/**
+      - export_presets.cfg
+      - main.tscn
+      - project.godot
+      - scripts/**.gd
+      - scripts/**.gd.uid
+      - scripts/verify_web_parity.sh
+      - scripts/web_manifest.sh
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source and tested browser artifact
+        uses: actions/checkout@v6
+      - name: Verify desktop/browser source parity and artifact integrity
+        run: ./scripts/verify_web_parity.sh
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out tested browser artifact
+        uses: actions/checkout@v6
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload browser site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web
+      - name: Deploy browser site
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,6 @@
+.DS_Store
+.godot/
+build/
+release/
+exports/
+*.log
