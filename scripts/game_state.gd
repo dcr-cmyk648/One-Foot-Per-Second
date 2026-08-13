@@ -21,6 +21,7 @@ const ALIEN_SPEED_CAP_FPS := SPEED_OF_SOUND_FPS * 12.0
 const SPEED_OF_LIGHT_FPS := 983571056.0
 const DNA_XP_THRESHOLD := 1.0e10
 const STRIKEOUT_POINTS_PER_REQUIRED_STRIKE := 5.0
+const OPENING_STRIKEOUT_BASE_POINTS := 5.0
 const BASE_VELOCITY_FPS := 1.0
 const VELOCITY_PER_RANK_FPS := 0.15
 const QUALITY_PER_RANK := 0.08
@@ -513,7 +514,17 @@ func is_pitch_in_flight() -> bool:
 
 func advance(delta: float) -> void:
 	simulation_accumulator += maxf(delta, 0.0)
-	if simulation_accumulator < SIMULATION_STEP:
+	# Ordinary idle accounting can run at a coarse cadence, but a visible flight
+	# and batter handoff share a frame-by-frame animation clock with PitchField.
+	# Advancing those phases every rendered frame prevents the shader ball from
+	# reaching (and disappearing at) the plate while the authoritative 0.10 s
+	# simulation accumulator is still waiting to publish its impact.
+	var visual_timeline_active := (
+		is_pitch_in_flight()
+		or batter_cooldown_remaining > 0.0
+		or not live_pitching_enabled
+	)
+	if simulation_accumulator < SIMULATION_STEP and not visual_timeline_active:
 		return
 	var elapsed := simulation_accumulator
 	simulation_accumulator = 0.0
@@ -1661,7 +1672,15 @@ func get_balls_required(opponent_index: int = current_opponent) -> int:
 func get_strikeout_base_points(opponent_index: int = current_opponent) -> float:
 	# Reducing the live count never reduces its original bounty, which is what
 	# makes count compression one of the prestige layer's strongest purchases.
-	return float(get_base_strikes_required(opponent_index)) * STRIKEOUT_POINTS_PER_REQUIRED_STRIKE
+	# The first toddler pays only 5 XP instead of front-loading three ordinary
+	# 5-point Strikes into one 15-XP windfall. Early opponents add 1 base XP per
+	# level until the established count-based bounty takes over at level 11.
+	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
+	var full_count_bounty := (
+		float(get_base_strikes_required(bounded))
+		* STRIKEOUT_POINTS_PER_REQUIRED_STRIKE
+	)
+	return minf(full_count_bounty, OPENING_STRIKEOUT_BASE_POINTS + float(bounded))
 
 func get_hit_save_chance(outcome: int, _opponent_index: int = current_opponent) -> float:
 	if outcome < 0 or outcome >= Content.HIT_OUTCOME_COUNT or outcome == Content.GRAND_SLAM_INDEX:

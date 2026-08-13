@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.6 Balance Audit
+# One Foot Per Second — v0.10.7 Balance Audit
 
 ## Outcome
 
@@ -24,7 +24,7 @@ The runner obeys the same human cadence as the field: one wind-up, one unresolve
 
 ## Why strikeout-only income works
 
-The fresh Dead-Fish Lob has roughly a 30.5% Strike probability. Fouls can add strike one or two, Balls can produce a walk, and fair hits end the plate appearance. Solving the complete `(Strikes, Balls)` state machine gives a **6.472%** fresh strikeout probability per plate appearance. That is bad enough to sell the joke but frequent enough to fund the first upgrades.
+The fresh Dead-Fish Lob has a **39.92%** Strike probability. Fouls can add strike one or two, Balls can produce a walk, and fair hits end the plate appearance. Solving the complete `(Strikes, Balls)` state machine gives an **11.956%** fresh strikeout probability per plate appearance. That is bad enough to sell the joke without making three Strikes feel like three independent one-in-four miracles.
 
 The idle solver uses the same exact absorbing model at every level:
 
@@ -41,19 +41,23 @@ The fully purchased audit profile reaches a 100% Strike result, and its 2,048-ba
 
 Human baseball keeps three Strikes and four Balls throughout. Alien counts climb from four to nine Strikes and eventually shrink to three Balls; eldritch counts climb through 12, 18, 28, 42, and 64 Strikes while the last two gods allow only two Balls. Genetic Strike compression affects only post-human opponents and can never reduce the requirement below three.
 
-Only the final Strike pays. Base payout is five XP per unmodified required Strike:
+Only the final Strike pays. The opening bounty ramps by one base XP per opponent until it meets the normal five XP per unmodified required Strike:
 
-| Base Strike count | Strikeout base XP |
-|---:|---:|
-| 3 | 15 |
-| 4 | 20 |
-| 6 | 30 |
-| 9 | 45 |
-| 12 | 60 |
-| 18 | 90 |
-| 28 | 140 |
-| 42 | 210 |
-| 64 | 320 |
+| Opponent / base Strike count | Strikeout base XP |
+|---|---:|
+| Human level 1 | 5 |
+| Human level 2 | 6 |
+| Human level 5 | 9 |
+| Human level 10 | 14 |
+| Human level 11+ / 3 | 15 |
+| Post-human / 4 | 20 |
+| Post-human / 6 | 30 |
+| Post-human / 9 | 45 |
+| Post-human / 12 | 60 |
+| Post-human / 18 | 90 |
+| Post-human / 28 | 140 |
+| Post-human / 42 | 210 |
+| Post-human / 64 | 320 |
 
 Compression retains the original payout. A six-Strike alien compressed to three still pays 30 base XP.
 

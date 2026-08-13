@@ -22,6 +22,7 @@ const FLIGHT_METER_COLOR := Color("ffd36b")
 const REPRESENTATIVE_RESULT_INTERVAL := 0.12
 const PITCHER_COLOR := Color("68d5ff")
 const BASE_PITCHER_INTRINSIC_SIZE := 1.08
+const RANGE_CONTROL_TOUCH_SIZE := 44.0
 const BATTER_CONTACT_HOLD := 0.18
 const BATTER_ENTRY_DURATION := 0.25
 const BATTER_EXIT_DURATIONS := [1.00, 0.72, 0.55, 0.42, 0.30, 0.20, 0.26, 0.12]
@@ -54,6 +55,10 @@ var strike_icon_flash := 0.0
 var removed_strike_icon := -1
 var move_closer_arrow: Button
 var move_farther_arrow: Button
+var portrait_up_icon: ImageTexture
+var portrait_down_icon: ImageTexture
+var landscape_left_icon: ImageTexture
+var landscape_right_icon: ImageTexture
 
 var snapshot := {
 	"opponent_index": 0,
@@ -278,8 +283,12 @@ void fragment() {
 	_on_resized()
 
 func _setup_range_arrows() -> void:
+	portrait_up_icon = _create_range_icon(Vector2i.UP)
+	portrait_down_icon = _create_range_icon(Vector2i.DOWN)
+	landscape_left_icon = _create_range_icon(Vector2i.LEFT)
+	landscape_right_icon = _create_range_icon(Vector2i.RIGHT)
 	move_farther_arrow = Button.new()
-	move_farther_arrow.text = "←"
+	move_farther_arrow.text = ""
 	move_farther_arrow.tooltip_text = "Move the pitcher farther away"
 	move_farther_arrow.custom_minimum_size = Vector2(38.0, 32.0)
 	move_farther_arrow.size = Vector2(38.0, 32.0)
@@ -290,7 +299,7 @@ func _setup_range_arrows() -> void:
 	add_child(move_farther_arrow)
 
 	move_closer_arrow = Button.new()
-	move_closer_arrow.text = "→"
+	move_closer_arrow.text = ""
 	move_closer_arrow.tooltip_text = "Move the pitcher closer to the batter"
 	move_closer_arrow.custom_minimum_size = Vector2(38.0, 32.0)
 	move_closer_arrow.size = Vector2(38.0, 32.0)
@@ -300,6 +309,33 @@ func _setup_range_arrows() -> void:
 	move_closer_arrow.pressed.connect(_request_move_closer)
 	add_child(move_closer_arrow)
 	_update_range_arrows()
+
+func _create_range_icon(direction: Vector2i) -> ImageTexture:
+	var image := Image.create(28, 28, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var color := Color("dce9f7")
+	var source_pixels: Array[Vector2i] = []
+	# Rasterized here instead of relying on arrow glyphs: browser fallback fonts
+	# can substitute missing-glyph boxes on both phone and desktop Web exports.
+	for y in range(4, 16):
+		var half_width := mini(y - 3, 10)
+		for x in range(14 - half_width, 15 + half_width):
+			source_pixels.append(Vector2i(x, y))
+	for y in range(14, 24):
+		for x in range(11, 18):
+			source_pixels.append(Vector2i(x, y))
+	for source in source_pixels:
+		var delta := source - Vector2i(14, 14)
+		var target := source
+		if direction == Vector2i.DOWN:
+			target = Vector2i(14 - delta.x, 14 - delta.y)
+		elif direction == Vector2i.LEFT:
+			target = Vector2i(14 + delta.y, 14 - delta.x)
+		elif direction == Vector2i.RIGHT:
+			target = Vector2i(14 - delta.y, 14 + delta.x)
+		if target.x >= 0 and target.x < 28 and target.y >= 0 and target.y < 28:
+			image.set_pixelv(target, color)
+	return ImageTexture.create_from_image(image)
 
 func _request_move_closer() -> void:
 	move_closer_requested.emit()
@@ -641,21 +677,43 @@ func _update_range_arrows() -> void:
 	var mound := _get_mound_position(float(snapshot.distance_feet))
 	if portrait_layout:
 		var body_radius := 10.0 * _get_pitcher_visual_scale()
-		var arrow_y := clampf(mound.y - 16.0, 4.0, maxf(size.y - 36.0, 4.0))
-		move_farther_arrow.position = Vector2(
-			clampf(mound.x - body_radius - 50.0, 4.0, maxf(size.x - 42.0, 4.0)),
-			arrow_y
+		var arrow_x := clampf(
+			mound.x + body_radius + 18.0,
+			4.0,
+			maxf(size.x - RANGE_CONTROL_TOUCH_SIZE - 4.0, 4.0)
 		)
+		move_closer_arrow.custom_minimum_size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
+		move_farther_arrow.custom_minimum_size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
+		move_closer_arrow.size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
+		move_farther_arrow.size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
 		move_closer_arrow.position = Vector2(
-			clampf(mound.x + body_radius + 12.0, 4.0, maxf(size.x - 42.0, 4.0)),
-			arrow_y
+			arrow_x,
+			clampf(mound.y - RANGE_CONTROL_TOUCH_SIZE - 4.0, 4.0, maxf(size.y - 96.0, 4.0))
 		)
+		move_farther_arrow.position = Vector2(
+			arrow_x,
+			clampf(mound.y + 4.0, 52.0, maxf(size.y - RANGE_CONTROL_TOUCH_SIZE - 4.0, 52.0))
+		)
+		move_closer_arrow.text = ""
+		move_farther_arrow.text = ""
+		move_closer_arrow.icon = portrait_up_icon
+		move_farther_arrow.icon = portrait_down_icon
+		move_closer_arrow.expand_icon = true
+		move_farther_arrow.expand_icon = true
 	else:
 		var arrow_y := mound.y + maxf(44.0, 20.0 * _get_camera_scale())
+		move_closer_arrow.custom_minimum_size = Vector2(38.0, 32.0)
+		move_farther_arrow.custom_minimum_size = Vector2(38.0, 32.0)
+		move_closer_arrow.size = Vector2(38.0, 32.0)
+		move_farther_arrow.size = Vector2(38.0, 32.0)
 		move_farther_arrow.position = Vector2(mound.x - 44.0, arrow_y)
 		move_closer_arrow.position = Vector2(mound.x + 6.0, arrow_y)
-	move_farther_arrow.text = "↓" if portrait_layout else "←"
-	move_closer_arrow.text = "↑" if portrait_layout else "→"
+		move_farther_arrow.text = ""
+		move_closer_arrow.text = ""
+		move_farther_arrow.icon = landscape_left_icon
+		move_closer_arrow.icon = landscape_right_icon
+		move_farther_arrow.expand_icon = true
+		move_closer_arrow.expand_icon = true
 	move_closer_arrow.disabled = not bool(snapshot.can_move_closer)
 	move_farther_arrow.disabled = not bool(snapshot.can_move_farther)
 	var distance_index := int(snapshot.get("distance_index", 0))

@@ -11,6 +11,7 @@ on:
       - project.godot
       - scripts/**.gd
       - scripts/**.gd.uid
+      - scripts/**.mjs
       - scripts/verify_web_parity.sh
       - scripts/web_manifest.sh
       - web/**

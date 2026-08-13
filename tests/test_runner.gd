@@ -7,7 +7,7 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.6 multiverse regression suite")
+	print("One Foot Per Second — v0.10.7 multiverse regression suite")
 	_test_content()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()
@@ -182,13 +182,13 @@ func _test_initial_balance_and_velocity_layers() -> void:
 		_expect(probability >= 0.0 and probability <= 1.0, "Outcome probability outside [0, 1]")
 	_expect_close(total, 1.0, "Outcome probabilities must sum to one")
 	_expect(probabilities.size() == 8, "The outcome model should include fair hits, Fouls, Balls, and Strikes")
-	_expect(probabilities[Content.STRIKE_INDEX] > 0.20 and probabilities[Content.STRIKE_INDEX] < 0.40, "The opening strike chance should be poor but viable")
+	_expect(probabilities[Content.STRIKE_INDEX] > 0.38 and probabilities[Content.STRIKE_INDEX] < 0.45, "The opening strike chance should be hard without feeling like three independent one-in-four miracles")
 	var opening_contact := 0.0
 	for outcome in Content.FOUL_INDEX + 1:
 		opening_contact += probabilities[outcome]
 	_expect(opening_contact > 0.50, "The toddler should still make contact most of the time")
 	_expect(probabilities[Content.FOUL_INDEX] > 0.0 and probabilities[Content.BALL_INDEX] > 0.0, "Opening baseball should already include Fouls and Balls")
-	_expect(game.get_strikeout_chance_per_at_bat() > 0.01, "The opening pitcher must have a real chance to finish a three-strike count")
+	_expect(game.get_strikeout_chance_per_at_bat() > 0.10, "The opening pitcher must have a real chance to finish a three-strike count")
 	var opening_pitch_entries := game.get_pitch_selection_entries()
 	_expect(opening_pitch_entries.size() == 1 and str(opening_pitch_entries[0].id) == "dead_fish", "The fresh pitcher should only call the learned Dead-Fish Lob")
 	var dead_fish_speed := game.get_pitch_speed_range("dead_fish")
@@ -225,6 +225,20 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	game.free()
 
 func _test_pitch_phase_state_machine() -> void:
+	var frame_sync_game: BaseballGameState = GameStateScript.new()
+	frame_sync_game.rng.seed = 1001
+	frame_sync_game.pitch_credit = 1.0
+	frame_sync_game.advance(BaseballGameState.SIMULATION_STEP)
+	_expect(frame_sync_game.is_pitch_in_flight(), "The frame-sync fixture should release one opening pitch")
+	frame_sync_game.pending_volley_outcome = Content.STRIKE_INDEX
+	for _frame in 187:
+		frame_sync_game.advance(0.016)
+	_expect(frame_sync_game.is_pitch_in_flight(), "A visible pitch must remain unresolved before its exact three-second arrival")
+	frame_sync_game.advance(0.016)
+	_expect(not frame_sync_game.is_pitch_in_flight(), "Impact must publish on the first rendered frame that reaches the plate, without waiting for the coarse idle tick")
+	_expect_close(float(frame_sync_game.result_totals[Content.STRIKE_INDEX]), 1.0, "The frame-synchronized impact should resolve exactly once")
+	frame_sync_game.free()
+
 	var game: BaseballGameState = GameStateScript.new()
 	game.rng.seed = 6006
 	var release := game._resolve_elapsed(4.0, true, true)
@@ -419,8 +433,9 @@ func _test_strikeout_only_economy() -> void:
 	game._apply_pitch_outcome(strike_summary, Content.STRIKE_INDEX)
 	_expect(game.plate_strikes == 0 and float(strike_summary.strikeouts) == 1.0, "Only strike three should complete a human strikeout")
 	game._apply_resolution(strike_summary, false)
-	_expect_close(float(strike_summary.earned_xp), 15.0, "A three-strike human out should pay 3 × 5 base XP")
-	_expect_close(game.xp, 15.0, "The completed strikeout should be the only banked XP")
+	_expect_close(float(strike_summary.earned_xp), 5.0, "The first toddler strikeout should pay a restrained 5 base XP")
+	_expect_close(game.xp, 5.0, "The completed strikeout should be the only banked XP")
+	_expect_close(game.get_strikeout_base_points(10), 15.0, "The early payout ramp should reach the ordinary three-strike bounty by level 11")
 	_expect_close(game.lifetime_strikeouts, 1.0, "Completed strikeouts should have their own lifetime statistic")
 	var strike_events: Array = strike_summary.pitch_events
 	_expect(strike_events.size() == 3, "Exact simulation should publish one render event per physical pitch")
@@ -1086,8 +1101,9 @@ func _test_progression_and_purchases() -> void:
 	var base_rate := game.get_pitch_rate()
 	game.purchased_milestones.append("pitch_clock_loophole")
 	_expect_close(game.get_pitch_rate(), base_rate * 1.10, "Pitch-Clock Loophole should apply its advertised Recovery multiplier")
+	var mastery_before_umpire := game.get_mastery_multiplier()
 	game.purchased_milestones.append("outer_dark_umpire")
-	_expect_close(game.get_mastery_multiplier(), 2.50, "The Outer-Dark umpire should multiply mastery")
+	_expect_close(game.get_mastery_multiplier(), mastery_before_umpire * 2.50, "The Outer-Dark umpire should multiply mastery")
 	game.purchased_ball_upgrades = ["pocket_singularity", "taped_seams"]
 	_expect(game.get_current_ball_name() == "Pocket-Singularity Center", "Loadout should show the strongest ball regardless of purchase order")
 	game.free()

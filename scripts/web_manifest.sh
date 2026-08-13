@@ -25,7 +25,7 @@ write_ofps_source_manifest() {
 			"${OFPS_ROOT}/export_presets.cfg" \
 			"${OFPS_ROOT}/main.tscn"
 		find "${OFPS_ROOT}/scripts" -maxdepth 1 -type f \
-			\( -name '*.gd' -o -name '*.gd.uid' \)
+			\( -name '*.gd' -o -name '*.gd.uid' -o -name '*.mjs' \)
 		find "${OFPS_ROOT}/assets" -type f ! -name '.DS_Store'
 	} | sort > "${OFPS_FILE_LIST}"
 

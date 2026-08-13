@@ -195,7 +195,7 @@ const LOOT_SUFFIXES := {
 # reaches at each era boundary. This keeps new classes competitive instead of
 # letting uncapped idle-game income turn the whole ladder into automatic
 # strikes. The final anchor is Octathulhu rather than a tenth era.
-const OPPONENT_DIFFICULTY_ANCHORS := [2.95, 6.0, 11.0, 17.0, 24.0, 28.0, 36.0, 52.0, 72.0, 100.0]
+const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 6.0, 11.0, 17.0, 24.0, 28.0, 36.0, 52.0, 72.0, 100.0]
 
 const DISTANCE_TIERS := [
 	{"name": "PRESCHOOL POINT-BLANK", "label": "3 ft", "feet": 3.0, "required_level": 0, "xp_multiplier": 1.0, "difficulty": 0.0},

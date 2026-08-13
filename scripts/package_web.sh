@@ -59,9 +59,11 @@ rm -rf "${OFPS_WEB_BUILD_DIR}"
   --log-file "${OFPS_TEMP_DIR}/export-web.log" \
   --export-release "Web" "${OFPS_WEB_BUILD_DIR}/index.html"
 
+node "${OFPS_ROOT}/scripts/prepare_web_pwa.mjs" "${OFPS_ROOT}" "${OFPS_WEB_BUILD_DIR}"
+
 for OFPS_REQUIRED_FILE in \
   index.html index.js index.pck index.wasm \
-  index.manifest.json index.offline.html index.service.worker.js; do
+  index.manifest.json index.192x192.png index.offline.html index.service.worker.js; do
   if [[ ! -s "${OFPS_WEB_BUILD_DIR}/${OFPS_REQUIRED_FILE}" ]]; then
     echo "Web export is incomplete: ${OFPS_REQUIRED_FILE} is missing or empty." >&2
     exit 1
@@ -82,8 +84,11 @@ fi
 if ! /usr/bin/grep -q 'apple-mobile-web-app-capable' "${OFPS_WEB_BUILD_DIR}/index.html" \
 		|| ! /usr/bin/grep -q 'apple-mobile-web-app-title' "${OFPS_WEB_BUILD_DIR}/index.html" \
 		|| ! /usr/bin/grep -q 'rel="apple-touch-icon"' "${OFPS_WEB_BUILD_DIR}/index.html" \
-		|| ! /usr/bin/grep -q '"display":"standalone"' "${OFPS_WEB_BUILD_DIR}/index.manifest.json"; then
-	echo "Web export is missing its iPhone Home Screen metadata." >&2
+		|| ! /usr/bin/grep -q 'beforeinstallprompt' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q 'wakeLock.request' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q '"display":"standalone"' "${OFPS_WEB_BUILD_DIR}/index.manifest.json" \
+		|| ! /usr/bin/grep -q '"sizes":"192x192"' "${OFPS_WEB_BUILD_DIR}/index.manifest.json"; then
+	echo "Web export is missing its mobile installation or screen-wake metadata." >&2
 	exit 1
 fi
 

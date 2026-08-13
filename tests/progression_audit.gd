@@ -6,7 +6,7 @@ const GameStateScript = preload("res://scripts/game_state.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.6 progression and economy audit")
+	print("One Foot Per Second — v0.10.7 progression and economy audit")
 	_audit_ladder()
 	_audit_encounter_profiles()
 	_audit_prestige_curves()
@@ -54,7 +54,7 @@ func _audit_encounter_profiles() -> void:
 
 	var fresh := GameStateScript.new()
 	_print_profile("Fresh vs Little Timmy", fresh)
-	_expect(fresh.get_strikeout_chance_per_at_bat() > 0.01, "The opening at-bat is mathematically impractical")
+	_expect(fresh.get_strikeout_chance_per_at_bat() > 0.10, "The opening at-bat is mathematically impractical")
 
 	var human := GameStateScript.new()
 	_max_ordinary_build(human, Content.HUMAN_FINAL_INDEX)

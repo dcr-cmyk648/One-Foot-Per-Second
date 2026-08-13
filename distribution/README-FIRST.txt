@@ -1,4 +1,4 @@
-ONE FOOT PER SECOND v0.10.6
+ONE FOOT PER SECOND v0.10.7
 ALL-PLATFORMS RELEASE
 
 Choose the browser package or the native package matching the computer that
@@ -7,14 +7,14 @@ and the game does not install services or modify the registry.
 
 BROWSER
 
-"One Foot Per Second v0.10.6 Browser.zip" is a static website. Upload its
+"One Foot Per Second v0.10.7 Browser.zip" is a static website. Upload its
 contents unchanged to a static host with index.html at the web root, then share
 that URL. See WEB-README.txt in the browser package for local testing and save
 details. It cannot be run reliably by double-clicking index.html.
 
 MACOS — INTEL OR APPLE SILICON
 
-1. Open "One Foot Per Second v0.10.6 macOS Universal.dmg".
+1. Open "One Foot Per Second v0.10.7 macOS Universal.dmg".
 2. Drag One Foot Per Second into Applications, or run it from the disk image.
 3. The build is ad-hoc signed but not Apple-notarized. On first launch,
    Control-click the app and choose Open. If macOS still blocks it, open
@@ -78,3 +78,5 @@ CONTENTS
 - release-manifest.json: machine-readable version and platform inventory
 
 There are no native Android, iPhone/iPad, or console packages in this release.
+The browser build is installable from Safari's Add to Home Screen action and
+Chrome's Android install prompt while remaining on the Web update channel.

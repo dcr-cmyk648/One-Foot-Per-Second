@@ -19,6 +19,8 @@ const WEB_WIDE_MIN_WIDTH := 1280.0
 const WEB_WIDE_MIN_HEIGHT := 696.0
 const WEB_LAYOUT_HYSTERESIS := 24.0
 const WEB_DENSE_MAX_HEIGHT := 860.0
+const MOBILE_TAB_ARROW_TOUCH_SIZE := 44
+const MOBILE_PORTRAIT_FIELD_MIN_HEIGHT := 270.0
 
 var game: BaseballGameState
 var pitch_field
@@ -40,6 +42,11 @@ var mastery_label: Label
 var mastery_bar: ProgressBar
 var previous_button: Button
 var next_button: Button
+var previous_navigation_icon: ImageTexture
+var next_navigation_icon: ImageTexture
+var transparent_navigation_icon: ImageTexture
+var favorite_open_icon: ImageTexture
+var favorite_kept_icon: ImageTexture
 var distance_label: Label
 var equipment_labels := {}
 var equipment_summary_label: Label
@@ -85,6 +92,7 @@ var field_stat_labels := {}
 var opponent_loadout_dock: VBoxContainer
 var opponent_loadout_signature := ""
 var locker_dialog: Window
+var locker_dialog_close_button: Button
 var locker_dialog_status_label: Label
 var locker_dialog_items: VBoxContainer
 var locker_dialog_slot_buttons := {}
@@ -102,7 +110,8 @@ var export_save_dialog: FileDialog
 var load_save_dialog: FileDialog
 var import_save_confirmation: ConfirmationDialog
 var save_transfer_message_dialog: AcceptDialog
-var ios_install_dialog: AcceptDialog
+var mobile_install_dialog: AcceptDialog
+var mobile_inspection_dialog: AcceptDialog
 var offline_progress_dialog: AcceptDialog
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
@@ -134,11 +143,15 @@ var mobile_overlay_panel: Control
 var mobile_overlay_surface: PanelContainer
 var mobile_overlay_content: VBoxContainer
 var mobile_overlay_title: Label
+var mobile_overlay_xp_label: Label
 var mobile_nav: HBoxContainer
 var mobile_install_button: Button
 var mobile_overlay_control: Control
 var mobile_overlay_home: Control
 var mobile_overlay_home_index := -1
+var mobile_tab_navigation: HBoxContainer
+var mobile_tab_previous_button: Button
+var mobile_tab_next_button: Button
 var root_margin: MarginContainer
 var page_scroll: ScrollContainer
 var page_container: VBoxContainer
@@ -250,7 +263,7 @@ func _notification(what: int) -> void:
 			_apply_browser_offline_catchup(maxf(now - web_backgrounded_at, 0.0))
 		web_backgrounded_at = 0.0
 		web_last_wall_clock = now
-		_refresh_ios_install_offer()
+		_refresh_mobile_install_offer()
 
 func _configure_platform_ui() -> void:
 	if not is_web_build:
@@ -269,44 +282,148 @@ func _configure_platform_ui() -> void:
 	export_save_button.tooltip_text = "Download a portable JSON backup of this run."
 	load_save_button.tooltip_text = "Choose a portable JSON backup to replace the current run."
 	save_label.tooltip_text = storage_note
-	_refresh_ios_install_offer()
+	_refresh_mobile_install_offer()
 
-func _ios_install_offer_for_state(web_build: bool, ios_device: bool, standalone: bool) -> bool:
-	return web_build and ios_device and not standalone
+func _mobile_install_offer_for_state(
+	web_build: bool,
+	ios_device: bool,
+	android_device: bool,
+	standalone: bool,
+	already_installed := false
+) -> bool:
+	return (
+		web_build
+		and (ios_device or android_device)
+		and not standalone
+		and not already_installed
+	)
 
-func _should_offer_ios_install() -> bool:
+func _get_mobile_install_platform() -> String:
 	if not is_web_build:
-		return false
+		return ""
 	var ios_result = JavaScriptBridge.eval(
 		"(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))",
 		true
 	)
+	if bool(ios_result):
+		return "ios"
+	var android_result = JavaScriptBridge.eval("/Android/i.test(navigator.userAgent)", true)
+	return "android" if bool(android_result) else ""
+
+func _should_offer_mobile_install() -> bool:
+	if not is_web_build:
+		return false
+	var platform := _get_mobile_install_platform()
 	var standalone_result = JavaScriptBridge.eval(
 		"(window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true)",
 		true
 	)
-	return _ios_install_offer_for_state(true, bool(ios_result), bool(standalone_result))
+	var installed_result = JavaScriptBridge.eval(
+		"Boolean(window.OFPS_PWA && window.OFPS_PWA.isInstalled())",
+		true
+	)
+	return _mobile_install_offer_for_state(
+		true,
+		platform == "ios",
+		platform == "android",
+		bool(standalone_result),
+		bool(installed_result)
+	)
 
-func _set_ios_install_offer_visible(visible: bool) -> void:
+func _set_mobile_install_offer_visible(visible: bool) -> void:
 	if mobile_install_button == null:
 		return
 	mobile_install_button.visible = visible
 	if mobile_nav != null:
 		mobile_nav.queue_sort()
 
-func _refresh_ios_install_offer() -> void:
-	_set_ios_install_offer_visible(_should_offer_ios_install())
+func _refresh_mobile_install_offer() -> void:
+	var platform := _get_mobile_install_platform()
+	mobile_install_button.tooltip_text = (
+		"Install One Foot Per Second on this Android device."
+		if platform == "android"
+		else "Add One Foot Per Second to this iPhone's Home Screen."
+	)
+	_set_mobile_install_offer_visible(_should_offer_mobile_install())
 
-func _show_ios_install_guide() -> void:
-	if ios_install_dialog == null:
+func _configure_mobile_install_dialog(platform: String) -> void:
+	if mobile_install_dialog == null:
 		return
-	ios_install_dialog.popup_centered_clamped(Vector2i(360, 350), 0.95)
+	if platform == "android":
+		mobile_install_dialog.title = "INSTALL ON ANDROID"
+		mobile_install_dialog.dialog_text = (
+			"1. Open this game in Chrome.\n\n"
+			+ "2. Tap Chrome's ⋮ menu, then tap INSTALL APP or ADD TO HOME SCREEN.\n\n"
+			+ "3. Confirm Install, then launch the game from its new app icon.\n\n"
+			+ "The installed game stays on the browser update channel and will offer SAVE & UPDATE when a new build is ready. EXPORT is still the safest portable backup."
+		)
+	else:
+		mobile_install_dialog.title = "INSTALL ON IPHONE"
+		mobile_install_dialog.dialog_text = (
+			"1. Tap Safari's SHARE button (the square with an up arrow).\n\n"
+			+ "2. Scroll down and tap ADD TO HOME SCREEN.\n\n"
+			+ "3. Tap ADD, then launch the game from its new Home Screen icon.\n\n"
+			+ "EXPORT a backup first. If iOS starts the installed game with a fresh save, use LOAD to bring your run across. If Add to Home Screen is missing, open this page in Safari."
+		)
+
+func _show_mobile_install() -> void:
+	if mobile_install_dialog == null:
+		return
+	var platform := _get_mobile_install_platform()
+	if platform == "android":
+		var prompted = JavaScriptBridge.eval(
+			"Boolean(window.OFPS_PWA && window.OFPS_PWA.promptInstall())",
+			true
+		)
+		if bool(prompted):
+			return
+	_configure_mobile_install_dialog(platform)
+	mobile_install_dialog.popup_centered_clamped(Vector2i(360, 365), 0.95)
+
+func _enable_mobile_inspection(control: Control, title: String) -> void:
+	control.set_meta("mobile_inspection_title", title)
+	control.mouse_default_cursor_shape = Control.CURSOR_HELP
+	if control is BaseButton:
+		(control as BaseButton).pressed.connect(_show_mobile_inspection_for_control.bind(control))
+	else:
+		control.gui_input.connect(_on_mobile_inspection_input.bind(control))
+
+func _on_mobile_inspection_input(event: InputEvent, control: Control) -> void:
+	if not mobile_layout:
+		return
+	var activated := (
+		(event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+		or (
+			event is InputEventMouseButton
+			and (event as InputEventMouseButton).pressed
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT
+		)
+	)
+	if activated:
+		_show_mobile_inspection_for_control(control)
+
+func _show_mobile_inspection_for_control(control: Control) -> void:
+	if not mobile_layout or mobile_inspection_dialog == null or control == null:
+		return
+	var details := control.tooltip_text.strip_edges()
+	if details.is_empty():
+		return
+	mobile_inspection_dialog.title = str(
+		control.get_meta("mobile_inspection_title", "DETAILS")
+	).to_upper()
+	mobile_inspection_dialog.dialog_text = details
+	mobile_inspection_dialog.popup_centered_clamped(Vector2i(360, 245), 0.94)
+	mobile_inspection_dialog.get_ok_button().set_deferred(
+		"custom_minimum_size",
+		Vector2(100.0, 44.0)
+	)
 
 func _update_browser_release_status(delta: float) -> void:
 	web_update_status_elapsed += delta
 	web_update_check_elapsed += delta
 	if web_update_status_elapsed >= 1.0:
 		web_update_status_elapsed = 0.0
+		_refresh_mobile_install_offer()
 		if JavaScriptBridge.pwa_needs_update():
 			_on_browser_update_available()
 		elif web_update_ready:
@@ -561,6 +678,110 @@ func _compact_panel_style(horizontal_margin: float, vertical_margin: float, radi
 	style.content_margin_bottom = vertical_margin
 	return style
 
+func _create_navigation_icon(direction: String) -> ImageTexture:
+	var image := Image.create(28, 28, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var points: Array[Vector2i] = []
+	for step in 10:
+		points.append(Vector2i(19 - step, 5 + step))
+		points.append(Vector2i(10 + step, 14 + step))
+	for source in points:
+		var target := source
+		match direction:
+			"right":
+				target.x = 27 - source.x
+			"up":
+				target = Vector2i(source.y, source.x)
+			"down":
+				target = Vector2i(source.y, 27 - source.x)
+		for offset_x in range(-1, 2):
+			for offset_y in range(-1, 2):
+				var pixel := target + Vector2i(offset_x, offset_y)
+				if pixel.x >= 0 and pixel.x < 28 and pixel.y >= 0 and pixel.y < 28:
+					image.set_pixelv(pixel, COLOR_TEXT)
+	return ImageTexture.create_from_image(image)
+
+func _ensure_navigation_icons() -> void:
+	if previous_navigation_icon == null:
+		previous_navigation_icon = _create_navigation_icon("left")
+	if next_navigation_icon == null:
+		next_navigation_icon = _create_navigation_icon("right")
+	if transparent_navigation_icon == null:
+		var empty_image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+		empty_image.fill(Color.TRANSPARENT)
+		transparent_navigation_icon = ImageTexture.create_from_image(empty_image)
+
+func _create_favorite_icon(filled: bool) -> ImageTexture:
+	var image := Image.create(28, 28, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var polygon := PackedVector2Array()
+	for point_index in 10:
+		var radius := 10.5 if point_index % 2 == 0 else 4.6
+		var angle := -PI * 0.5 + float(point_index) * PI / 5.0
+		polygon.append(Vector2(14.0, 14.0) + Vector2(cos(angle), sin(angle)) * radius)
+	for y in range(2, 26):
+		for x in range(2, 26):
+			var point := Vector2(float(x) + 0.5, float(y) + 0.5)
+			if not Geometry2D.is_point_in_polygon(point, polygon):
+				continue
+			var edge := false
+			if not filled:
+				for offset in [Vector2(-1.5, 0.0), Vector2(1.5, 0.0), Vector2(0.0, -1.5), Vector2(0.0, 1.5)]:
+					if not Geometry2D.is_point_in_polygon(point + offset, polygon):
+						edge = true
+						break
+			if filled or edge:
+				image.set_pixel(x, y, COLOR_GOLD if filled else COLOR_MUTED)
+	return ImageTexture.create_from_image(image)
+
+func _ensure_favorite_icons() -> void:
+	if favorite_open_icon == null:
+		favorite_open_icon = _create_favorite_icon(false)
+	if favorite_kept_icon == null:
+		favorite_kept_icon = _create_favorite_icon(true)
+
+func _configure_tab_overflow_controls(for_mobile: bool) -> void:
+	if upgrade_tabs == null or mobile_tab_navigation == null:
+		return
+	mobile_tab_navigation.visible = for_mobile
+	var tab_bar := upgrade_tabs.get_tab_bar()
+	if for_mobile:
+		_ensure_navigation_icons()
+		tab_bar.add_theme_icon_override("decrement", transparent_navigation_icon)
+		tab_bar.add_theme_icon_override("increment", transparent_navigation_icon)
+	else:
+		tab_bar.remove_theme_icon_override("decrement")
+		tab_bar.remove_theme_icon_override("increment")
+	_refresh_mobile_tab_navigation()
+
+func _visible_upgrade_tab_indices() -> Array[int]:
+	var visible_indices: Array[int] = []
+	for tab_index in upgrade_tabs.get_tab_count():
+		if not upgrade_tabs.is_tab_hidden(tab_index):
+			visible_indices.append(tab_index)
+	return visible_indices
+
+func _move_mobile_upgrade_tab(direction: int) -> void:
+	var visible_indices := _visible_upgrade_tab_indices()
+	var visible_position := visible_indices.find(upgrade_tabs.current_tab)
+	if visible_position < 0:
+		return
+	var target_position := visible_position + direction
+	if target_position < 0 or target_position >= visible_indices.size():
+		return
+	upgrade_tabs.current_tab = visible_indices[target_position]
+	_refresh_mobile_tab_navigation()
+
+func _refresh_mobile_tab_navigation(_tab_index := -1) -> void:
+	if mobile_tab_previous_button == null or mobile_tab_next_button == null:
+		return
+	var visible_indices := _visible_upgrade_tab_indices()
+	var visible_position := visible_indices.find(upgrade_tabs.current_tab)
+	mobile_tab_previous_button.disabled = visible_position <= 0
+	mobile_tab_next_button.disabled = (
+		visible_position < 0 or visible_position >= visible_indices.size() - 1
+	)
+
 func _build_interface() -> void:
 	var background := ColorRect.new()
 	background.color = COLOR_BG
@@ -753,13 +974,13 @@ func _build_mobile_navigation(parent: Control) -> void:
 	mobile_install_button = Button.new()
 	mobile_install_button.name = "MobileInstallButton"
 	mobile_install_button.text = "INSTALL"
-	mobile_install_button.tooltip_text = "Add One Foot Per Second to this iPhone's Home Screen."
+	mobile_install_button.tooltip_text = "Install One Foot Per Second on this phone."
 	mobile_install_button.custom_minimum_size.y = 44.0
 	mobile_install_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mobile_install_button.focus_mode = Control.FOCUS_NONE
 	mobile_install_button.add_theme_font_size_override("font_size", 10)
 	mobile_install_button.add_theme_color_override("font_color", COLOR_GOLD)
-	mobile_install_button.pressed.connect(_show_ios_install_guide)
+	mobile_install_button.pressed.connect(_show_mobile_install)
 	mobile_install_button.visible = false
 	mobile_nav.add_child(mobile_install_button)
 
@@ -802,6 +1023,14 @@ func _build_mobile_overlay() -> void:
 	mobile_overlay_title.add_theme_font_size_override("font_size", 17)
 	mobile_overlay_title.add_theme_color_override("font_color", COLOR_ACCENT)
 	heading_row.add_child(mobile_overlay_title)
+	mobile_overlay_xp_label = Label.new()
+	mobile_overlay_xp_label.name = "MobileOverlayXP"
+	mobile_overlay_xp_label.visible = false
+	mobile_overlay_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	mobile_overlay_xp_label.add_theme_font_size_override("font_size", 13)
+	mobile_overlay_xp_label.add_theme_color_override("font_color", COLOR_GOLD)
+	mobile_overlay_xp_label.tooltip_text = "XP available to spend"
+	heading_row.add_child(mobile_overlay_xp_label)
 	var close_button := Button.new()
 	close_button.name = "MobileOverlayCloseButton"
 	close_button.text = "CLOSE  ×"
@@ -832,6 +1061,8 @@ func _show_mobile_overlay(control: Control, title: String) -> void:
 	if control == equipment_sidebar:
 		equipment_sidebar.custom_minimum_size.x = 0.0
 	mobile_overlay_title.text = title
+	mobile_overlay_xp_label.visible = control == upgrade_panel
+	mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_number(game.xp)
 	mobile_overlay_panel.visible = true
 	mobile_overlay_panel.move_to_front()
 
@@ -986,20 +1217,36 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (330.0 if dense_wide else 360.0)
 	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (190.0 if dense_wide else 215.0)
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
+	_configure_tab_overflow_controls(mobile_layout)
 	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else (5 if dense_wide else 8))
 	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else (8 if dense_wide else 12))
-	previous_button.custom_minimum_size.x = 42.0 if mobile_layout else (116.0 if dense_wide else 140.0)
-	next_button.custom_minimum_size.x = 42.0 if mobile_layout else (116.0 if dense_wide else 140.0)
-	previous_button.text = "‹" if mobile_layout else "‹ PREVIOUS BATTER"
+	previous_button.custom_minimum_size.x = 44.0 if mobile_layout else (116.0 if dense_wide else 140.0)
+	next_button.custom_minimum_size.x = 44.0 if mobile_layout else (116.0 if dense_wide else 140.0)
+	previous_button.custom_minimum_size.y = 44.0 if mobile_layout else 0.0
+	next_button.custom_minimum_size.y = 44.0 if mobile_layout else 0.0
 	if mobile_layout:
-		next_button.text = "›"
+		_ensure_navigation_icons()
+		previous_button.text = ""
+		next_button.text = ""
+		previous_button.icon = previous_navigation_icon
+		next_button.icon = next_navigation_icon
+		previous_button.expand_icon = true
+		next_button.expand_icon = true
+	else:
+		previous_button.icon = null
+		next_button.icon = null
+		previous_button.text = "< PREVIOUS BATTER"
+		next_button.text = "NEXT BATTER >"
 	opponent_label.add_theme_font_size_override("font_size", 18 if mobile_layout else (21 if dense_wide else 25))
 	quirk_label.add_theme_font_size_override("font_size", 11 if mobile_layout else (12 if dense_wide else 14))
 	era_label.add_theme_font_size_override("font_size", 10 if mobile_layout else (11 if dense_wide else 13))
 	distance_label.add_theme_font_size_override("font_size", 11 if mobile_layout else (12 if dense_wide else 13))
 	field_stack.add_theme_constant_override("separation", 3 if mobile_layout or dense_wide else 7)
 	if mobile_layout:
-		pitch_field.custom_minimum_size = Vector2(0.0, 320.0 if mobile_portrait_layout else 220.0)
+		pitch_field.custom_minimum_size = Vector2(
+			0.0,
+			MOBILE_PORTRAIT_FIELD_MIN_HEIGHT if mobile_portrait_layout else 220.0
+		)
 	elif dense_wide:
 		pitch_field.custom_minimum_size = Vector2(400.0, 250.0)
 	else:
@@ -1060,7 +1307,7 @@ func _build_play_area(parent: Control) -> void:
 	opponent_row.add_theme_constant_override("separation", 12)
 	play_stack.add_child(opponent_row)
 	previous_button = Button.new()
-	previous_button.text = "‹ PREVIOUS BATTER"
+	previous_button.text = "< PREVIOUS BATTER"
 	previous_button.custom_minimum_size.x = 140.0
 	previous_button.pressed.connect(_previous_opponent)
 	opponent_row.add_child(previous_button)
@@ -1079,8 +1326,9 @@ func _build_play_area(parent: Control) -> void:
 	quirk_label.add_theme_font_size_override("font_size", 14)
 	quirk_label.add_theme_color_override("font_color", COLOR_MUTED)
 	opponent_stack.add_child(quirk_label)
+	_enable_mobile_inspection(quirk_label, "Batter details")
 	next_button = Button.new()
-	next_button.text = "NEXT BATTER ›"
+	next_button.text = "NEXT BATTER >"
 	next_button.custom_minimum_size.x = 140.0
 	next_button.pressed.connect(_next_opponent)
 	opponent_row.add_child(next_button)
@@ -1137,6 +1385,7 @@ func _build_play_area(parent: Control) -> void:
 	mastery_label.add_theme_font_size_override("font_size", 13)
 	mastery_label.add_theme_color_override("font_color", COLOR_MUTED)
 	mastery_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_enable_mobile_inspection(mastery_label, "Opponent mastery")
 	field_stack.add_child(mastery_label)
 	mastery_bar = ProgressBar.new()
 	mastery_bar.min_value = 0.0
@@ -1156,6 +1405,7 @@ func _build_play_area(parent: Control) -> void:
 		outcome_panel.add_theme_stylebox_override("panel", _compact_panel_style(5.0, 3.0, 6))
 		outcomes_grid.add_child(outcome_panel)
 		outcome_panels.append(outcome_panel)
+		_enable_mobile_inspection(outcome_panel, str(Content.OUTCOME_NAMES[index]))
 		var outcome_stack := VBoxContainer.new()
 		outcome_stack.add_theme_constant_override("separation", 0)
 		outcome_panel.add_child(outcome_stack)
@@ -1226,6 +1476,7 @@ func _build_equipment_sidebar(parent: Control) -> void:
 	equipment_summary_label.add_theme_font_size_override("font_size", 12)
 	equipment_summary_label.add_theme_color_override("font_color", COLOR_MUTED)
 	equipment_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_enable_mobile_inspection(equipment_summary_label, "Owned facilities")
 	sidebar.add_child(equipment_summary_label)
 
 func _build_inventory_dock(parent: Control) -> void:
@@ -1291,6 +1542,7 @@ func _build_field_stat_overlay(parent: Control) -> void:
 		var row := HBoxContainer.new()
 		row.tooltip_text = str(Content.STAT_HELP.get(stat_id, ""))
 		row.mouse_default_cursor_shape = Control.CURSOR_HELP
+		_enable_mobile_inspection(row, str(row_definition[1]))
 		stack.add_child(row)
 		var name_label := Label.new()
 		name_label.text = str(row_definition[1])
@@ -1386,6 +1638,22 @@ func _build_locker_dialog() -> void:
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 8)
 	margin.add_child(stack)
+	var locker_heading := HBoxContainer.new()
+	locker_heading.add_theme_constant_override("separation", 8)
+	stack.add_child(locker_heading)
+	var locker_title := Label.new()
+	locker_title.text = "STRIKEOUT EQUIPMENT"
+	locker_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	locker_title.add_theme_font_size_override("font_size", 16)
+	locker_title.add_theme_color_override("font_color", COLOR_ACCENT)
+	locker_heading.add_child(locker_title)
+	locker_dialog_close_button = Button.new()
+	locker_dialog_close_button.name = "EquipmentCloseButton"
+	locker_dialog_close_button.text = "CLOSE  X"
+	locker_dialog_close_button.custom_minimum_size = Vector2(96.0, 44.0)
+	locker_dialog_close_button.focus_mode = Control.FOCUS_NONE
+	locker_dialog_close_button.pressed.connect(_close_locker_dialog)
+	locker_heading.add_child(locker_dialog_close_button)
 	locker_dialog_status_label = Label.new()
 	locker_dialog_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	locker_dialog_status_label.add_theme_font_size_override("font_size", 13)
@@ -1421,14 +1689,22 @@ func _open_locker(slot: String) -> void:
 		return
 	selected_loot_slot = slot
 	_rebuild_locker_dialog()
+	locker_dialog_close_button.visible = mobile_layout
 	if mobile_layout:
-		var viewport_size := get_viewport_rect().size
-		locker_dialog.min_size = Vector2i(320, 440)
-		locker_dialog.popup_centered(Vector2i(
-			clampi(int(viewport_size.x) - 16, 320, 620),
-			clampi(int(viewport_size.y) - 24, 440, 760)
-		))
+		var viewport_size := _get_responsive_viewport_size()
+		var popup_size := Vector2i(
+			clampi(int(viewport_size.x) - 16, 300, 620),
+			clampi(int(viewport_size.y) - 24, 420, 760)
+		)
+		locker_dialog.borderless = true
+		locker_dialog.min_size = Vector2i(300, 420)
+		locker_dialog.popup_centered(popup_size)
+		locker_dialog.position = Vector2i(
+			maxi((int(viewport_size.x) - popup_size.x) / 2, 0),
+			maxi((int(viewport_size.y) - popup_size.y) / 2, 0)
+		)
 	else:
+		locker_dialog.borderless = false
 		locker_dialog.min_size = Vector2i(800, 560)
 		locker_dialog.popup_centered(Vector2i(940, 700))
 
@@ -1465,7 +1741,7 @@ func _rebuild_locker_dialog() -> void:
 		clone_note = "×%.3f after clone inheritance" % game.get_equipment_inheritance_factor()
 	locker_dialog_status_label.text = (
 		"%s  •  %d / %d KEPT  •  EQUIPPED: %s\n%s\n"
-		+ "Click an item to equip it. ★ items are never auto-scrapped; the lowest-Power unstarred item is removed above capacity.  •  %s"
+		+ "Click an item to equip it. Filled-star items are never auto-scrapped; the lowest-Power unstarred item is removed above capacity.  •  %s"
 	) % [
 		str(definition.name),
 		items.size(),
@@ -1502,7 +1778,7 @@ func _rebuild_locker_dialog() -> void:
 		item_button.clip_text = true
 		item_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		item_button.text = "%sPOWER %d  •  %s  •  ILVL %d  •  %s\n%s" % [
-			"✓ EQUIPPED  •  " if is_equipped else "",
+			"EQUIPPED  •  " if is_equipped else "",
 			game.get_loot_item_power(item),
 			str(rarity.name),
 			int(item.item_level),
@@ -1517,9 +1793,11 @@ func _rebuild_locker_dialog() -> void:
 		var favorite_button := Button.new()
 		favorite_button.custom_minimum_size = Vector2(52.0, 60.0)
 		favorite_button.size_flags_horizontal = Control.SIZE_SHRINK_END
-		favorite_button.text = "★" if bool(item.get("favorite", false)) else "☆"
+		_ensure_favorite_icons()
+		favorite_button.text = ""
+		favorite_button.icon = favorite_kept_icon if bool(item.get("favorite", false)) else favorite_open_icon
+		favorite_button.expand_icon = false
 		favorite_button.tooltip_text = "Allow auto-scrap" if bool(item.get("favorite", false)) else "Protect from auto-scrap"
-		favorite_button.add_theme_font_size_override("font_size", 23)
 		favorite_button.add_theme_color_override(
 			"font_color",
 			COLOR_GOLD if bool(item.get("favorite", false)) else COLOR_MUTED
@@ -1543,6 +1821,7 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	var value_label := Label.new()
 	value_label.add_theme_font_size_override("font_size", 14)
 	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_enable_mobile_inspection(value_label, heading)
 	stack.add_child(value_label)
 	var effect_label := Label.new()
 	effect_label.add_theme_font_size_override("font_size", 12)
@@ -1561,13 +1840,60 @@ func _build_upgrade_area(parent: Control) -> void:
 	# Every long child explicitly clips or wraps, so the TabContainer can own its
 	# real panel width. Its native overflow arrows then remain usable instead of
 	# being clipped by an intermediate viewport.
+	var upgrade_stack := VBoxContainer.new()
+	upgrade_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	upgrade_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	upgrade_stack.add_theme_constant_override("separation", 4)
+	upgrade_panel.add_child(upgrade_stack)
+	mobile_tab_navigation = HBoxContainer.new()
+	mobile_tab_navigation.name = "MobileTabNavigation"
+	mobile_tab_navigation.visible = false
+	mobile_tab_navigation.add_theme_constant_override("separation", 8)
+	upgrade_stack.add_child(mobile_tab_navigation)
+	var mobile_tab_label := Label.new()
+	mobile_tab_label.text = "BROWSE TABS"
+	mobile_tab_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_tab_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mobile_tab_label.add_theme_font_size_override("font_size", 11)
+	mobile_tab_label.add_theme_color_override("font_color", COLOR_MUTED)
+	mobile_tab_navigation.add_child(mobile_tab_label)
+	mobile_tab_previous_button = Button.new()
+	mobile_tab_previous_button.name = "PreviousUpgradeTab"
+	_ensure_navigation_icons()
+	mobile_tab_previous_button.text = ""
+	mobile_tab_previous_button.icon = previous_navigation_icon
+	mobile_tab_previous_button.expand_icon = true
+	mobile_tab_previous_button.tooltip_text = "Previous upgrade tab"
+	mobile_tab_previous_button.custom_minimum_size = Vector2(
+		MOBILE_TAB_ARROW_TOUCH_SIZE,
+		MOBILE_TAB_ARROW_TOUCH_SIZE
+	)
+	mobile_tab_previous_button.add_theme_font_size_override("font_size", 28)
+	mobile_tab_previous_button.focus_mode = Control.FOCUS_NONE
+	mobile_tab_previous_button.pressed.connect(_move_mobile_upgrade_tab.bind(-1))
+	mobile_tab_navigation.add_child(mobile_tab_previous_button)
+	mobile_tab_next_button = Button.new()
+	mobile_tab_next_button.name = "NextUpgradeTab"
+	mobile_tab_next_button.text = ""
+	mobile_tab_next_button.icon = next_navigation_icon
+	mobile_tab_next_button.expand_icon = true
+	mobile_tab_next_button.tooltip_text = "Next upgrade tab"
+	mobile_tab_next_button.custom_minimum_size = Vector2(
+		MOBILE_TAB_ARROW_TOUCH_SIZE,
+		MOBILE_TAB_ARROW_TOUCH_SIZE
+	)
+	mobile_tab_next_button.add_theme_font_size_override("font_size", 28)
+	mobile_tab_next_button.focus_mode = Control.FOCUS_NONE
+	mobile_tab_next_button.pressed.connect(_move_mobile_upgrade_tab.bind(1))
+	mobile_tab_navigation.add_child(mobile_tab_next_button)
 	upgrade_tabs = TabContainer.new()
 	upgrade_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	upgrade_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	upgrade_tabs.clip_tabs = true
 	upgrade_tabs.use_hidden_tabs_for_min_size = true
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 8)
-	upgrade_panel.add_child(upgrade_tabs)
+	upgrade_tabs.tab_changed.connect(_refresh_mobile_tab_navigation)
+	upgrade_stack.add_child(upgrade_tabs)
 	_build_training_tab(upgrade_tabs)
 	_build_pitch_tab(upgrade_tabs)
 	_build_ball_tab(upgrade_tabs)
@@ -1798,6 +2124,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		if not str(help_id).is_empty():
 			name_label.tooltip_text = str(Content.STAT_HELP.get(str(help_id), ""))
 			name_label.mouse_default_cursor_shape = Control.CURSOR_HELP
+			_enable_mobile_inspection(name_label, str(stat_names[id]))
 		row.add_child(name_label)
 		var value_label := Label.new()
 		value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1846,7 +2173,8 @@ func _build_confirmation_dialog() -> void:
 	_build_locker_dialog()
 	_build_hard_reset_dialog()
 	_build_save_transfer_dialogs()
-	_build_ios_install_dialog()
+	_build_mobile_install_dialog()
+	_build_mobile_inspection_dialog()
 	_build_offline_progress_dialog()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
@@ -1873,20 +2201,24 @@ func _build_offline_progress_dialog() -> void:
 	offline_progress_dialog.get_ok_button().text = "BACK TO THE MOUND"
 	add_child(offline_progress_dialog)
 
-func _build_ios_install_dialog() -> void:
-	ios_install_dialog = AcceptDialog.new()
-	ios_install_dialog.name = "IOSInstallGuide"
-	ios_install_dialog.title = "INSTALL ON IPHONE"
-	ios_install_dialog.dialog_autowrap = true
-	ios_install_dialog.dialog_text = (
-		"1. Tap Safari's SHARE button (the square with an up arrow).\n\n"
-		+ "2. Scroll down and tap ADD TO HOME SCREEN.\n\n"
-		+ "3. Tap ADD, then launch the game from its new Home Screen icon.\n\n"
-		+ "EXPORT a backup first. If iOS starts the installed game with a fresh save, use LOAD to bring your run across. If Add to Home Screen is missing, open this page in Safari."
-	)
-	ios_install_dialog.min_size = Vector2i(340, 310)
-	ios_install_dialog.get_ok_button().text = "GOT IT"
-	add_child(ios_install_dialog)
+func _build_mobile_install_dialog() -> void:
+	mobile_install_dialog = AcceptDialog.new()
+	mobile_install_dialog.name = "MobileInstallGuide"
+	mobile_install_dialog.dialog_autowrap = true
+	mobile_install_dialog.min_size = Vector2i(340, 325)
+	mobile_install_dialog.get_ok_button().text = "GOT IT"
+	add_child(mobile_install_dialog)
+	_configure_mobile_install_dialog("ios")
+
+func _build_mobile_inspection_dialog() -> void:
+	mobile_inspection_dialog = AcceptDialog.new()
+	mobile_inspection_dialog.name = "MobileInspectionDialog"
+	mobile_inspection_dialog.title = "DETAILS"
+	mobile_inspection_dialog.dialog_autowrap = true
+	mobile_inspection_dialog.min_size = Vector2i(330, 190)
+	mobile_inspection_dialog.get_ok_button().text = "CLOSE"
+	mobile_inspection_dialog.get_ok_button().add_theme_font_size_override("font_size", 22)
+	add_child(mobile_inspection_dialog)
 
 func _build_save_transfer_dialogs() -> void:
 	export_save_dialog = FileDialog.new()
@@ -2056,7 +2388,7 @@ func _set_catalog_lock(button: Button, definition: Dictionary) -> void:
 
 func _set_catalog_lock_text(button: Button, definition: Dictionary, requirements: Array[String]) -> void:
 	var unlock_text := " • ".join(requirements)
-	button.text = "%s\n🔒 %s" % [str(definition.name), "\n🔒 ".join(requirements)]
+	button.text = "%s\n%s" % [str(definition.name), "\n".join(requirements)]
 	button.tooltip_text = unlock_text
 	button.disabled = true
 
@@ -2158,7 +2490,7 @@ func _refresh_guide_text(
 			"Completed strikeouts can leave random clothing. The first career strikeout guarantees a hat; "
 			+ "later eligible strikeouts have a 12% chance, with pity by the tenth roll and a five-second parcel "
 			+ "cadence at extreme production. Common, Magic, Rare, Legendary, and Unique gear gains progressively "
-			+ "more affixes. The colored letter squares at the field's lower-right open equipment; ★ protects an "
+			+ "more affixes. The colored letter squares at the field's lower-right open equipment; the star button protects an "
 			+ "item from auto-scrap. Bonuses are capped sidegrades, and each slot keeps up to 10 items."
 		),
 		(
@@ -2204,6 +2536,8 @@ func _refresh_interface() -> void:
 	)
 	_refresh_reveal_visibility()
 	xp_label.text = BaseballGameState.format_number(game.xp)
+	if mobile_overlay_xp_label != null:
+		mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_number(game.xp)
 	rate_label.text = BaseballGameState.format_number(estimated_xp_per_second)
 	if development_session:
 		save_button.disabled = true
@@ -2225,19 +2559,21 @@ func _refresh_interface() -> void:
 	next_button.disabled = game.current_opponent >= game.highest_unlocked
 	previous_button.tooltip_text = "Select the previous unlocked batter. A released pitch keeps flying and will resolve against the selected batter."
 	next_button.tooltip_text = "Select the next unlocked batter. A released pitch keeps flying and will resolve against the selected batter."
-	if game.cosmos_conquered:
-		next_button.text = "DIVINE OFFER READY"
-	elif game.is_story_exhibition_blocked():
-		next_button.text = "REBIRTH REQUIRED" if not game.get_story_status_text().contains("Offer in") and not game.get_story_status_text().contains("Revelation in") else "EXHIBITION ACTIVE"
-	elif game.current_opponent < game.highest_unlocked:
-		next_button.text = "NEXT BATTER ›"
-	elif game.current_opponent == game.opponents.size() - 1:
-		next_button.text = "FINAL BOSS ACTIVE"
-	else:
-		next_button.text = "NEXT BATTER LOCKED"
 	if mobile_layout:
-		previous_button.text = "‹"
-		next_button.text = "›"
+		previous_button.text = ""
+		next_button.text = ""
+	else:
+		previous_button.text = "< PREVIOUS BATTER"
+		if game.cosmos_conquered:
+			next_button.text = "DIVINE OFFER READY"
+		elif game.is_story_exhibition_blocked():
+			next_button.text = "REBIRTH REQUIRED" if not game.get_story_status_text().contains("Offer in") and not game.get_story_status_text().contains("Revelation in") else "EXHIBITION ACTIVE"
+		elif game.current_opponent < game.highest_unlocked:
+			next_button.text = "NEXT BATTER >"
+		elif game.current_opponent == game.opponents.size() - 1:
+			next_button.text = "FINAL BOSS ACTIVE"
+		else:
+			next_button.text = "NEXT BATTER LOCKED"
 	var distance := game.get_current_distance()
 	distance_label.text = (
 		"%s  •  XP ×%s  •  THREAT +%.2f" % [
@@ -2256,6 +2592,7 @@ func _refresh_interface() -> void:
 	var mastery_value := game.opponent_mastery[game.current_opponent]
 	var mastery_required := float(opponent.mastery_required)
 	var overmastery_summary := game.get_overmastery_summary()
+	mastery_label.tooltip_text = "Strikeouts build opponent mastery. Complete the displayed target to unlock progression; excess mastery adds logarithmic farming bonuses."
 	if game.is_alien_exhibition_blocked():
 		mastery_label.text = game.get_story_status_text()
 		mastery_bar.value = game.alien_exhibition_seconds / BaseballGameState.EXHIBITION_SECONDS * 100.0
@@ -2278,15 +2615,30 @@ func _refresh_interface() -> void:
 		)
 	elif mastery_value >= mastery_required:
 		var target_ratio := mastery_value / maxf(mastery_required, 0.000001)
-		mastery_label.text = "OPPONENT MASTERED  •  ×%s TARGET%s" % [
+		var full_mastery_text := "OPPONENT MASTERED  •  ×%s TARGET%s" % [
 			BaseballGameState.format_number(target_ratio),
 			"  •  %s" % overmastery_summary if not overmastery_summary.is_empty() else "",
 		]
+		if mobile_layout and not overmastery_summary.is_empty():
+			mastery_label.text = "MASTERED ×%s  •  XP ×%.3f  •  LOOT +%.1f%%" % [
+				BaseballGameState.format_number(target_ratio),
+				game.get_opponent_farm_xp_multiplier(),
+				game.get_opponent_loot_luck() * 100.0,
+			]
+		else:
+			mastery_label.text = full_mastery_text
+		mastery_label.tooltip_text = (
+			full_mastery_text
+			+ "\nStaying on a mastered batter grants a small logarithmic XP bonus and better loot rolls."
+		)
 	else:
 		mastery_label.text = "OPPONENT MASTERY  %s / %s  •  Next level unlocks at 100%%" % [
 			BaseballGameState.format_number(mastery_value),
 			BaseballGameState.format_number(mastery_required),
 		]
+		mastery_label.tooltip_text = (
+			"Strikeouts build mastery. Reach 100% to unlock the next batter; progress beyond the target improves XP and loot rolls logarithmically."
+		)
 	if not game.is_story_exhibition_blocked() and not game.is_speed_gate_blocked():
 		mastery_bar.value = game.get_mastery_ratio() * 100.0
 	for index in probabilities.size():
@@ -2494,6 +2846,7 @@ func _refresh_opponent_loadout() -> void:
 			str(entry.get("name", "Unknown")),
 			float(entry.get("difficulty_bonus", 0.0)),
 		]
+		_enable_mobile_inspection(button, "Enemy %s" % kind)
 		opponent_loadout_dock.add_child(button)
 
 func _refresh_purchase_buttons() -> void:
@@ -2511,7 +2864,7 @@ func _refresh_purchase_buttons() -> void:
 			button.disabled = false
 			button.tooltip_text = str(Content.STAT_HELP.speed)
 		elif definition.has("max_level") and rank >= int(definition.max_level):
-			button.text = "✓ %s  •  RANK %d / %d  •  MAXED\n%s" % [
+			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [
 				definition.name,
 				rank,
 				int(definition.max_level),
@@ -2537,7 +2890,7 @@ func _refresh_purchase_buttons() -> void:
 		if not button.visible:
 			continue
 		if id in game.unlocked_pitches:
-			button.text = "✓ %s  •  LEARNED\n%s" % [definition.name, definition.description]
+			button.text = "%s  •  LEARNED\n%s" % [definition.name, definition.description]
 			button.tooltip_text = _definition_tooltip(definition, ["quality", "speed"])
 			button.disabled = true
 		elif game.highest_unlocked < int(definition.required_level):
@@ -2558,7 +2911,7 @@ func _refresh_purchase_buttons() -> void:
 		if not button.visible:
 			continue
 		if game.has_ball_upgrade(id):
-			button.text = "✓ %s  •  INSTALLED\n%s" % [definition.name, definition.description]
+			button.text = "%s  •  INSTALLED\n%s" % [definition.name, definition.description]
 			button.tooltip_text = _definition_tooltip(definition, ["payload"])
 			button.disabled = true
 		elif game.highest_unlocked < int(definition.required_level):
@@ -2579,7 +2932,7 @@ func _refresh_purchase_buttons() -> void:
 		if not button.visible:
 			continue
 		if game.has_milestone(id):
-			button.text = "✓ %s  •  OWNED\n%s" % [definition.name, definition.description]
+			button.text = "%s  •  OWNED\n%s" % [definition.name, definition.description]
 			button.tooltip_text = _definition_tooltip(definition)
 			button.disabled = true
 		elif not game.get_milestone_unmet_requirements(definition).is_empty():
@@ -2598,14 +2951,14 @@ func _refresh_purchase_buttons() -> void:
 		var rank := int(game.scale_levels[id])
 		var button: Button = scale_buttons[id]
 		if game.highest_unlocked < int(definition.required_level):
-			button.text = "🔒 %s  •  REACH LEVEL %d\n%s" % [
+			button.text = "%s  •  REACH LEVEL %d\n%s" % [
 				definition.name,
 				int(definition.required_level) + 1,
 				definition.description,
 			]
 			button.disabled = true
 		elif rank >= int(definition.max_level):
-			button.text = "✓ %s  •  RANK %d / %d  •  MAXED\n%s" % [
+			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [
 				definition.name,
 				rank,
 				int(definition.max_level),
@@ -2685,7 +3038,7 @@ func _refresh_rebirth_buttons() -> void:
 
 	var potential_dna := game.get_potential_dna()
 	if not game.genetic_offer_unlocked:
-		genetic_reset_button.text = "🔒 GENETIC REBIRTH\nBeat human baseball, then survive Xylophax for one minute."
+		genetic_reset_button.text = "GENETIC REBIRTH LOCKED\nBeat human baseball, then survive Xylophax for one minute."
 		genetic_reset_button.disabled = true
 	elif game.highest_unlocked < Content.ALIEN_EXHIBITION_INDEX:
 		genetic_reset_button.text = "GENETIC REBIRTH NOT READY\nReach Xylophax again; current body XP still determines the award."
@@ -2702,10 +3055,10 @@ func _refresh_rebirth_buttons() -> void:
 		var rank := int(game.genetic_levels[id])
 		var button: Button = genetic_buttons[id]
 		if not game.genetic_offer_unlocked:
-			button.text = "🔒 %s\n%s" % [definition.name, definition.description]
+			button.text = "%s  •  LOCKED\n%s" % [definition.name, definition.description]
 			button.disabled = true
 		elif rank >= int(definition.max_level):
-			button.text = "✓ %s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description]
+			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [definition.name, rank, int(definition.max_level), definition.description]
 			button.disabled = true
 		else:
 			button.text = "%s  •  RANK %d  •  %d DNA\n%s" % [definition.name, rank, game.get_genetic_cost(id), definition.description]
@@ -2713,7 +3066,7 @@ func _refresh_rebirth_buttons() -> void:
 
 	var potential_arcana := game.get_potential_arcana()
 	if not game.eldritch_offer_unlocked:
-		eldritch_reset_button.text = "🔒 ELDRITCH ASCENSION\nBeat the alien leagues, then survive the Last Aeon for one minute."
+		eldritch_reset_button.text = "ELDRITCH ASCENSION LOCKED\nBeat the alien leagues, then survive the Last Aeon for one minute."
 		eldritch_reset_button.disabled = true
 	elif game.highest_unlocked < Content.ELDRITCH_EXHIBITION_INDEX:
 		eldritch_reset_button.text = "ELDRITCH ASCENSION NOT READY\nReach the Last Aeon again; all DNA earned in this reality determines the award."
@@ -2730,10 +3083,10 @@ func _refresh_rebirth_buttons() -> void:
 		var rank := int(game.eldritch_levels[id])
 		var button: Button = eldritch_buttons[id]
 		if not game.eldritch_offer_unlocked:
-			button.text = "🔒 %s\n%s" % [definition.name, definition.description]
+			button.text = "%s  •  LOCKED\n%s" % [definition.name, definition.description]
 			button.disabled = true
 		elif rank >= int(definition.max_level):
-			button.text = "✓ %s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description]
+			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [definition.name, rank, int(definition.max_level), definition.description]
 			button.disabled = true
 		else:
 			button.text = "%s  •  RANK %d  •  %d ARCANA\n%s" % [definition.name, rank, game.get_eldritch_cost(id), definition.description]
@@ -2743,7 +3096,7 @@ func _refresh_rebirth_buttons() -> void:
 		var id := str(definition.id)
 		var button: Button = divine_buttons[id]
 		if game.has_divine_blessing(id):
-			button.text = "✓ %s  •  ETERNALLY OWNED\n%s" % [definition.name, definition.description]
+			button.text = "%s  •  ETERNALLY OWNED\n%s" % [definition.name, definition.description]
 			button.disabled = true
 		else:
 			button.text = "%s  •  CHOOSE AFTER COSMIC VICTORY\n%s" % [definition.name, definition.description]
@@ -2879,7 +3232,7 @@ func _on_save_status_changed(message: String) -> void:
 func _log_event(message: String) -> void:
 	if event_log == null:
 		return
-	event_log.append_text("[color=#63d9ff]›[/color] %s\n" % message)
+	event_log.append_text("[color=#63d9ff]>[/color] %s\n" % message)
 
 func _previous_opponent() -> void:
 	game.set_current_opponent(game.current_opponent - 1)

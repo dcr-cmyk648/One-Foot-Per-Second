@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.6 Design
+# One Foot Per Second — v0.10.7 Design
 
 ## Product shape
 
@@ -30,13 +30,14 @@ There are eight pitch outcomes:
 
 Only a Strike or simultaneous post-human volley that completes the required Strike count pays XP and mastery. Saved fair hits consume a pitch and preserve both counts. Grand Slams have zero save chance under every build. A walk is deliberately bad for the pitcher: it clears the plate appearance, pays nothing, and uses the Single-length lineup delay.
 
-The base strikeout payout is:
+The early base strikeout payout is deliberately ramped so the first lucky out
+does not purchase the whole opening shop:
 
 ```text
-base XP = unmodified required Strikes × 5
+base XP = min(unmodified required Strikes × 5, 4 + opponent level)
 ```
 
-Count compression changes the live requirement but not that bounty. A six-Strike alien compressed to three still pays 30 base XP.
+The first toddler therefore pays 5 XP; levels 2–10 add one base XP apiece, and level 11 reaches the ordinary 15-XP human bounty. Count compression changes the live requirement but not the unmodified-count bounty. A six-Strike alien compressed to three still pays 30 base XP.
 
 Final XP is:
 
@@ -57,7 +58,7 @@ Pitch quality is compared with opponent threat, including release distance and t
 
 Each release chooses one learned pitch. Before Pitch Calling, every learned pitch is equally likely. Each Pitch Calling rank multiplies the strongest pitch's selection weight by `1.35` relative to the weakest, with intermediate pitches interpolated by quality. The selected pitch contributes its quality and its own speed range. Exact speed is sampled once, displayed at the field's upper-left, and used for that ball's probability and flight.
 
-The fresh complete at-bat has a 6.472% strikeout chance. That figure is not `Strike³`: Fouls can help reach two Strikes, Balls can create a walk, and fair contact can end the batter. Live and offline simulation use an exact absorbing dynamic program over `(Strikes, Balls)`, including two-Strike Foul self-loops, protected-hit self-loops, simultaneous volleys, and terminal downtime.
+The fresh Dead-Fish Lob has a 39.92% Strike chance, and the complete opening at-bat has an 11.956% strikeout chance. That figure is not `Strike³`: Fouls can help reach two Strikes, Balls can create a walk, and fair contact can end the batter. Live and offline simulation use an exact absorbing dynamic program over `(Strikes, Balls)`, including two-Strike Foul self-loops, protected-hit self-loops, simultaneous volleys, and terminal downtime.
 
 ## Count arc
 

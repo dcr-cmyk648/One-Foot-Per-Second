@@ -23,7 +23,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.6 progressive-interface audit")
+	print("One Foot Per Second — v0.10.7 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -142,9 +142,9 @@ func _run() -> void:
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "Closing reset confirmation should relock it")
 	main.development_session = true
 	_audit_catalog_visibility(main, 0, "fresh")
-	_expect(not str(main.training_buttons.velocity.text).contains("🔒"), "Speed Training should be the only fundamental available from the opening level")
+	_expect(not str(main.training_buttons.velocity.text).contains("REACH LEVEL"), "Speed Training should be the only fundamental available from the opening level")
 	for training_id in ["command", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"]:
-		_expect(str(main.training_buttons[training_id].text).contains("🔒"), "%s should begin level-gated" % training_id)
+		_expect(str(main.training_buttons[training_id].text).contains("REACH LEVEL"), "%s should begin level-gated" % training_id)
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({
 		"id": "ui_rare_hat",
@@ -171,6 +171,7 @@ func _run() -> void:
 	var first_item_button: Button = first_item_row.get_child(0)
 	var first_star_button: Button = first_item_row.get_child(1)
 	_expect(first_item_button.text.contains("POWER") and first_item_button.text.contains("EQUIPPED"), "Locker rows should expose Power and make the equipped item unmistakable")
+	_expect(not first_item_button.text.contains("✓") and first_star_button.text.is_empty() and first_star_button.icon != null, "Equipment controls should use browser-safe drawn icons instead of unsupported font glyphs")
 	_expect(first_star_button.position.x + first_star_button.size.x <= first_item_row.size.x + 1.0, "The favorite star must remain inside the item row")
 	_expect(main.locker_dialog.min_size.x >= 800 and main.locker_dialog.min_size.y >= 560, "The equipment popup should enforce enough room for complete item rows")
 	main.locker_dialog.close_requested.emit()
@@ -247,7 +248,7 @@ func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 			if not should_show or owned or main.game.highest_unlocked >= int(definition.required_level):
 				continue
 			_expect(button.disabled, "%s should lock %s until its level requirement" % [stage, definition.name])
-			_expect(button.text.begins_with("%s\n🔒 " % definition.name), "%s locked entry should show only its name and requirements" % stage)
+			_expect(button.text.begins_with("%s\n" % definition.name), "%s locked entry should show only its name and requirements" % stage)
 			_expect(button.tooltip_text.contains("REACH LEVEL %d" % (int(definition.required_level) + 1)), "%s locked tooltip should include its level requirement" % stage)
 			_expect(not button.text.contains(str(definition.description)), "%s locked entry leaks its effect" % stage)
 			_expect(not button.tooltip_text.contains(str(definition.description)), "%s locked tooltip leaks its effect" % stage)

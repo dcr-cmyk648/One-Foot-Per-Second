@@ -30,27 +30,34 @@ func _run() -> void:
 	_expect(main.mobile_portrait_layout, "Portrait field orientation did not activate")
 	_expect(is_equal_approx(main._normalize_browser_content_scale(3.0), 3.0), "A 3× phone display must retain its logical content scale")
 	_expect(main.mobile_nav.visible, "Phone navigation should remain visible below the field")
-	_expect(not main.mobile_install_button.visible, "Native and non-iOS sessions should not show the iPhone install action")
-	_expect(main._ios_install_offer_for_state(true, true, false), "Eligible iPhones should receive the Home Screen install pathway")
-	_expect(not main._ios_install_offer_for_state(true, true, true), "A Home Screen launch should hide the redundant install pathway")
-	_expect(not main._ios_install_offer_for_state(true, false, false), "Non-iOS browsers should not receive iPhone-specific instructions")
+	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "A fresh 390×844 phone should not require vertical scrolling")
+	_expect(not main.mobile_install_button.visible, "Native sessions should not show a phone install action")
+	_expect(main._mobile_install_offer_for_state(true, true, false, false), "Eligible iPhones should receive the Home Screen install pathway")
+	_expect(main._mobile_install_offer_for_state(true, false, true, false), "Eligible Android phones should receive the install pathway")
+	_expect(not main._mobile_install_offer_for_state(true, true, false, true), "A Home Screen launch should hide the redundant install pathway")
+	_expect(not main._mobile_install_offer_for_state(true, false, false, false), "Non-mobile browsers should not receive phone-specific instructions")
 	_expect(main.header_subtitle.visible, "The milestone subtitle should remain visible beneath the title on phone")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Phone and desktop should share the same milestone subtitle")
 	_expect(main._should_use_compact_layout(Vector2(1279.0, 800.0)), "A resized browser just below the wide boundary should use overlay navigation")
 	_expect(main._should_use_compact_layout(Vector2(1366.0, 680.0)), "A resized short browser window should use overlay navigation")
 	_expect(not main._should_use_compact_layout(Vector2(1280.0, 696.0)), "The complete wide interface should fit at its declared boundary")
 	_expect(not main._should_use_compact_layout(Vector2(1600.0, 720.0), true, true), "Widening a normal-height compact browser should restore the full interface")
-	main._set_ios_install_offer_visible(true)
+	main._set_mobile_install_offer_visible(true)
 	await process_frame
 	_expect(main.mobile_install_button.visible, "An eligible iPhone should expose INSTALL directly in the phone navigation")
 	_expect(main.mobile_nav.get_combined_minimum_size().x <= main.page_scroll.size.x + 1.0, "The iPhone INSTALL action should fit without widening the phone UI")
-	main._show_ios_install_guide()
+	main._configure_mobile_install_dialog("ios")
+	main.mobile_install_dialog.popup_centered_clamped(Vector2i(360, 365), 0.95)
 	await process_frame
-	_expect(main.ios_install_dialog.visible, "The INSTALL action should open its Home Screen guide")
-	_expect(main.ios_install_dialog.dialog_text.contains("ADD TO HOME SCREEN"), "The iPhone guide should name Apple's Add to Home Screen action")
-	_expect(main.ios_install_dialog.dialog_text.contains("EXPORT"), "The iPhone guide should protect players from browser-storage surprises")
-	main.ios_install_dialog.hide()
-	main._set_ios_install_offer_visible(false)
+	_expect(main.mobile_install_dialog.visible, "The INSTALL action should open its Home Screen guide")
+	_expect(main.mobile_install_dialog.dialog_text.contains("ADD TO HOME SCREEN"), "The iPhone guide should name Apple's Add to Home Screen action")
+	_expect(main.mobile_install_dialog.dialog_text.contains("EXPORT"), "The iPhone guide should protect players from browser-storage surprises")
+	main.mobile_install_dialog.hide()
+	main._configure_mobile_install_dialog("android")
+	_expect(main.mobile_install_dialog.title == "INSTALL ON ANDROID", "The Android install guide should identify its platform")
+	_expect(main.mobile_install_dialog.dialog_text.contains("INSTALL APP"), "The Android fallback should name Chrome's install action")
+	_expect(main.mobile_install_dialog.dialog_text.contains("SAVE & UPDATE"), "The Android guide should explain that installed builds stay web-updated")
+	main._set_mobile_install_offer_visible(false)
 	_expect(not main.upgrade_panel.visible, "Upgrade panel should not squeeze the phone field")
 	_expect(not main.equipment_sidebar.visible, "Loadout sidebar should not squeeze the phone field")
 	_expect(not main.event_log_panel.visible, "Event log should live behind the phone menu")
@@ -60,7 +67,9 @@ func _run() -> void:
 		"The phone pitcher must appear below the batter"
 	)
 	_expect(main.outcomes_grid.columns == 4, "Phone outcomes should wrap into a readable 4-by-2 grid")
-	_expect(main.previous_button.text == "‹" and main.next_button.text == "›", "Phone opponent controls should use compact arrows")
+	_expect(main.previous_button.text.is_empty() and main.next_button.text.is_empty(), "Phone opponent controls should not depend on font arrow glyphs")
+	_expect(main.previous_button.icon != null and main.next_button.icon != null, "Phone opponent controls should provide rasterized back/forward icons")
+	_expect(main.previous_button.get_combined_minimum_size().y >= 44.0 and main.next_button.get_combined_minimum_size().y >= 44.0, "Phone opponent controls should remain touch-sized")
 	_expect(not main.visual_weight_label.visible, "Secondary renderer detail should not crowd the phone footer")
 	_expect(main.field_stat_panel.size.x <= 134.0, "The phone throw profile is wider than its values require")
 	_expect(
@@ -70,6 +79,13 @@ func _run() -> void:
 	)
 	var portrait_arm: Dictionary = main.pitch_field._get_throw_arm_geometry(0, 1, 0.0)
 	_expect(Vector2(portrait_arm.end).x > 0.0, "A right-handed phone pitcher should rest the arm on screen-right")
+	var portrait_mound: Vector2 = main.pitch_field.get_pitcher_position()
+	_expect(main.pitch_field.move_closer_arrow.text.is_empty(), "Phone mound controls should use icons instead of unsupported arrow glyphs")
+	_expect(main.pitch_field.move_closer_arrow.icon != null and main.pitch_field.move_farther_arrow.icon != null, "Phone mound controls should provide rasterized up/down icons")
+	_expect(main.pitch_field.move_closer_arrow.size.x >= 44.0 and main.pitch_field.move_closer_arrow.size.y >= 44.0, "Phone mound controls should be touch-sized")
+	_expect(main.pitch_field.move_closer_arrow.position.x > portrait_mound.x, "Both phone mound controls should sit to the pitcher's right")
+	_expect(main.pitch_field.move_farther_arrow.position.x > portrait_mound.x, "The farther-mound control should not cover the cooldown meter")
+	_expect(main.pitch_field.move_closer_arrow.position.y < main.pitch_field.move_farther_arrow.position.y, "Move closer should point up above Move farther")
 	main.is_web_build = true
 	main._on_browser_update_available()
 	await process_frame
@@ -84,11 +100,76 @@ func _run() -> void:
 	_expect(main.mobile_overlay_panel.visible, "Upgrades button should open a full phone overlay")
 	_expect(main.upgrade_panel.get_parent() == main.mobile_overlay_content, "Upgrade panel should move into the overlay")
 	_expect(main.upgrade_panel.visible, "Upgrade overlay content should be visible")
+	_expect(main.mobile_overlay_xp_label.visible, "The Upgrades overlay should keep spendable XP visible")
+	_expect(
+		main.mobile_overlay_xp_label.text == "XP %s" % main.xp_label.text,
+		"The Upgrades overlay XP balance should match the live game balance"
+	)
+	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
+	_expect(
+		main.mobile_tab_next_button.get_combined_minimum_size().x >= 44.0
+		and main.mobile_tab_next_button.get_combined_minimum_size().y >= 44.0,
+		"The phone tab-forward control should provide a 44-by-44 touch target"
+	)
+	_expect(
+		main.mobile_tab_previous_button.get_combined_minimum_size().x >= 44.0
+		and main.mobile_tab_previous_button.get_combined_minimum_size().y >= 44.0,
+		"The phone tab-back control should provide a 44-by-44 touch target"
+	)
+	_expect(main.mobile_tab_previous_button.icon != null and main.mobile_tab_next_button.icon != null, "Phone tab traversal should not depend on font arrow glyphs")
+	_expect(main.upgrade_tabs.get_tab_bar().has_theme_icon_override("decrement") and main.upgrade_tabs.get_tab_bar().has_theme_icon_override("increment"), "Tiny native overflow arrows should yield to the explicit phone tab controls")
+	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
+	main.mobile_tab_next_button.pressed.emit()
+	await process_frame
+	_expect(main.upgrade_tabs.current_tab == 1, "The touch-sized Next control did not change upgrade tabs")
+	_expect(not main.mobile_tab_previous_button.disabled, "Advancing a tab should enable Back")
 	main._close_mobile_overlay()
 	await process_frame
 	_expect(not main.mobile_overlay_panel.visible, "Closing the phone overlay should reveal the field")
 	_expect(main.upgrade_panel.get_parent() == main.body_container, "Upgrade panel should return to its desktop home")
 	_expect(not main.upgrade_panel.visible, "Returned upgrade panel should stay hidden on phone")
+
+	main._show_mobile_inspection_for_control(main.outcome_panels[0])
+	await process_frame
+	_expect(main.mobile_inspection_dialog.visible, "Tapping a result card should open mobile details")
+	_expect(main.mobile_inspection_dialog.dialog_text.to_upper().contains("GRAND SLAM"), "Result-card details should reuse the desktop tooltip")
+	_expect(
+		main.mobile_inspection_dialog.get_ok_button().get_combined_minimum_size().y >= 44.0,
+		"Mobile inspection should always have a touch-sized Close action, not %s"
+		% str(main.mobile_inspection_dialog.get_ok_button().get_combined_minimum_size())
+	)
+	main.mobile_inspection_dialog.hide()
+	if main.opponent_loadout_dock.get_child_count() > 0:
+		var opponent_item := main.opponent_loadout_dock.get_child(0) as Control
+		main._show_mobile_inspection_for_control(opponent_item)
+		await process_frame
+		_expect(main.mobile_inspection_dialog.visible, "Tapping enemy equipment should open mobile details")
+		_expect(main.mobile_inspection_dialog.dialog_text.contains("Batter threat"), "Enemy equipment details should include its threat modifier")
+		main.mobile_inspection_dialog.hide()
+
+	main.game.opponent_mastery[0] = float(main.game.opponents[0].mastery_required) * 124.0
+	main._refresh_interface()
+	await process_frame
+	await process_frame
+	_expect(main.mastery_label.text.begins_with("MASTERED ×124"), "Phone overmastery should use its compact one-line summary")
+	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "A long overmastery state should not push phone navigation below 390×844")
+	main._show_mobile_inspection_for_control(main.mastery_label)
+	await process_frame
+	_expect(main.mobile_inspection_dialog.visible, "Phone mastery should expose its full desktop explanation on tap")
+	main.mobile_inspection_dialog.hide()
+
+	main._open_locker("hat")
+	await process_frame
+	await process_frame
+	_expect(main.locker_dialog.visible, "The phone equipment browser should open")
+	_expect(main.locker_dialog.borderless, "The phone equipment browser should not rely on an iOS-obscured title bar")
+	_expect(main.locker_dialog_close_button.visible, "The phone equipment browser needs an in-content Close button")
+	_expect(main.locker_dialog_close_button.get_combined_minimum_size().y >= 44.0, "The equipment Close button should be touch-sized")
+	_expect(main.locker_dialog.position.y >= 0, "The phone equipment browser should remain below the usable viewport edge")
+	_expect(main.locker_dialog.position.y + main.locker_dialog.size.y <= 844, "The phone equipment browser should fit inside the usable viewport")
+	main.locker_dialog_close_button.pressed.emit()
+	await process_frame
+	_expect(not main.locker_dialog.visible, "The in-content equipment Close button should dismiss the browser")
 
 	main._show_mobile_overlay(main.equipment_sidebar, "LOADOUT")
 	await process_frame

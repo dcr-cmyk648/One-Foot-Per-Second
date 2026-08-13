@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.7 — The dugout has thumbs now
+
+- Browser flight impacts now resolve on the exact rendered arrival frame instead of waiting as long as one coarse idle-simulation tick after the visible ball reaches the plate.
+- Locker favorite stars and all remaining lock/check/direction markers now use plain text or code-drawn icons, eliminating browser missing-font boxes throughout the interface.
+
+- Rebalanced Little Timmy from roughly a 30.5% to a 40% called-Strike chance, raising the complete opening at-bat's strikeout chance above 10%. The first strikeout now pays 5 XP instead of 15; early base payouts add one XP per opponent until the ordinary three-Strikes-times-five bounty resumes at level 11.
+- Replaced the tiny phone upgrade-tab affordances with explicit 44-by-44 previous and next controls, while keeping the current spendable XP visible in the Upgrades overlay.
+- Removed font-dependent direction glyphs from browser navigation. Batter selection and upgrade traversal now use code-drawn back/forward icons, while mound movement uses code-drawn left/right or portrait up/down controls; every phone target is at least 44 pixels and the mound pair stays stacked to the pitcher's right.
+- Compacted long overmastery summaries and reduced the portrait field minimum just enough to keep the header, full game view, outcomes, and bottom navigation together at 390×844; tapping the compact mastery line opens its complete explanation.
+- Made the phone equipment browser borderless and added a large in-content Close button, so iOS status chrome cannot make its only exit unreachable.
+- Added closable tap-inspection sheets that reuse desktop tooltip explanations for result cards, opponent equipment, live profile rows, stat help, and loadout summaries.
+- Added Android Progressive Web App installation through Chrome's native prompt with an on-device fallback guide. The 192-pixel manifest icon and existing service-worker update path keep installed Android copies web-updated alongside iPhone Home Screen copies.
+- Added a best-effort Screen Wake Lock request while a browser game is visible, with automatic reacquisition after tab or app suspension and another attempt on player input.
+- Expanded the portrait interface audit across mobile installation states, XP visibility, tab traversal, mound controls, tappable details, and the equipment-window escape path.
+
 ## 0.10.6 — The scorebook does not study itself
 
 - Offline strikeout XP now begins at 1% of the normal open-game award instead of silently paying the full rate. Exact plate appearances, mastery, loot, batter state, and the seven-day catch-up window remain simulated.
