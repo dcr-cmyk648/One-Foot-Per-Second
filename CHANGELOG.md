@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.2 — The browser remembers it is a window
+
+- Made resized browser windows switch to the compact overlay interface whenever width or height can no longer hold the desktop panels. The whole page now has vertical overflow access as a final safety net, so controls cannot become permanently cropped below a short window.
+- Kept the milestone subtitle visible beneath the title on every layout. It begins with “A baseball game about a regular ol’ guy,” becomes “A baseball game about a big boi” after the first steroid purchase, and continues changing only after the matching alien, genetic, eldritch, and divine discoveries.
+- Removed the redundant checkmark from equipped field slots. Their letters remain stable and their rarity-colored border continues to show what is equipped at a glance.
+- Added a checked-in Codex local-environment action named Open Game with the play icon. It launches the current native build on demand and falls back to the Godot project when no export exists; builds no longer need to be opened automatically after an update.
+- Added regression coverage for ordinary resized landscape windows, page overflow access, phone subtitle visibility, milestone copy, and icon-free equipped slots.
+
 ## 0.10.1 — Retina remembers that pixels have density
 
 - Fixed high-density browser displays treating device pixels as interface pixels. The Web build now applies the browser display scale to its fluid canvas, so iPhone text, controls, and character models render at readable CSS-pixel size instead of shrinking by the device pixel ratio.

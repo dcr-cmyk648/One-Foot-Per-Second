@@ -23,14 +23,20 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.1 progressive-interface audit")
+	print("One Foot Per Second — v0.10.2 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
 			margin = child
 			break
-	var page: VBoxContainer = margin.get_child(0)
+	var page_scroll: ScrollContainer = margin.get_child(0)
+	var page: VBoxContainer = page_scroll.get_child(0)
 	var body: HBoxContainer = page.get_child(1)
+	_expect(page_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "The page must never hide content behind horizontal scrolling")
+	_expect(page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Short browser windows need vertical access to every control")
+	_expect(main._should_use_compact_layout(Vector2(1024.0, 768.0)), "A narrow landscape browser should move sidebars into overlays")
+	_expect(main._should_use_compact_layout(Vector2(1366.0, 680.0)), "A short landscape browser should move tall panels into overlays")
+	_expect(not main._should_use_compact_layout(Vector2(1280.0, 800.0)), "A roomy 1280×800 browser should retain the desktop layout")
 	_expect(body.size.x <= main.size.x + 1.0, "Primary interface width %.1f exceeds the %.1f px canvas" % [body.size.x, main.size.x])
 	for child in body.get_children():
 		_expect(
@@ -96,6 +102,12 @@ func _run() -> void:
 	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
 	_expect(not main.import_save_confirmation.visible, "The load-save replacement confirmation should begin closed")
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "The destructive reset window should begin closed and locked")
+	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Fresh human baseball needs the regular-guy subtitle")
+	main.game.purchased_milestones.append("steroids")
+	main._refresh_interface()
+	_expect(main.header_subtitle.text == "A baseball game about a big boi", "The first steroid use should update the subtitle")
+	main.game.purchased_milestones.erase("steroids")
+	main._refresh_interface()
 	main.development_session = false
 	main._request_hard_reset()
 	await process_frame
@@ -129,7 +141,7 @@ func _run() -> void:
 	var hat_style := main.inventory_slot_buttons.hat.get_theme_stylebox("normal") as StyleBoxFlat
 	var expected_equipped_border := Color.WHITE.lerp(Color(Content.LOOT_RARITIES[2].color), 0.55)
 	_expect(hat_style.border_color.is_equal_approx(expected_equipped_border) and hat_style.border_width_left == 3, "An equipped slot should use a thick, bright version of its rarity color")
-	_expect(main.inventory_slot_buttons.hat.text == "✓H", "An equipped field slot should carry an explicit checkmark")
+	_expect(main.inventory_slot_buttons.hat.text == "H", "An equipped field slot should rely on rarity color without a redundant icon")
 	main._open_locker("hat")
 	await process_frame
 	_expect(main.locker_dialog.visible, "Clicking a field equipment square should open the equipment popup")
@@ -150,8 +162,10 @@ func _run() -> void:
 		await _capture_visible_tabs(main, "fresh")
 
 	main.game.genetic_offer_unlocked = true
+	main.game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
 	main._refresh_interface()
 	await process_frame
+	_expect(main.header_subtitle.text == "A baseball game about a guy who found aliens", "Alien contact should update the subtitle without revealing later layers")
 	_expect(main.prestige_header_stack.visible, "Genetic offer did not reveal DNA")
 	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer did not reveal Rebirth")
 	_expect(main.genetic_section.visible, "Genetic offer did not reveal mutations")
@@ -165,8 +179,10 @@ func _run() -> void:
 	await _audit_tab_geometry(main, "genetic")
 
 	main.game.eldritch_offer_unlocked = true
+	main.game.highest_unlocked = Content.ELDRITCH_EXHIBITION_INDEX
 	main._refresh_interface()
 	await process_frame
+	_expect(main.header_subtitle.text == "A baseball game about one guy versus the void", "The eldritch exhibition should receive its own discovered-milestone subtitle")
 	_expect(main.eldritch_section.visible, "Eldritch offer did not reveal magic")
 	_expect(not main.divine_section.visible, "Eldritch offer prematurely reveals divine rewards")
 	_expect(main.era_label.text.contains("/ 45"), "Eldritch reveal should expose the complete opponent ladder")
@@ -178,6 +194,7 @@ func _run() -> void:
 	main.game.cosmos_conquered = true
 	main._refresh_interface()
 	await process_frame
+	_expect(main.header_subtitle.text == "A baseball game about saving the universe, somehow", "Cosmic victory should complete the subtitle arc")
 	_expect(main.divine_section.visible, "Cosmic victory did not reveal divine rewards")
 	_expect(main.stat_rows.completion.visible, "Cosmic victory did not reveal completion stats")
 	_expect(main.guide_label.text.contains("divine blessing"), "Cosmic victory did not expand the Guide")

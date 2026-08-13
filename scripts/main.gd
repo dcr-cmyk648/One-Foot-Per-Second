@@ -15,6 +15,8 @@ const COLOR_GOOD := Color("6ee7a8")
 const COLOR_BAD := Color("ff667d")
 const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
+const WEB_COMPACT_MAX_WIDTH := 1180.0
+const WEB_COMPACT_MAX_HEIGHT := 720.0
 
 var game: BaseballGameState
 var pitch_field
@@ -131,6 +133,7 @@ var mobile_overlay_control: Control
 var mobile_overlay_home: Control
 var mobile_overlay_home_index := -1
 var root_margin: MarginContainer
+var page_scroll: ScrollContainer
 var page_container: VBoxContainer
 var body_container: HBoxContainer
 var header_panel: PanelContainer
@@ -248,7 +251,6 @@ func _configure_platform_ui() -> void:
 		JavaScriptBridge.pwa_update_available.connect(_on_browser_update_available)
 	if JavaScriptBridge.pwa_needs_update():
 		_on_browser_update_available()
-	header_subtitle.text = "A BASEBALL IDLE GAME ABOUT A VERY SLOW PITCH  •  BROWSER BUILD"
 	var storage_note := (
 		"Progress is stored in this browser. EXPORT creates a portable backup."
 		if web_storage_persistent
@@ -496,9 +498,21 @@ func _build_interface() -> void:
 	root_margin.add_theme_constant_override("margin_bottom", 12)
 	add_child(root_margin)
 
+	page_scroll = ScrollContainer.new()
+	page_scroll.name = "PageScroll"
+	page_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	page_scroll.follow_focus = true
+	root_margin.add_child(page_scroll)
+
 	page_container = VBoxContainer.new()
+	page_container.name = "Page"
+	page_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	page_container.add_theme_constant_override("separation", 10)
-	root_margin.add_child(page_container)
+	page_scroll.add_child(page_container)
 	_build_header(page_container)
 
 	body_container = HBoxContainer.new()
@@ -560,7 +574,8 @@ func _build_header(parent: Control) -> void:
 	header_title.add_theme_color_override("font_color", COLOR_ACCENT)
 	header_title_stack.add_child(header_title)
 	header_subtitle = Label.new()
-	header_subtitle.text = "A BASEBALL IDLE GAME ABOUT A VERY SLOW PITCH"
+	header_subtitle.text = "A baseball game about a regular ol’ guy"
+	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	header_subtitle.add_theme_font_size_override("font_size", 13)
 	header_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
 	header_title_stack.add_child(header_subtitle)
@@ -789,11 +804,22 @@ func _apply_responsive_layout() -> void:
 	if pitch_field == null:
 		return
 	var viewport_size := _get_responsive_viewport_size()
-	var portrait := viewport_size.y > viewport_size.x * 1.08
-	var should_use_mobile := is_web_build and (
-		portrait or minf(viewport_size.x, viewport_size.y) < 720.0
-	)
+	var portrait := _is_portrait_viewport(viewport_size)
+	var should_use_mobile := is_web_build and _should_use_compact_layout(viewport_size)
 	_set_mobile_layout(should_use_mobile, portrait)
+
+func _is_portrait_viewport(viewport_size: Vector2) -> bool:
+	return viewport_size.y > viewport_size.x * 1.08
+
+func _should_use_compact_layout(viewport_size: Vector2) -> bool:
+	# Width and height are independent constraints in a resizable browser window.
+	# The former min-dimension check left both desktop sidebars active in many
+	# ordinary landscape windows, clipping controls with no way to reach them.
+	return (
+		_is_portrait_viewport(viewport_size)
+		or viewport_size.x < WEB_COMPACT_MAX_WIDTH
+		or viewport_size.y < WEB_COMPACT_MAX_HEIGHT
+	)
 
 func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	var layout_changed := enabled != mobile_layout
@@ -827,7 +853,11 @@ func _set_mobile_layout(enabled: bool, portrait := true) -> void:
 	body_container.add_theme_constant_override("separation", 0 if mobile_layout else 10)
 	header_row.add_theme_constant_override("separation", 7 if mobile_layout else 20)
 	header_title.add_theme_font_size_override("font_size", 17 if mobile_layout else 27)
-	header_subtitle.visible = not mobile_layout
+	header_title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL if mobile_layout else Control.SIZE_FILL
+	header_spacer.visible = not mobile_layout
+	header_subtitle.visible = true
+	header_subtitle.custom_minimum_size.x = 175.0 if mobile_layout else 0.0
+	header_subtitle.add_theme_font_size_override("font_size", 9 if mobile_layout else 13)
 	for index in header_metric_stacks.size():
 		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else 126.0
 		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else 12)
@@ -1900,18 +1930,13 @@ func _refresh_reveal_visibility() -> void:
 		divine_section.visible = divine_revealed
 		last_reveal_mask = reveal_mask
 
-	header_subtitle.text = "A BASEBALL IDLE GAME ABOUT A VERY SLOW PITCH"
+	header_subtitle.text = _get_game_subtitle()
+	header_subtitle.tooltip_text = header_subtitle.text
 	equipment_progression_heading.text = "OWNED FACILITIES"
 	if genetic_revealed:
-		header_subtitle.text = "A BASEBALL IDLE GAME ABOUT QUESTIONABLE BIOLOGY"
 		equipment_progression_heading.text = "FACILITIES & MUTATIONS"
 	if eldritch_revealed:
-		header_subtitle.text = "A BASEBALL IDLE GAME ABOUT COSMICALLY OVERQUALIFIED PITCHING"
 		equipment_progression_heading.text = "FACILITIES, MUTATIONS & MAGIC"
-	if divine_revealed:
-		header_subtitle.text = "A BASEBALL IDLE GAME ABOUT SAVING THE UNIVERSE WITH BASEBALL"
-	if is_web_build:
-		header_subtitle.text += "  •  BROWSER BUILD"
 
 	for id in ["arms", "dna", "genetic_rebirths"]:
 		stat_rows[id].visible = genetic_revealed
@@ -1921,6 +1946,23 @@ func _refresh_reveal_visibility() -> void:
 		stat_rows[id].visible = divine_revealed
 	stat_rows.speed_limit.visible = game.is_velocity_body_capped()
 	_refresh_guide_text(genetic_revealed, eldritch_revealed, divine_revealed)
+
+func _get_game_subtitle() -> String:
+	# Each line describes only a milestone the player has already discovered.
+	# Keeping this separate from reveal headings avoids advertising future layers.
+	if game.cosmos_conquered or game.divine_ascensions > 0:
+		return "A baseball game about saving the universe, somehow"
+	if game.eldritch_ascensions > 0 or game.lifetime_eldritch_ascensions > 0:
+		return "A baseball game about several versions of one guy"
+	if game.eldritch_offer_unlocked or game.highest_unlocked >= Content.ELDRITCH_EXHIBITION_INDEX:
+		return "A baseball game about one guy versus the void"
+	if game.genetic_rebirths > 0 or game.lifetime_genetic_rebirths > 0:
+		return "A baseball game about a genetically modified guy"
+	if game.genetic_offer_unlocked or game.highest_unlocked >= Content.ALIEN_EXHIBITION_INDEX:
+		return "A baseball game about a guy who found aliens"
+	if game.has_milestone("steroids"):
+		return "A baseball game about a big boi"
+	return "A baseball game about a regular ol’ guy"
 
 func _refresh_guide_text(
 	genetic_revealed: bool,
@@ -2233,7 +2275,7 @@ func _refresh_locker() -> void:
 		# orange Legendary, purple Unique. The item's separate cosmetic tint still
 		# appears on the abstract pitcher.
 		var color := game.get_equipped_loot_rarity_color(slot, COLOR_MUTED)
-		button.text = ("✓%s" % str(definition.letter)) if unlocked and not equipped.is_empty() else (str(definition.letter) if unlocked else "?")
+		button.text = str(definition.letter) if unlocked else "?"
 		button.disabled = not unlocked
 		_apply_loot_square_style(button, color, not unlocked, not equipped.is_empty())
 		if not unlocked:

@@ -6,7 +6,7 @@ const GameStateScript = preload("res://scripts/game_state.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.1 progression and economy audit")
+	print("One Foot Per Second — v0.10.2 progression and economy audit")
 	_audit_ladder()
 	_audit_encounter_profiles()
 	_audit_prestige_curves()
