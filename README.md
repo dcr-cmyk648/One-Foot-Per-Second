@@ -26,7 +26,7 @@ The native packages are portable builds, not store submissions. The Mac app is a
 
 ## Play in a browser
 
-`release/One Foot Per Second v0.10.1/One Foot Per Second v0.10.1 Browser.zip` is a static site with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database, application server, special cross-origin headers, or installation step.
+`release/One Foot Per Second v0.10.1/One Foot Per Second v0.10.1 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database, application server, special cross-origin headers, or installation step. A running tab checks for releases every five minutes and offers to save, activate the new cached build, and reload; it never interrupts a pitch with a forced update.
 
 To build only the browser package, or serve the current build locally:
 

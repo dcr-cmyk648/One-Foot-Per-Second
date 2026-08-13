@@ -5,7 +5,9 @@ OFPS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OFPS_BUILD_DIR="${OFPS_ROOT}/build/web"
 OFPS_PAGES_DIR="${OFPS_ROOT}/web"
 
-for OFPS_REQUIRED_FILE in index.html index.js index.pck index.wasm; do
+for OFPS_REQUIRED_FILE in \
+	index.html index.js index.pck index.wasm \
+	index.manifest.json index.offline.html index.service.worker.js; do
 	if [[ ! -s "${OFPS_BUILD_DIR}/${OFPS_REQUIRED_FILE}" ]]; then
 		echo "Cannot stage GitHub Pages: build/web/${OFPS_REQUIRED_FILE} is missing." >&2
 		exit 1

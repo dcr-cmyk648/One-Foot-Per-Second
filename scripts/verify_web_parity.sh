@@ -11,7 +11,8 @@ cleanup_ofps_web_parity() {
 trap cleanup_ofps_web_parity EXIT
 
 for OFPS_REQUIRED_FILE in \
-	index.html index.js index.pck index.wasm .nojekyll \
+	index.html index.js index.pck index.wasm \
+	index.manifest.json index.offline.html index.service.worker.js .nojekyll \
 	.gdignore \
 	SOURCE-SHA256SUMS.txt BUILD-SHA256SUMS.txt; do
 	if [[ ! -e "${OFPS_PAGES_DIR}/${OFPS_REQUIRED_FILE}" ]]; then

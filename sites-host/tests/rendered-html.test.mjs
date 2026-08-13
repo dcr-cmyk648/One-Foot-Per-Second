@@ -10,10 +10,20 @@ const context = {
   passThroughOnException() {},
 };
 
-test("serves the verified Godot page directly at the site root", async () => {
+test("redirects the site root into the update-controlled game scope", async () => {
+  const response = await worker.fetch(
+    new Request("http://localhost/"),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    context,
+  );
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("location"), "http://localhost/game/index.html");
+});
+
+test("serves the verified Godot page with revalidation headers", async () => {
   const gameHtml = `<!doctype html><html><head><base href="/game/"><title>One Foot Per Second</title></head><body><canvas id="canvas"></canvas><script src="index.js"></script></body></html>`;
   const response = await worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    new Request("http://localhost/game/index.html", { headers: { accept: "text/html" } }),
     {
       ASSETS: {
         fetch: async (request) =>
@@ -25,11 +35,31 @@ test("serves the verified Godot page directly at the site root", async () => {
     context,
   );
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "public, max-age=0, must-revalidate");
   const html = await response.text();
   assert.match(html, /<title>One Foot Per Second<\/title>/i);
   assert.match(html, /<base href="\/game\/">/i);
   assert.match(html, /<canvas id="canvas"/i);
   assert.doesNotMatch(html, /iframe|codex-preview|SkeletonPreview|react-loading-skeleton/i);
+});
+
+test("never pins the release worker behind a long-lived host cache", async () => {
+  const workerSource = "const CACHE_VERSION = 'test-release';";
+  const response = await worker.fetch(
+    new Request("http://localhost/game/index.service.worker.js"),
+    {
+      ASSETS: {
+        fetch: async (request) =>
+          new URL(request.url).pathname === "/game/index.service.worker.js"
+            ? new Response(workerSource, { headers: { "content-type": "text/javascript" } })
+            : new Response("Not found", { status: 404 }),
+      },
+    },
+    context,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "public, max-age=0, must-revalidate");
+  assert.equal(await response.text(), workerSource);
 });
 
 test("reassembles Sites-safe runtime segments as one wasm response", async () => {

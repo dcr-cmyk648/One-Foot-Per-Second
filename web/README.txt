@@ -28,6 +28,15 @@ batter is at the top. Upgrades, Loadout, Event Log, and Save controls open over
 the field from the bottom navigation row. This is a browser presentation layer;
 the underlying game and exported save format remain identical to desktop.
 
+UPDATES AND OFFLINE PLAY
+
+The generated service worker identifies each release by its content-derived
+cache version. An open game asks the host for an update every five minutes. When
+one is ready, the game shows SAVE & UPDATE; it does not reload until the player
+chooses. The current run is saved and browser storage is flushed before the new
+release activates. After one successful online load, the current build can also
+start offline when the browser retains its cache.
+
 CODEX SITES
 
 The source project includes a Sites hosting shell that publishes this verified

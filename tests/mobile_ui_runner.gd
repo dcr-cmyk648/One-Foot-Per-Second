@@ -49,6 +49,14 @@ func _run() -> void:
 	)
 	var portrait_arm: Dictionary = main.pitch_field._get_throw_arm_geometry(0, 1, 0.0)
 	_expect(Vector2(portrait_arm.end).x > 0.0, "A right-handed phone pitcher should rest the arm on screen-right")
+	main.is_web_build = true
+	main._on_browser_update_available()
+	await process_frame
+	_expect(main.update_banner.visible, "An available browser release should show the update banner")
+	_expect(main.update_banner.size.x <= 370.0, "The browser update banner should fit a 390-pixel phone")
+	main._snooze_browser_update()
+	_expect(not main.update_banner.visible, "Choosing Later should dismiss the browser update banner")
+	main.is_web_build = false
 
 	main._show_mobile_overlay(main.upgrade_panel, "UPGRADES")
 	await process_frame
