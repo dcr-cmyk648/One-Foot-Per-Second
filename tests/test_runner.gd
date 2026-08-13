@@ -7,7 +7,7 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.3 multiverse regression suite")
+	print("One Foot Per Second — v0.10.4 multiverse regression suite")
 	_test_content()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()

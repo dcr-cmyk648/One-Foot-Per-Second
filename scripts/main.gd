@@ -16,7 +16,7 @@ const COLOR_BAD := Color("ff667d")
 const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
 const WEB_WIDE_MIN_WIDTH := 1280.0
-const WEB_WIDE_MIN_HEIGHT := 720.0
+const WEB_WIDE_MIN_HEIGHT := 696.0
 const WEB_LAYOUT_HYSTERESIS := 24.0
 const WEB_DENSE_MAX_HEIGHT := 860.0
 
@@ -849,10 +849,13 @@ func _should_use_compact_layout(
 		return true
 	var minimum_width := WEB_WIDE_MIN_WIDTH
 	var minimum_height := WEB_WIDE_MIN_HEIGHT
-	if apply_hysteresis:
-		var threshold_shift := WEB_LAYOUT_HYSTERESIS if current_compact else -WEB_LAYOUT_HYSTERESIS
-		minimum_width += threshold_shift
-		minimum_height += threshold_shift
+	# Hysteresis is deliberately one-sided: an already-wide layout may shrink a
+	# little before collapsing, but compact mode returns to wide at the declared
+	# safe boundary. Applying the buffer to compact-mode re-entry used to require
+	# 1304×744, so an ordinary 720 px-tall browser could remain compact forever
+	# no matter how wide the window became.
+	if apply_hysteresis and not current_compact:
+		minimum_width -= WEB_LAYOUT_HYSTERESIS
 	return viewport_size.x < minimum_width or viewport_size.y < minimum_height
 
 func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void:

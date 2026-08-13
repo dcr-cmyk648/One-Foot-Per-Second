@@ -23,7 +23,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.3 progressive-interface audit")
+	print("One Foot Per Second — v0.10.4 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -36,10 +36,12 @@ func _run() -> void:
 	_expect(page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Short browser windows need vertical access to every control")
 	_expect(main._should_use_compact_layout(Vector2(1279.0, 800.0)), "A browser one pixel below the wide boundary should move sidebars into overlays")
 	_expect(main._should_use_compact_layout(Vector2(1366.0, 680.0)), "A short landscape browser should move tall panels into overlays")
-	_expect(not main._should_use_compact_layout(Vector2(1280.0, 720.0)), "The complete wide interface should fit at its declared boundary")
+	_expect(not main._should_use_compact_layout(Vector2(1280.0, 696.0)), "The complete wide interface should fit at its declared boundary")
 	_expect(not main._should_use_compact_layout(Vector2(1256.0, 696.0), false, true), "Wide-mode hysteresis must remain safe at its smallest allowed viewport")
-	_expect(main._should_use_compact_layout(Vector2(1303.0, 743.0), true, true), "Compact mode should not flicker wide inside the hysteresis band")
-	_expect(not main._should_use_compact_layout(Vector2(1304.0, 744.0), true, true), "Compact mode should leave only after clearing both hysteresis thresholds")
+	_expect(main._should_use_compact_layout(Vector2(1279.0, 900.0), true, true), "Compact mode should stay compact until the safe width is restored")
+	_expect(not main._should_use_compact_layout(Vector2(1280.0, 696.0), true, true), "A resized compact browser must return to wide at the safe boundary")
+	_expect(not main._should_use_compact_layout(Vector2(1600.0, 720.0), true, true), "A normal-height browser must not remain locked in compact mode regardless of width")
+	_expect(main._should_use_compact_layout(Vector2(1600.0, 695.0), true, true), "A browser below the measured safe height should remain compact")
 	_expect(body.size.x <= main.size.x + 1.0, "Primary interface width %.1f exceeds the %.1f px canvas" % [body.size.x, main.size.x])
 	for child in body.get_children():
 		_expect(

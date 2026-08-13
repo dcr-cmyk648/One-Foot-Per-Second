@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.4 — Wide means wide again
+
+- Fixed a responsive-state lock that could leave a 720-pixel-tall browser in compact mode forever after the window had once crossed the narrow breakpoint.
+- Compact mode now returns to the full interface at the measured-safe 1280×696 boundary, while an already-wide window retains a small width-only buffer to prevent resize flicker.
+- Added regression coverage for compact-to-wide resize sequences at ordinary browser heights.
+
 ## 0.10.3 — Everything fits in the ballpark
 
 - Replaced the one-pixel wide/compact switch with measured-safe width and height thresholds plus a small hysteresis band, eliminating clipped right panels and resize flicker at the boundary.
