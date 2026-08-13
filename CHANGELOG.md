@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 — The ballpark turns sideways
+
+- Added a browser-only responsive phone interface. Portrait play rotates the field into a vertical lane with the pitcher below and batter above, while desktop and installed builds retain the established top-down landscape layout.
+- Replaced phone-width sidebars with full-screen Upgrades, Loadout, Event Log, and Save overlays reachable from a persistent touch-sized navigation row. Outcome cards wrap into a legible grid and secondary renderer text yields space to the game.
+- Kept phone presentation on the shared Godot scene and simulation rather than creating a second game. Saves, unlocks, economy, content, input, pitch physics, and every nonvisual rule remain identical across browser and native exports.
+- Added a dedicated portrait-interface regression suite covering field orientation, overlay reparenting, compact controls, and restoration of the desktop layout.
+- Added an OpenAI Sites hosting shell that embeds the verified Godot export and streams its large WebAssembly runtime from host-safe segments. The Sites build refuses stale browser artifacts, while GitHub Pages remains a static fallback from the same checked-in export.
+
 ## 0.9.0 — The bullpen discovers hyperlinks
 
 - Added a maintained Godot Web export target using the Compatibility renderer, the preferred single-threaded template, adaptive browser-canvas sizing, and a static-site package suitable for ordinary Web hosting.

@@ -126,6 +126,7 @@ var cached_bright_star_lines := PackedVector2Array()
 var cached_star_size := Vector2.ZERO
 var cached_star_density := -1
 var browser_visual_profile := false
+var portrait_layout := false
 var visual_ball_capacity := MAX_VISUAL_BALLS
 var return_ball_capacity := MAX_RETURN_BALLS
 var star_density_capacity := MAX_STAR_DENSITY
@@ -193,6 +194,21 @@ func reset_visual_state() -> void:
 	pitch_call_age = 99.0
 	last_pitch_visual_travel_time = 3.0
 	queue_redraw()
+
+func set_portrait_layout(enabled: bool) -> void:
+	if portrait_layout == enabled:
+		return
+	portrait_layout = enabled
+	# Every live projectile stores an immutable screen-space launch. Recreate an
+	# unresolved authoritative pitch after an orientation change so it follows the
+	# newly rotated field without altering its outcome, speed, or remaining time.
+	reset_visual_state()
+	_update_shader_parameters()
+	_update_range_arrows()
+	queue_redraw()
+
+func is_portrait_layout() -> bool:
+	return portrait_layout
 
 func _setup_ball_stream() -> void:
 	ball_multimesh = MultiMesh.new()
@@ -471,7 +487,7 @@ func _spawn_pitch(backdate: float, flight_seconds := -1.0, color_override: Varia
 		spawn_at / STREAM_WRAP_SECONDS,
 		launch_duration / MAX_VISUAL_TRAVEL_SECONDS,
 		clampf((signed_curve / projectile_scale + 1.0) * 0.5, 0.0, 1.0),
-		clampf(flight_length / maxf(size.x * projectile_scale, 1.0), 0.0, 1.0)
+		clampf(flight_length / maxf(_get_field_axis_length() * projectile_scale, 1.0), 0.0, 1.0)
 	)
 	ball_multimesh.set_instance_transform_2d(slot, instance_transform)
 	ball_multimesh.set_instance_color(slot, color)
@@ -519,11 +535,33 @@ func _get_throw_arm_geometry(arm_index: int, arm_count: int, motion: float) -> D
 	var body_scale := _get_pitcher_visual_scale()
 	var start_distance := (6.4 + bounded_motion * 1.5) * body_scale
 	var end_distance := (14.0 + bounded_motion * 3.7) * body_scale
+	var start := direction * start_distance
+	var finish := direction * end_distance
+	var normal := Vector2(-direction.y, direction.x)
 	return {
-		"start": direction * start_distance,
-		"end": direction * end_distance,
-		"normal": Vector2(-direction.y, direction.x),
+		"start": _orient_pitch_vector(start),
+		"end": _orient_pitch_vector(finish),
+		"normal": _orient_pitch_vector(normal),
 	}
+
+func _orient_pitch_vector(local_vector: Vector2) -> Vector2:
+	# Desktop throws left-to-right. A portrait phone uses the same local field
+	# coordinates rotated counter-clockwise: pitcher below, batter above.
+	if portrait_layout:
+		return Vector2(local_vector.y, -local_vector.x)
+	return local_vector
+
+func _get_pitch_direction() -> Vector2:
+	return Vector2.UP if portrait_layout else Vector2.RIGHT
+
+func _get_lateral_direction() -> Vector2:
+	return Vector2.RIGHT if portrait_layout else Vector2.DOWN
+
+func _get_field_axis_length() -> float:
+	return size.y if portrait_layout else size.x
+
+func _get_field_lateral_length() -> float:
+	return size.x if portrait_layout else size.y
 
 func _get_clone_offset(clone_index: int) -> Vector2:
 	if clone_index <= 0:
@@ -585,8 +623,8 @@ func _retire_expired_pitch_slots() -> void:
 func _update_shader_parameters() -> void:
 	if ball_material == null:
 		return
-	ball_material.set_shader_parameter("maximum_field_length", maxf(size.x, 1.0))
-	ball_material.set_shader_parameter("maximum_arc_height", maxf(size.y * 0.34, 20.0))
+	ball_material.set_shader_parameter("maximum_field_length", maxf(_get_field_axis_length(), 1.0))
+	ball_material.set_shader_parameter("maximum_arc_height", maxf(_get_field_lateral_length() * 0.34, 20.0))
 
 func _on_resized() -> void:
 	if ball_stream != null:
@@ -599,9 +637,23 @@ func _update_range_arrows() -> void:
 	if move_closer_arrow == null or move_farther_arrow == null:
 		return
 	var mound := _get_mound_position(float(snapshot.distance_feet))
-	var arrow_y := mound.y + maxf(44.0, 20.0 * _get_camera_scale())
-	move_farther_arrow.position = Vector2(mound.x - 44.0, arrow_y)
-	move_closer_arrow.position = Vector2(mound.x + 6.0, arrow_y)
+	if portrait_layout:
+		var body_radius := 10.0 * _get_pitcher_visual_scale()
+		var arrow_y := clampf(mound.y - 16.0, 4.0, maxf(size.y - 36.0, 4.0))
+		move_farther_arrow.position = Vector2(
+			clampf(mound.x - body_radius - 50.0, 4.0, maxf(size.x - 42.0, 4.0)),
+			arrow_y
+		)
+		move_closer_arrow.position = Vector2(
+			clampf(mound.x + body_radius + 12.0, 4.0, maxf(size.x - 42.0, 4.0)),
+			arrow_y
+		)
+	else:
+		var arrow_y := mound.y + maxf(44.0, 20.0 * _get_camera_scale())
+		move_farther_arrow.position = Vector2(mound.x - 44.0, arrow_y)
+		move_closer_arrow.position = Vector2(mound.x + 6.0, arrow_y)
+	move_farther_arrow.text = "↓" if portrait_layout else "←"
+	move_closer_arrow.text = "↑" if portrait_layout else "→"
 	move_closer_arrow.disabled = not bool(snapshot.can_move_closer)
 	move_farther_arrow.disabled = not bool(snapshot.can_move_farther)
 	var distance_index := int(snapshot.get("distance_index", 0))
@@ -1093,14 +1145,13 @@ func _create_return_ball(
 	ball_index := 0,
 	ball_count := 1
 ) -> void:
-	var lane_y := size.y * 0.56
 	var spread_position := (
 		-0.5 + float(ball_index) / float(maxi(ball_count - 1, 1))
 		if ball_count > 1
 		else 0.0
 	)
-	var lane_spread := minf(float(ball_count - 1) * 1.2, size.y * 0.22)
-	var start := _get_plate_position() + Vector2(0.0, spread_position * lane_spread)
+	var lane_spread := minf(float(ball_count - 1) * 1.2, _get_field_lateral_length() * 0.22)
+	var start := _get_plate_position() + _get_lateral_direction() * spread_position * lane_spread
 	var direction := -1.0 if (result_sequence + ball_index) % 2 == 0 else 1.0
 	var finish := start
 	var duration := 0.40
@@ -1118,42 +1169,69 @@ func _create_return_ball(
 			relay = true
 			duration = 0.48
 		else:
-			finish = mound + Vector2(18.0, -24.0)
+			finish = mound + _orient_pitch_vector(Vector2(18.0, -24.0))
 			duration = 0.72
 	else:
-		match outcome:
-			0:
-				finish = Vector2(-180.0, lane_y + direction * size.y * (0.18 + salvo * 0.34))
-				duration = 1.65
-			1:
-				finish = Vector2(-90.0, lane_y + direction * size.y * (0.10 + salvo * 0.30))
-				duration = 1.35
-			2:
-				finish = Vector2(12.0, lane_y + direction * size.y * (0.08 + salvo * 0.25))
-				duration = 1.12
-			3:
-				finish = Vector2(size.x * 0.17, lane_y + direction * size.y * (0.06 + salvo * 0.20))
-				duration = 0.90
-			4:
-				finish = Vector2(size.x * 0.48, lane_y + direction * size.y * (0.04 + salvo * 0.12))
-				duration = 0.66
-			Content.FOUL_INDEX:
-				finish = Vector2(size.x * 0.56, -30.0 if direction < 0.0 else size.y + 30.0)
-				duration = 0.74
-			Content.BALL_INDEX, Content.STRIKE_INDEX:
-				# A missed pitch has not been hit. Continue it through the plate at
-				# the same screen-space speed it had on approach, then let it fade.
-				missed_strike = true
-				finish = Vector2(size.x + 28.0, lane_y)
-				var mound := _get_mound_position(float(snapshot.distance_feet))
-				var incoming_distance := maxf(start.distance_to(mound), 1.0)
-				var continuation_distance := maxf(start.distance_to(finish), 1.0)
-				duration = maxf(last_pitch_visual_travel_time * continuation_distance / incoming_distance, 0.03)
-				fade_start = 0.06
+		if portrait_layout:
+			var lane_x := size.x * 0.50
+			match outcome:
+				0:
+					finish = Vector2(lane_x + direction * size.x * (0.18 + salvo * 0.34), size.y + 180.0)
+					duration = 1.65
+				1:
+					finish = Vector2(lane_x + direction * size.x * (0.10 + salvo * 0.30), size.y + 90.0)
+					duration = 1.35
+				2:
+					finish = Vector2(lane_x + direction * size.x * (0.08 + salvo * 0.25), size.y - 12.0)
+					duration = 1.12
+				3:
+					finish = Vector2(lane_x + direction * size.x * (0.06 + salvo * 0.20), size.y * 0.83)
+					duration = 0.90
+				4:
+					finish = Vector2(lane_x + direction * size.x * (0.04 + salvo * 0.12), size.y * 0.65)
+					duration = 0.66
+				Content.FOUL_INDEX:
+					finish = Vector2(-30.0 if direction < 0.0 else size.x + 30.0, size.y * 0.44)
+					duration = 0.74
+				Content.BALL_INDEX, Content.STRIKE_INDEX:
+					missed_strike = true
+					finish = Vector2(lane_x, -28.0)
+		else:
+			var lane_y := size.y * 0.56
+			match outcome:
+				0:
+					finish = Vector2(-180.0, lane_y + direction * size.y * (0.18 + salvo * 0.34))
+					duration = 1.65
+				1:
+					finish = Vector2(-90.0, lane_y + direction * size.y * (0.10 + salvo * 0.30))
+					duration = 1.35
+				2:
+					finish = Vector2(12.0, lane_y + direction * size.y * (0.08 + salvo * 0.25))
+					duration = 1.12
+				3:
+					finish = Vector2(size.x * 0.17, lane_y + direction * size.y * (0.06 + salvo * 0.20))
+					duration = 0.90
+				4:
+					finish = Vector2(size.x * 0.48, lane_y + direction * size.y * (0.04 + salvo * 0.12))
+					duration = 0.66
+				Content.FOUL_INDEX:
+					finish = Vector2(size.x * 0.56, -30.0 if direction < 0.0 else size.y + 30.0)
+					duration = 0.74
+				Content.BALL_INDEX, Content.STRIKE_INDEX:
+					missed_strike = true
+					finish = Vector2(size.x + 28.0, lane_y)
+		if missed_strike:
+			# A missed pitch continues through the plate at its unchanged approach
+			# speed, regardless of which way the field is presented.
+			var mound := _get_mound_position(float(snapshot.distance_feet))
+			var incoming_distance := maxf(start.distance_to(mound), 1.0)
+			var continuation_distance := maxf(start.distance_to(finish), 1.0)
+			duration = maxf(last_pitch_visual_travel_time * continuation_distance / incoming_distance, 0.03)
+			fade_start = 0.06
 	var midpoint := start.lerp(finish, 0.5)
 	var flight := finish - start
 	var normal := Vector2(-flight.y, flight.x).normalized()
-	var bend := 0.0 if missed_strike else size.y * 0.34 * salvo
+	var bend := 0.0 if missed_strike else _get_field_lateral_length() * 0.34 * salvo
 	var control := midpoint + normal * bend * direction
 	return_balls.append({
 		"outcome": outcome,
@@ -1199,14 +1277,22 @@ func _get_plate_position() -> Vector2:
 
 func _get_plate_position_unlocked() -> Vector2:
 	var distance_progress := _get_distance_progress()
+	if portrait_layout:
+		var close_plate_y := size.y * 0.43
+		var far_plate_y := maxf(size.y * 0.23, 112.0)
+		return Vector2(size.x * 0.50, lerpf(close_plate_y, far_plate_y, distance_progress))
 	var plate_x := lerpf(size.x * 0.58, size.x - 210.0, distance_progress)
 	return Vector2(plate_x, size.y * 0.56)
 
 func _get_mound_position(distance_feet: float) -> Vector2:
 	var plate := _get_plate_position()
 	var minimum_separation := 132.0
-	var maximum_separation := maxf(plate.x - 76.0, minimum_separation)
 	var normalized := _get_distance_progress(distance_feet)
+	if portrait_layout:
+		var maximum_separation := maxf(size.y - plate.y - 76.0, minimum_separation)
+		var separation := lerpf(minimum_separation, maximum_separation, normalized)
+		return plate + Vector2(0.0, separation)
+	var maximum_separation := maxf(plate.x - 76.0, minimum_separation)
 	var separation := lerpf(minimum_separation, maximum_separation, normalized)
 	return plate - Vector2(separation, 0.0)
 
@@ -1241,25 +1327,35 @@ func _get_pitcher_arm_scale() -> float:
 	return _get_pitcher_visual_scale()
 
 func _get_batter_position() -> Vector2:
-	return _get_plate_position() + Vector2(52.0, 0.0)
+	return _get_plate_position() + _get_pitch_direction() * 52.0
+
+func get_pitcher_position() -> Vector2:
+	return _get_mound_position(float(snapshot.distance_feet))
+
+func get_batter_position() -> Vector2:
+	return _get_batter_position()
 
 func _draw() -> void:
 	var stage := _get_environment_stage()
 	_draw_environment(stage)
-	var width := size.x
 	var height := size.y
-	var lane_y := height * 0.56
 	var mound := _get_mound_position(float(snapshot.distance_feet))
 	var plate := _get_plate_position()
 	var line_color := Color(0.45, 0.68, 0.59, 0.34) if stage == 0 else Color(0.38, 0.52, 0.70, 0.30)
 	var wedge_color := Color(0.08, 0.20, 0.15, 0.34) if stage == 0 else Color(0.08, 0.10, 0.18, 0.32)
-	var fair_wedge := PackedVector2Array([plate, Vector2(20.0, 18.0), Vector2(20.0, height - 18.0)])
+	var fair_wedge := (
+		PackedVector2Array([plate, Vector2(18.0, height - 20.0), Vector2(size.x - 18.0, height - 20.0)])
+		if portrait_layout
+		else PackedVector2Array([plate, Vector2(20.0, 18.0), Vector2(20.0, height - 18.0)])
+	)
 	draw_colored_polygon(fair_wedge, wedge_color)
-	draw_line(plate, Vector2(20.0, 18.0), line_color, 1.5)
-	draw_line(plate, Vector2(20.0, height - 18.0), line_color, 1.5)
+	draw_line(plate, fair_wedge[1], line_color, 1.5)
+	draw_line(plate, fair_wedge[2], line_color, 1.5)
 	for ring_index in 4:
 		var ring_radius := 85.0 + float(ring_index) * 95.0
-		draw_arc(plate, ring_radius, PI * 0.66, PI * 1.34, 48, Color(line_color, 0.25), 1.0)
+		var start_angle := PI * 0.16 if portrait_layout else PI * 0.66
+		var end_angle := PI * 0.84 if portrait_layout else PI * 1.34
+		draw_arc(plate, ring_radius, start_angle, end_angle, 48, Color(line_color, 0.25), 1.0)
 	draw_dashed_line(mound, plate, Color(line_color, 0.65), 1.0, 8.0)
 	_draw_distance_marker(mound, plate)
 	_draw_pitcher(mound)
@@ -1768,13 +1864,16 @@ func _draw_pitcher_arm_rectangles(
 
 func _draw_home_plate(origin: Vector2) -> void:
 	var plate_scale := clampf(_get_camera_scale(), 0.72, 2.25)
-	var points := PackedVector2Array([
-		origin + Vector2(-9.0, -10.0) * plate_scale,
-		origin + Vector2(5.0, -10.0) * plate_scale,
-		origin + Vector2(11.0, 0.0) * plate_scale,
-		origin + Vector2(5.0, 10.0) * plate_scale,
-		origin + Vector2(-9.0, 10.0) * plate_scale,
-	])
+	var local_points := [
+		Vector2(-9.0, -10.0),
+		Vector2(5.0, -10.0),
+		Vector2(11.0, 0.0),
+		Vector2(5.0, 10.0),
+		Vector2(-9.0, 10.0),
+	]
+	var points := PackedVector2Array()
+	for local_point in local_points:
+		points.append(origin + _orient_pitch_vector(local_point) * plate_scale)
 	draw_polyline(points, Color(0.62, 0.77, 0.84, 0.88), maxf(1.5, 1.5 * plate_scale))
 	draw_line(points[points.size() - 1], points[0], Color(0.62, 0.77, 0.84, 0.88), maxf(1.5, 1.5 * plate_scale))
 	draw_arc(origin, 22.0 * plate_scale, 0.0, TAU, 32, Color(0.42, 0.75, 0.86, 0.24), maxf(1.0, plate_scale))

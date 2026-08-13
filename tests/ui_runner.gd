@@ -23,7 +23,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.9.0 progressive-interface audit")
+	print("One Foot Per Second — v0.10.0 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -73,9 +73,9 @@ func _run() -> void:
 			_expect(slot_button.disabled and slot_button.text == "?", "The post-human equipment square should begin anonymous and locked")
 		else:
 			_expect(not slot_button.disabled and slot_button.text == str(definition.letter), "%s should be an available letter square" % definition.name)
-	var outcome_row: HBoxContainer
+	var outcome_row: GridContainer
 	for child in main.pitch_field.get_parent().get_children():
-		if child is HBoxContainer and child.get_child_count() == Content.OUTCOME_NAMES.size():
+		if child is GridContainer and child.get_child_count() == Content.OUTCOME_NAMES.size():
 			var all_panels := true
 			for outcome_child in child.get_children():
 				all_panels = all_panels and outcome_child is PanelContainer
