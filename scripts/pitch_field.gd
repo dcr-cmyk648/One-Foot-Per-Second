@@ -4,6 +4,7 @@ extends Control
 signal move_closer_requested
 signal move_farther_requested
 signal batter_call_displayed(call_text: String, color: Color)
+signal field_tapped(field_position: Vector2)
 
 const Content = preload("res://scripts/content.gd")
 const MAX_VISUAL_BALLS := 4000
@@ -26,6 +27,8 @@ const RANGE_CONTROL_TOUCH_SIZE := 44.0
 const BATTER_CONTACT_HOLD := 0.18
 const BATTER_ENTRY_DURATION := 0.25
 const LOOT_POPUP_DURATION := 2.40
+const FIELD_TAP_EFFECT_DURATION := 0.48
+const MAX_FIELD_TAP_EFFECTS := 18
 const BATTER_EXIT_DURATIONS := [1.00, 0.72, 0.55, 0.42, 0.30, 0.20, 0.26, 0.12]
 # Total contact + exit + empty plate + entrance closely matches the authoritative
 # downtime in BaseballGameState: Grand Slams make the player wait twelve full
@@ -106,6 +109,8 @@ var pending_results: Array[Dictionary] = []
 var return_balls: Array[Dictionary] = []
 var result_popups: Array[Dictionary] = []
 var loot_popups: Array[Dictionary] = []
+var field_tap_effects: Array[Dictionary] = []
+var last_screen_touch_msec := -100000
 var last_result_scheduled_at := -100.0
 var result_sequence := 0
 var configured_opponent_index := -1
@@ -146,10 +151,13 @@ func _ready() -> void:
 		return_ball_capacity = WEB_MAX_RETURN_BALLS
 		star_density_capacity = WEB_MAX_STAR_DENSITY
 		clone_visual_capacity = WEB_MAX_CLONE_VISUALS
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mouse_filter = Control.MOUSE_FILTER_PASS
+	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	tooltip_text = "Tap the open field to advance the active timer. Taps can supply at most half of each timer."
 	clip_contents = true
 	_setup_ball_stream()
 	_setup_range_arrows()
+	gui_input.connect(_on_field_gui_input)
 	resized.connect(_on_resized)
 	set_process(true)
 
@@ -174,6 +182,7 @@ func reset_visual_state() -> void:
 	return_balls.clear()
 	result_popups.clear()
 	loot_popups.clear()
+	field_tap_effects.clear()
 	last_result_scheduled_at = -100.0
 	result_sequence = 0
 	configured_opponent_index = -1
@@ -346,6 +355,65 @@ func _request_move_closer() -> void:
 func _request_move_farther() -> void:
 	move_farther_requested.emit()
 
+func _on_field_gui_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			last_screen_touch_msec = Time.get_ticks_msec()
+			field_tapped.emit(touch.position)
+	elif event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		if (
+			click.pressed
+			and click.button_index == MOUSE_BUTTON_LEFT
+			and Time.get_ticks_msec() - last_screen_touch_msec > 350
+		):
+			field_tapped.emit(click.position)
+
+func apply_field_timer_advance(phase: String, seconds: float) -> void:
+	var advance := maxf(seconds, 0.0)
+	if advance <= 0.0:
+		return
+	match phase:
+		"flight":
+			stream_time = fmod(stream_time + advance, STREAM_WRAP_SECONDS)
+			volley_release_time -= advance
+			for slot_value in active_pitch_slots.keys():
+				var slot := int(slot_value)
+				slot_expiry_times[slot] = maxf(slot_expiry_times[slot] - advance, total_time)
+		"lineup":
+			_update_batter_lifecycle(advance)
+		"recovery":
+			# The meter extrapolates from its last authoritative sample. Backdating
+			# only that sample makes it jump immediately without aging other effects.
+			pitch_cycle_sample_time -= advance
+	queue_redraw()
+
+func show_field_tap(field_position: Vector2, result: Dictionary) -> void:
+	var applied := bool(result.get("applied", false))
+	var fraction := maxf(float(result.get("fraction", 0.0)), 0.0)
+	var label := ""
+	if applied and fraction > 0.00001:
+		var percent := fraction * 100.0
+		label = (
+			"+%d%%" % int(round(percent))
+			if absf(percent - round(percent)) < 0.05
+			else "+%.1f%%" % percent
+		)
+	field_tap_effects.append({
+		"position": Vector2(
+			clampf(field_position.x, 16.0, maxf(size.x - 16.0, 16.0)),
+			clampf(field_position.y, 16.0, maxf(size.y - 16.0, 16.0))
+		),
+		"age": 0.0,
+		"duration": FIELD_TAP_EFFECT_DURATION,
+		"applied": applied,
+		"label": label,
+	})
+	while field_tap_effects.size() > MAX_FIELD_TAP_EFFECTS:
+		field_tap_effects.pop_front()
+	queue_redraw()
+
 func _process(delta: float) -> void:
 	stream_time = fmod(stream_time + delta, STREAM_WRAP_SECONDS)
 	total_time += delta
@@ -357,9 +425,16 @@ func _process(delta: float) -> void:
 	pitch_call_age += delta
 	strike_icon_flash = maxf(strike_icon_flash - delta * 3.6, 0.0)
 	impact_strength = maxf(impact_strength - delta * 2.2, 0.0)
+	_update_field_tap_effects(delta)
 	_update_batter_lifecycle(delta)
 	_update_result_visuals(delta)
 	queue_redraw()
+
+func _update_field_tap_effects(delta: float) -> void:
+	for index in range(field_tap_effects.size() - 1, -1, -1):
+		field_tap_effects[index].age = float(field_tap_effects[index].age) + delta
+		if float(field_tap_effects[index].age) >= float(field_tap_effects[index].duration):
+			field_tap_effects.remove_at(index)
 
 func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {}) -> void:
 	var incoming_opponent_index := game.current_opponent
@@ -1448,6 +1523,30 @@ func _draw() -> void:
 		draw_arc(plate, radius, 0.0, TAU, 48, Color(impact_color, impact_strength * 0.75), 3.0)
 	_draw_result_popups()
 	_draw_loot_popups()
+	_draw_field_tap_effects()
+
+func _draw_field_tap_effects() -> void:
+	for effect in field_tap_effects:
+		var duration := maxf(float(effect.duration), 0.001)
+		var progress := clampf(float(effect.age) / duration, 0.0, 1.0)
+		var fade := 1.0 - progress
+		var center := Vector2(effect.position)
+		var applied := bool(effect.applied)
+		var color := Color(PITCHER_COLOR, fade * (0.58 if applied else 0.24))
+		var radius := lerpf(6.0, 25.0, progress)
+		draw_arc(center, radius, 0.0, TAU, 28, color, lerpf(2.5, 1.0, progress))
+		draw_circle(center, lerpf(3.0, 1.0, progress), Color(color, fade * 0.72))
+		var label := str(effect.label)
+		if not label.is_empty():
+			draw_string(
+				ThemeDB.fallback_font,
+				center + Vector2(-28.0, -12.0 - progress * 12.0),
+				label,
+				HORIZONTAL_ALIGNMENT_CENTER,
+				56.0,
+				11,
+				Color(0.58, 0.91, 1.0, fade * 0.82)
+			)
 
 func _draw_lifecycle_batter() -> void:
 	var visual := _get_batter_transition_visual()

@@ -108,6 +108,14 @@ func _run() -> void:
 		main.mobile_overlay_xp_label.text == "XP %s" % main.xp_label.text,
 		"The Upgrades overlay XP balance should match the live game balance"
 	)
+	_expect(main.mobile_upgrade_stats_panel.visible, "The phone upgrade overlay should keep current stats visible")
+	_expect(main.mobile_upgrade_stat_labels.size() == 9, "The phone upgrade overlay should expose every trainable base-stat axis")
+	_expect(
+		main.mobile_upgrade_stat_labels.speed.text == BaseballGameState.format_speed(main.game.get_representative_pitch_speed()),
+		"The phone upgrade overlay should show the current effective speed"
+	)
+	_expect(main.mobile_upgrade_stat_labels.quality.text == "%.3f" % main.game.get_pitch_quality(), "The phone upgrade overlay should show current quality")
+	_expect(main.mobile_upgrade_stat_labels.tap.text == "5.0%", "The phone upgrade overlay should show the current field-tap advance")
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
 		main.mobile_tab_next_button.get_combined_minimum_size().x >= 44.0
@@ -120,6 +128,7 @@ func _run() -> void:
 		"The phone tab-back control should provide a 44-by-44 touch target"
 	)
 	_expect(main.mobile_tab_previous_button.icon != null and main.mobile_tab_next_button.icon != null, "Phone tab traversal should not depend on font arrow glyphs")
+	_expect(not main.upgrade_tabs.get_tab_bar().scrolling_enabled, "The tiny native TabBar arrows should be removed on phone layouts")
 	_expect(main.upgrade_tabs.get_tab_bar().has_theme_icon_override("decrement") and main.upgrade_tabs.get_tab_bar().has_theme_icon_override("increment"), "Tiny native overflow arrows should yield to the explicit phone tab controls")
 	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
 	main.mobile_tab_next_button.pressed.emit()
@@ -194,6 +203,9 @@ func _run() -> void:
 			phone_compare_stack = phone_item_stack
 			phone_compare_button = phone_actions.get_child(1) as Button
 			_expect(phone_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone item text should not intercept vertical scrolling")
+			_expect(phone_item_label.text.begins_with("Readable Comparison Cap"), "Phone equipment rows should lead with the complete item name")
+			_expect(phone_item_label.text.contains("POWER %d" % main.game.get_loot_item_power(main.game.get_loot_item("phone_compare_hat"))), "Phone equipment rows should show Power without opening Compare")
+			_expect(phone_item_label.custom_minimum_size.y >= 62.0, "Phone equipment summaries should reserve visible height above their action buttons")
 			_expect((phone_actions.get_child(0) as Button).text == "EQUIP", "Phone rows should expose an explicit Equip action")
 	_expect(phone_compare_button != null, "The phone locker should retain the comparison item")
 	_expect(phone_compare_stack.tooltip_text.is_empty(), "Phone and S-Pen layouts should not create a covering hover tooltip")

@@ -7,11 +7,12 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.8 multiverse regression suite")
+	print("One Foot Per Second — v0.10.9 multiverse regression suite")
 	_test_content()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()
 	_test_live_field_contract()
+	_test_field_tapping()
 	_test_distance_risk_and_reward()
 	_test_overmastery_farming()
 	_test_opponent_counters()
@@ -84,11 +85,11 @@ func _test_content() -> void:
 	_expect(Content.SIGNATURE_BATTER_NAMES[43] == "Ball-rog, the Unstrikeable", "Ball-rog should remain the penultimate named batter")
 	_expect(Content.SIGNATURE_BATTER_NAMES[44] == "Octathulhu, God of the Eightfold Swing", "Final named opponent changed unexpectedly")
 	_expect(Content.PITCHES.size() == 14, "Expected fourteen pitch types")
-	_expect(Content.TRAINING.size() == 8, "Expected eight repeatable training axes")
+	_expect(Content.TRAINING.size() == 9, "Expected nine repeatable training axes")
 	var training_ids: Array[String] = []
 	for definition in Content.TRAINING:
 		training_ids.append(str(definition.id))
-	_expect(training_ids == ["velocity", "command", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"], "Training should expose one clear purchase per base stat in unlock order")
+	_expect(training_ids == ["velocity", "command", "field_hustle", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"], "Training should expose one clear purchase per base stat in unlock order")
 	_expect(Content.BALL_UPGRADES.size() == 26, "Expected twenty-six ball evolutions")
 	_expect(Content.MILESTONES.size() == 42, "Expected forty-two interstitial facilities and interventions")
 	_expect(Content.DISTANCE_TIERS.size() == 15, "Expected the 3-foot-to-galaxy range ladder")
@@ -342,6 +343,52 @@ func _test_live_field_contract() -> void:
 	_expect(empty_plate_frames > 20, "The integration audit should cover visible batter-replacement downtime")
 	field.free()
 	game.free()
+
+func _test_field_tapping() -> void:
+	var game: BaseballGameState = GameStateScript.new()
+	_expect_close(game.get_field_tap_fraction(), 0.05, "A fresh field tap should advance five percent")
+	var first_tap := game.apply_field_tap()
+	_expect(bool(first_tap.get("applied", false)) and str(first_tap.get("phase", "")) == "recovery", "The opening field tap should advance pitch recovery")
+	_expect_close(float(first_tap.get("seconds", 0.0)), 0.20, "Five percent of the opening four-second recovery should be 0.20 seconds")
+	_expect_close(game.pitch_credit, 0.05, "A recovery tap should add exactly five percent release credit")
+	for _tap in 9:
+		game.apply_field_tap()
+	_expect_close(game.pitch_credit, BaseballGameState.FIELD_TAP_PHASE_CAP, "Tapping may provide exactly half of one timer")
+	var capped_tap := game.apply_field_tap()
+	_expect(not bool(capped_tap.get("applied", false)) and str(capped_tap.get("reason", "")) == "idle_limit", "The idle half of a timer must never be tappable")
+
+	var upgraded: BaseballGameState = GameStateScript.new()
+	upgraded.training_levels.field_hustle = BaseballGameState.FIELD_TAP_MAX_RANK
+	_expect_close(upgraded.get_field_tap_fraction(), 0.08, "Max Field Hustle should reach eight percent per tap")
+	var summary := upgraded._empty_resolution_summary()
+	upgraded._begin_pitch_volley(summary, 0.0)
+	var immutable_speed := upgraded.pending_volley_speed_fps
+	var immutable_outcome := upgraded.pending_volley_outcome
+	var flight_before := upgraded.pitch_flight_remaining
+	var flight_tap := upgraded.apply_field_tap()
+	_expect(str(flight_tap.get("phase", "")) == "flight", "A tap during travel should advance the immutable flight clock")
+	_expect_close(upgraded.pitch_flight_remaining, flight_before * 0.92, "An upgraded flight tap should remove eight percent of the released duration")
+	_expect_close(upgraded.pending_volley_speed_fps, immutable_speed, "Tapping flight time must not mutate the sampled pitch speed")
+	_expect(upgraded.pending_volley_outcome == immutable_outcome, "Tapping flight time must not reroll the hidden outcome")
+
+	var field: PitchField = _make_field(upgraded)
+	var stream_before := field.stream_time
+	field.apply_field_timer_advance("flight", float(flight_tap.seconds))
+	_expect(field.stream_time > stream_before, "The visible ball should fast-forward with the authoritative flight timer")
+	field.show_field_tap(Vector2(200.0, 140.0), flight_tap)
+	_expect(field.field_tap_effects.size() == 1 and str(field.field_tap_effects[0].label) == "+8%", "A successful tap should create the brief percentage ring")
+	field._update_field_tap_effects(PitchField.FIELD_TAP_EFFECT_DURATION + 0.01)
+	_expect(field.field_tap_effects.is_empty(), "The field tap cue should retire quickly")
+
+	upgraded._clear_pitch_cycle()
+	upgraded.batter_cooldown_remaining = 12.0
+	upgraded.batter_replacement_pending = true
+	var lineup_tap := upgraded.apply_field_tap()
+	_expect(str(lineup_tap.get("phase", "")) == "lineup", "A tap at an empty plate should advance the lineup timer")
+	_expect_close(upgraded.batter_cooldown_remaining, 11.04, "An eight-percent lineup tap should advance 0.96 seconds")
+	field.free()
+	game.free()
+	upgraded.free()
 
 func _test_distance_risk_and_reward() -> void:
 	var game: BaseballGameState = GameStateScript.new()
@@ -1277,6 +1324,7 @@ func _test_save_round_trip_and_migration() -> void:
 	original.genetic_offer_unlocked = true
 	original.eldritch_offer_unlocked = true
 	original.training_levels.velocity = 9
+	original.training_levels.field_hustle = 4
 	original.training_levels.turnover = 7
 	original.training_levels.offline_efficiency = 9
 	original.genetic_levels.compressed_strike_genome = 3
@@ -1308,6 +1356,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect("four_seam" in restored.unlocked_pitches and restored.has_milestone("regulation_ball"), "Ordinary purchases should survive saves")
 	_expect_close(restored.opponent_mastery[3], 77.0, "Mastery should survive saves")
 	_expect(int(restored.training_levels.turnover) == 7, "Batter-cooldown training should survive saves")
+	_expect(int(restored.training_levels.field_hustle) == 4, "Field-tap training should survive saves")
 	_expect_close(restored.get_offline_xp_efficiency(), 0.10, "Offline-efficiency training should survive saves")
 
 	var early_v13: BaseballGameState = GameStateScript.new()

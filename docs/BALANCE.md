@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.8 Balance Audit
+# One Foot Per Second — v0.10.9 Balance Audit
 
 ## Outcome
 
@@ -114,6 +114,7 @@ Ordinary Training has one clear purchase per displayed base stat:
 |---|---:|---|---:|---:|
 | Speed Training | 1 | base speed +0.15 ft/s | ×1.30 | current body |
 | Command Drills | 2 | base quality +0.08 | ×1.105 | none |
+| Field Hustle | 3 | tap advance +0.5 percentage points | ×2.10 | 6 |
 | Recovery Drills | 4 | base recovery +0.035/s | ×1.45 | 26 |
 | Scorebook Study | 5 | offline XP +1 percentage point | ×1.65 | 24 |
 | Long-Toss Mechanics | 6 | distance-threat factor −0.025 | ×1.72 | 20 |
@@ -122,6 +123,8 @@ Ordinary Training has one clear purchase per displayed base stat:
 | Pitch Calling | 12 | best-option bias +0.50 | ×2.10 | 12 |
 
 Only Speed begins unlocked; the other axes appear as level-gated entries in this order. The former Command, Spin, and Deception buttons were all additive quality purchases and are folded into Command. Distinct operations intentionally stack across systems: Training raises the additive base, while one-time Facilities multiply the completed stat.
+
+Active field taps begin at 5% of the current foreground timer's starting duration and can reach 8% through Field Hustle. The tap budget is capped at 50% per recovery, flight, or lineup phase. No amount of clicking can replace the other half of the timer, and untouched idle/offline pacing remains unchanged.
 
 Fourteen pitch types, twenty-six replacement ball shells, and forty-two one-time facilities/interventions run from level 1 through level 45. Facilities are costly, high-impact multipliers; several are gated by actual measured speed, mound distance, or lifetime Strikeouts in addition to campaign level. Suspicious Vitamins arrive long before Extremely Obvious Steroids, and the human ladder stays recognizably human. Every tab is sorted by unlock level and cost. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 

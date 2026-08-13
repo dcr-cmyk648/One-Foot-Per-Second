@@ -24,7 +24,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.8 progressive-interface audit")
+	print("One Foot Per Second — v0.10.9 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -73,11 +73,22 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
-	_expect(main.field_stat_labels.size() == 8, "The default field should expose every base trained stat in a compact overlay")
+	_expect(main.field_stat_labels.size() == 9, "The default field should expose every base trained stat in a compact overlay")
 	_expect(str(main.field_stat_labels.speed.text).contains("1.00 ft/s"), "The field overlay should begin with the game's literal one-foot-per-second speed")
 	_expect(main.field_stat_labels.offline.text == "1%", "The fresh field should make its deliberately weak offline reward rate visible")
+	_expect(main.field_stat_labels.tap.text == "5.0%", "The field should expose the starting active-tap advance")
 	for stat_id in main.field_stat_labels:
 		_expect(not (main.field_stat_labels[stat_id] as Label).tooltip_text.is_empty(), "Field stat %s needs a hover explanation" % stat_id)
+	var field_click := InputEventMouseButton.new()
+	field_click.button_index = MOUSE_BUTTON_LEFT
+	field_click.pressed = true
+	field_click.position = Vector2(310.0, 210.0)
+	main.pitch_field._on_field_gui_input(field_click)
+	_expect(is_equal_approx(main.game.pitch_credit, 0.05), "Clicking unobstructed field space should advance the opening timer")
+	_expect(main.pitch_field.field_tap_effects.size() == 1, "A field click should create its local feedback ring")
+	main.game._clear_pitch_cycle()
+	main.pitch_field.field_tap_effects.clear()
+	main._refresh_interface()
 	_expect(main.opponent_loadout_dock.get_child_count() == 2, "The opening opponent side should show body and bat squares")
 	_expect(not main.locker_dialog.visible, "The equipment popup should start closed")
 	for definition in Content.LOOT_SLOTS:
@@ -144,7 +155,7 @@ func _run() -> void:
 	main.development_session = true
 	_audit_catalog_visibility(main, 0, "fresh")
 	_expect(not str(main.training_buttons.velocity.text).contains("REACH LEVEL"), "Speed Training should be the only fundamental available from the opening level")
-	for training_id in ["command", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"]:
+	for training_id in ["command", "field_hustle", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"]:
 		_expect(str(main.training_buttons[training_id].text).contains("REACH LEVEL"), "%s should begin level-gated" % training_id)
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({

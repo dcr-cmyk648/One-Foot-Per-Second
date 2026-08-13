@@ -40,6 +40,10 @@ const DISTANCE_MIN_FACTOR := 0.50
 const BASE_OFFLINE_XP_EFFICIENCY := 0.01
 const OFFLINE_XP_EFFICIENCY_PER_RANK := 0.01
 const OFFLINE_XP_MAX_RANK := 24
+const BASE_FIELD_TAP_FRACTION := 0.05
+const FIELD_TAP_FRACTION_PER_RANK := 0.005
+const FIELD_TAP_MAX_RANK := 6
+const FIELD_TAP_PHASE_CAP := 0.50
 # Every completed plate appearance has a believable lineup-change baseline.
 # Contact adds the displayed delay on top; a walk uses the Single bonus.
 const BASE_BATTER_TURNOVER_SECONDS := 3.0
@@ -98,6 +102,7 @@ var cosmos_conquered := false
 var training_levels := {
 	"velocity": 0,
 	"command": 0,
+	"field_hustle": 0,
 	"recovery": 0,
 	"turnover": 0,
 	"hit_recovery": 0,
@@ -196,6 +201,10 @@ var pending_volley_pitch_id := "dead_fish"
 var pending_volley_speed_fps := 1.0
 var pending_volley_distance_index := 0
 var pending_volley_opponent_index := 0
+var foreground_timer_serial := 0
+var field_tap_phase_key := ""
+var field_tap_phase_original_seconds := 0.0
+var field_tap_advanced_seconds := 0.0
 var simulation_accumulator := 0.0
 var last_batch: Dictionary = {}
 var last_offline_seconds := 0.0
@@ -224,6 +233,7 @@ func _complete_batter_replacement() -> void:
 	batter_replacement_pending = false
 	batter_generation = (batter_generation + 1) % 1000000000
 	_refresh_batter_variant()
+	_start_new_foreground_timer_phase()
 
 func _opponent_variant_seed(opponent_index: int, generation: int) -> int:
 	# Cosmetic/difficulty rolls are deterministic from the batter identity. This
@@ -454,6 +464,7 @@ func reset_fresh() -> void:
 	training_levels = {
 		"velocity": 0,
 		"command": 0,
+		"field_hustle": 0,
 		"recovery": 0,
 		"turnover": 0,
 		"hit_recovery": 0,
@@ -517,6 +528,92 @@ func _clear_pitch_cycle() -> void:
 	pending_volley_speed_fps = 1.0
 	pending_volley_distance_index = selected_distance_index
 	pending_volley_opponent_index = current_opponent
+	_start_new_foreground_timer_phase()
+
+func _start_new_foreground_timer_phase() -> void:
+	foreground_timer_serial = (foreground_timer_serial + 1) % 1000000000
+	field_tap_phase_key = ""
+	field_tap_phase_original_seconds = 0.0
+	field_tap_advanced_seconds = 0.0
+
+func get_field_tap_fraction() -> float:
+	var rank := clampi(
+		int(training_levels.get("field_hustle", 0)),
+		0,
+		FIELD_TAP_MAX_RANK
+	)
+	return BASE_FIELD_TAP_FRACTION + float(rank) * FIELD_TAP_FRACTION_PER_RANK
+
+func get_field_tap_phase_cap() -> float:
+	return FIELD_TAP_PHASE_CAP
+
+func apply_field_tap() -> Dictionary:
+	var phase := ""
+	var timer_total := 0.0
+	var timer_remaining := 0.0
+	if is_pitch_in_flight():
+		phase = "flight"
+		timer_total = maxf(pending_volley_flight_duration, pitch_flight_remaining)
+		timer_remaining = pitch_flight_remaining
+	elif batter_cooldown_remaining > 0.000001:
+		phase = "lineup"
+		timer_total = batter_cooldown_remaining
+		timer_remaining = batter_cooldown_remaining
+	elif live_pitching_enabled:
+		phase = "recovery"
+		timer_total = get_pitch_cooldown_seconds()
+		timer_remaining = get_seconds_until_next_pitch()
+	if phase.is_empty() or timer_total <= 0.000001 or timer_remaining <= 0.000001:
+		return {"applied": false, "phase": phase, "reason": "no_timer"}
+
+	var phase_key := "%s:%d" % [phase, foreground_timer_serial]
+	if phase_key != field_tap_phase_key:
+		field_tap_phase_key = phase_key
+		field_tap_phase_original_seconds = timer_total
+		field_tap_advanced_seconds = 0.0
+	var original := maxf(field_tap_phase_original_seconds, 0.000001)
+	var remaining_tap_budget := maxf(
+		original * FIELD_TAP_PHASE_CAP - field_tap_advanced_seconds,
+		0.0
+	)
+	var maximum_without_skipping_resolution := timer_remaining
+	if phase == "flight":
+		# Keep the immutable volley alive for one normal simulation tick so its
+		# authoritative impact event and the visual ball reach the plate together.
+		maximum_without_skipping_resolution = maxf(timer_remaining - 0.000001, 0.0)
+	var advance_seconds := minf(
+		original * get_field_tap_fraction(),
+		minf(remaining_tap_budget, maximum_without_skipping_resolution)
+	)
+	if advance_seconds <= 0.000001:
+		return {
+			"applied": false,
+			"phase": phase,
+			"reason": "idle_limit",
+			"cap": FIELD_TAP_PHASE_CAP,
+		}
+
+	field_tap_advanced_seconds += advance_seconds
+	match phase:
+		"flight":
+			pitch_flight_remaining = maxf(pitch_flight_remaining - advance_seconds, 0.000001)
+		"lineup":
+			batter_cooldown_remaining = maxf(batter_cooldown_remaining - advance_seconds, 0.0)
+			if batter_cooldown_remaining <= 0.000001:
+				_complete_batter_replacement()
+		"recovery":
+			pitch_credit = minf(
+				pitch_credit + advance_seconds * maxf(get_recovery_rate(), 0.000001),
+				1.0
+			)
+	return {
+		"applied": true,
+		"phase": phase,
+		"seconds": advance_seconds,
+		"fraction": advance_seconds / original,
+		"tap_fraction": get_field_tap_fraction(),
+		"cap": FIELD_TAP_PHASE_CAP,
+	}
 
 func is_pitch_in_flight() -> bool:
 	return pending_volley_size > 0 and pitch_flight_remaining > 0.0
@@ -769,6 +866,7 @@ func _resolve_one_pitch(summary: Dictionary, _stochastic: bool, elapsed_offset :
 	_apply_pitch_outcome(summary, outcome, elapsed_offset)
 
 func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
+	_start_new_foreground_timer_phase()
 	pending_volley_size = get_volley_size()
 	pending_volley_pitch_id = _sample_pitch_id()
 	pending_volley_speed_fps = _sample_pitch_speed(pending_volley_pitch_id)
@@ -820,6 +918,7 @@ func _resolve_pending_volley(summary: Dictionary, elapsed_offset: float) -> void
 	pending_volley_saved = false
 	pending_volley_pitch_id = "dead_fish"
 	pending_volley_speed_fps = get_representative_pitch_speed("dead_fish")
+	_start_new_foreground_timer_phase()
 	_apply_pitch_outcome(
 		summary,
 		outcome,
@@ -2755,6 +2854,7 @@ func _reset_body_progress() -> void:
 	training_levels = {
 		"velocity": 0,
 		"command": 0,
+		"field_hustle": 0,
 		"recovery": 0,
 		"turnover": 0,
 		"hit_recovery": 0,

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.9 — The pants have a nametag
+
+- Mobile Locker rows now reserve a high-contrast two-line summary with the complete item name followed by Power, rarity, and item level; Compare is no longer required to identify a drop.
+- The phone Upgrades overlay now pins all nine current effective stats above the tabs so every purchase can be evaluated without closing the menu.
+- Removed the TabBar's tiny native overflow arrows on phone layouts. The explicit 44-pixel previous/next controls are now the only mobile upgrade-tab navigation.
+- Clicking or tapping open field space now advances the active recovery, flight, or batter-lineup timer by 5% and draws a brief expanding ring at the exact input point. Taps are hard-capped to half of each timer, preserving the idle pace.
+- Added the early-human Field Hustle training axis: six ranks add 0.5 percentage points per tap, reaching 8% without raising the per-timer 50% contribution cap.
+
 ## 0.10.8 — The pants demand informed consent
 
 - Loot no longer auto-equips into empty slots. New drops produce a compact rarity-colored field callout; automatic highest-Power equipment remains available only through Autonomic Wardrobe Lobe.

@@ -170,6 +170,7 @@ const STAT_HELP := {
 	"calling": "Calling biases the random arsenal toward stronger learned pitch types without removing weaker ones.",
 	"distance": "Distance control reduces the added batter threat from moving the mound farther away.",
 	"offline": "Offline efficiency is the share of normal strikeout XP deposited while the game is closed or suspended.",
+	"tap": "Tapping the open field advances the active pitch, flight, or lineup timer. Taps may supply at most half of one timer; the rest must pass normally.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Mastery fills opponent unlock bars and continues logarithmically after a batter is mastered.",
 }
@@ -636,6 +637,16 @@ const TRAINING := [
 		"required_level": 1,
 		"stats": ["quality"],
 		"description": "Base quality +0.08.",
+	},
+	{
+		"id": "field_hustle",
+		"name": "Field Hustle",
+		"base_cost": 15.0,
+		"growth": 2.10,
+		"max_level": 6,
+		"required_level": 2,
+		"stats": ["tap"],
+		"description": "Tap advance +0.5 percentage points.",
 	},
 	{
 		"id": "recovery",

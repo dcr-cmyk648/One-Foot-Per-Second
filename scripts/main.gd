@@ -168,6 +168,8 @@ var mobile_overlay_home_index := -1
 var mobile_tab_navigation: HBoxContainer
 var mobile_tab_previous_button: Button
 var mobile_tab_next_button: Button
+var mobile_upgrade_stats_panel: PanelContainer
+var mobile_upgrade_stat_labels := {}
 var root_margin: MarginContainer
 var page_scroll: ScrollContainer
 var page_container: VBoxContainer
@@ -608,6 +610,7 @@ func _apply_development_arguments() -> void:
 	game.training_levels = {
 		"velocity": 180 if preview == "alien" else 315,
 		"command": 385 if preview == "alien" else 730,
+		"field_hustle": BaseballGameState.FIELD_TAP_MAX_RANK,
 		"recovery": 26,
 		"turnover": 10,
 		"hit_recovery": 8,
@@ -785,6 +788,9 @@ func _configure_tab_overflow_controls(for_mobile: bool) -> void:
 		return
 	mobile_tab_navigation.visible = for_mobile
 	var tab_bar := upgrade_tabs.get_tab_bar()
+	# The explicit 44-pixel buttons own phone tab traversal. Disabling native
+	# scrolling removes TabBar's second, tiny overflow-arrow pair entirely.
+	tab_bar.scrolling_enabled = not for_mobile
 	if for_mobile:
 		_ensure_navigation_icons()
 		tab_bar.add_theme_icon_override("decrement", transparent_navigation_icon)
@@ -1257,6 +1263,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (330.0 if dense_wide else 360.0)
 	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (190.0 if dense_wide else 215.0)
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
+	mobile_upgrade_stats_panel.visible = mobile_layout
 	_configure_tab_overflow_controls(mobile_layout)
 	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else (5 if dense_wide else 8))
 	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else (8 if dense_wide else 12))
@@ -1312,7 +1319,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	# The phone readout only needs enough room for a short label and value. Keeping
 	# it clear of the centered pitcher matters more than preserving desktop width.
 	field_stat_panel.offset_right = 138.0 if mobile_layout else 252.0
-	field_stat_panel.offset_bottom = 150.0 if mobile_layout else 176.0
+	field_stat_panel.offset_bottom = 164.0 if mobile_layout else 192.0
 	inventory_dock.offset_left = -248.0 if mobile_layout else -310.0
 	inventory_dock.offset_top = -40.0 if mobile_layout else -48.0
 	for slot_button_value in inventory_slot_buttons.values():
@@ -1397,6 +1404,7 @@ func _build_play_area(parent: Control) -> void:
 	pitch_field.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	pitch_field.move_closer_requested.connect(_move_closer)
 	pitch_field.move_farther_requested.connect(_move_farther)
+	pitch_field.field_tapped.connect(_on_field_tapped)
 	pitch_field.batter_call_displayed.connect(_on_batter_call_displayed)
 	field_stack.add_child(pitch_field)
 	_build_field_stat_overlay(pitch_field)
@@ -1575,6 +1583,7 @@ func _build_field_stat_overlay(parent: Control) -> void:
 		["hit_delay", "HIT DELAY"],
 		["calling", "CALLING"],
 		["distance", "DISTANCE"],
+		["tap", "FIELD TAP"],
 		["offline", "OFFLINE"],
 	]
 	for row_definition in rows:
@@ -1911,7 +1920,7 @@ func _rebuild_locker_dialog() -> void:
 		var rarity := Content.loot_rarity(int(item.rarity))
 		var is_equipped := str(game.equipped_loot.get(selected_loot_slot, "")) == str(item.id)
 		var row_panel := PanelContainer.new()
-		row_panel.custom_minimum_size.y = 112.0
+		row_panel.custom_minimum_size.y = 130.0 if mobile_layout else 112.0
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		row_panel.add_theme_stylebox_override("panel", _loot_item_row_style(Color(rarity.color), is_equipped))
@@ -1928,17 +1937,23 @@ func _rebuild_locker_dialog() -> void:
 		row_panel.add_child(row_stack)
 		var item_label := Label.new()
 		item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item_label.custom_minimum_size.y = 62.0 if mobile_layout else 0.0
+		item_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		item_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		item_label.text = "%sPOWER %d  •  %s  •  ILVL %d\n%s\nTHIS ITEM: %s" % [
-			"EQUIPPED  •  " if is_equipped else "",
-			game.get_loot_item_power(item),
-			str(rarity.name),
-			int(item.item_level),
-			str(item.name),
-			game.get_loot_item_description(item),
+		var item_heading := "%s%s" % ["EQUIPPED  •  " if is_equipped else "", str(item.name)]
+		var item_meta := "POWER %d  •  %s  •  ILVL %d" % [
+			game.get_loot_item_power(item), str(rarity.name), int(item.item_level),
 		]
-		item_label.add_theme_font_size_override("font_size", 13)
+		item_label.text = (
+			"%s\n%s" % [item_heading, item_meta]
+			if mobile_layout
+			else "%s\n%s\nTHIS ITEM: %s" % [item_heading, item_meta, game.get_loot_item_description(item)]
+		)
+		item_label.add_theme_font_size_override("font_size", 15 if mobile_layout else 13)
+		item_label.add_theme_constant_override("outline_size", 2 if mobile_layout else 0)
+		item_label.add_theme_color_override("font_outline_color", Color("050810"))
 		item_label.add_theme_color_override("font_color", Color(rarity.color))
 		row_stack.add_child(item_label)
 		locker_item_hold_targets.append({"control": item_label, "item_id": str(item.id)})
@@ -2233,6 +2248,7 @@ func _build_upgrade_area(parent: Control) -> void:
 	upgrade_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	upgrade_stack.add_theme_constant_override("separation", 4)
 	upgrade_panel.add_child(upgrade_stack)
+	_build_mobile_upgrade_stats(upgrade_stack)
 	mobile_tab_navigation = HBoxContainer.new()
 	mobile_tab_navigation.name = "MobileTabNavigation"
 	mobile_tab_navigation.visible = false
@@ -2289,6 +2305,61 @@ func _build_upgrade_area(parent: Control) -> void:
 	_build_rebirth_tab(upgrade_tabs)
 	_build_stats_tab(upgrade_tabs)
 	_build_guide_tab(upgrade_tabs)
+
+func _build_mobile_upgrade_stats(parent: Control) -> void:
+	mobile_upgrade_stats_panel = PanelContainer.new()
+	mobile_upgrade_stats_panel.name = "MobileUpgradeStats"
+	mobile_upgrade_stats_panel.visible = false
+	mobile_upgrade_stats_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_upgrade_stats_panel.add_theme_stylebox_override("panel", _compact_panel_style(7.0, 5.0, 6))
+	parent.add_child(mobile_upgrade_stats_panel)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 3)
+	mobile_upgrade_stats_panel.add_child(stack)
+	var heading := Label.new()
+	heading.text = "CURRENT STATS"
+	heading.add_theme_font_size_override("font_size", 10)
+	heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	stack.add_child(heading)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 1)
+	stack.add_child(grid)
+	var rows := [
+		["speed", "SPEED"],
+		["quality", "QUALITY"],
+		["recovery", "RECOVERY"],
+		["lineup", "LINEUP"],
+		["hit_delay", "HIT DELAY"],
+		["calling", "CALLING"],
+		["distance", "DISTANCE"],
+		["tap", "FIELD TAP"],
+		["offline", "OFFLINE"],
+	]
+	for row_definition in rows:
+		var stat_id := str(row_definition[0])
+		var row := HBoxContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.tooltip_text = str(Content.STAT_HELP.get(stat_id, ""))
+		row.mouse_default_cursor_shape = Control.CURSOR_HELP
+		_enable_mobile_inspection(row, str(row_definition[1]))
+		grid.add_child(row)
+		var name_label := Label.new()
+		name_label.text = str(row_definition[1])
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.add_theme_font_size_override("font_size", 9)
+		name_label.add_theme_color_override("font_color", COLOR_MUTED)
+		name_label.tooltip_text = row.tooltip_text
+		row.add_child(name_label)
+		var value_label := Label.new()
+		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value_label.add_theme_font_size_override("font_size", 10)
+		value_label.add_theme_color_override("font_color", COLOR_TEXT)
+		value_label.tooltip_text = row.tooltip_text
+		row.add_child(value_label)
+		mobile_upgrade_stat_labels[stat_id] = value_label
 
 func _create_scroll_tab(tabs: TabContainer, title: String) -> VBoxContainer:
 	var scroll := ScrollContainer.new()
@@ -2468,6 +2539,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		"lineup_time": "Base lineup time",
 		"hit_delay": "Fair-hit delay multiplier",
 		"pitch_calling": "Best-option calling bias",
+		"field_tap": "Field tap advance",
 		"offline_xp": "Offline XP efficiency",
 		"strikes": "Strikes per batter",
 		"balls": "Balls per walk",
@@ -2507,6 +2579,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 			"lineup_time": "lineup",
 			"hit_delay": "hit_delay",
 			"pitch_calling": "calling",
+			"field_tap": "tap",
 			"offline_xp": "offline",
 		}.get(str(id), ""))
 		if not str(help_id).is_empty():
@@ -2866,7 +2939,9 @@ func _refresh_guide_text(
 			"Earn opponent mastery to unlock the next batter, or move backward whenever an easier opponent "
 			+ "produces more XP per second. The circle beside the pitcher fills toward the next release. While "
 			+ "the plate is empty, pitching stops and the circle beside home plate fills until the next batter "
-			+ "arrives. On-Deck Hurry-Up multiplies every replacement delay by 0.930 per rank. After an opponent's "
+			+ "arrives. Tap open field space to advance whichever of recovery, flight, or lineup is active by 5%; "
+			+ "taps can supply only half of one timer, and Field Hustle raises each tap without changing that cap. "
+			+ "On-Deck Hurry-Up multiplies every replacement delay by 0.930 per rank. After an opponent's "
 			+ "mastery target is passed, staying there adds a small logarithmic XP and loot-quality farming bonus."
 		),
 		(
@@ -3091,7 +3166,22 @@ func _refresh_field_stats() -> void:
 	field_stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	field_stat_labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
 	field_stat_labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
+	field_stat_labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
 	field_stat_labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
+	_refresh_mobile_upgrade_stats()
+
+func _refresh_mobile_upgrade_stats() -> void:
+	if mobile_upgrade_stat_labels.is_empty():
+		return
+	mobile_upgrade_stat_labels.speed.text = BaseballGameState.format_speed(game.get_representative_pitch_speed())
+	mobile_upgrade_stat_labels.quality.text = "%.3f" % game.get_pitch_quality()
+	mobile_upgrade_stat_labels.recovery.text = "%.3f/s" % game.get_recovery_rate()
+	mobile_upgrade_stat_labels.lineup.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
+	mobile_upgrade_stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
+	mobile_upgrade_stat_labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
+	mobile_upgrade_stat_labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
+	mobile_upgrade_stat_labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
+	mobile_upgrade_stat_labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 
 func _format_compact_seconds(seconds: float) -> String:
 	if absf(seconds - round(seconds)) < 0.05:
@@ -3538,6 +3628,10 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	stat_labels.lineup_time.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
 	stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	stat_labels.pitch_calling.text = "×%.3f" % game.get_pitch_calling_bias()
+	stat_labels.field_tap.text = "%.1f%% per tap • %.0f%% maximum contribution per timer" % [
+		game.get_field_tap_fraction() * 100.0,
+		game.get_field_tap_phase_cap() * 100.0,
+	]
 	stat_labels.offline_xp.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 	stat_labels.strikes.text = str(game.get_strikes_per_batter())
 	stat_labels.balls.text = str(game.get_balls_required())
@@ -3626,6 +3720,17 @@ func _on_batch_resolved(summary: Dictionary) -> void:
 func _on_batter_call_displayed(call_text: String, color: Color) -> void:
 	last_result_label.text = call_text
 	last_result_label.add_theme_color_override("font_color", color)
+
+func _on_field_tapped(field_position: Vector2) -> void:
+	if game == null or pitch_field == null:
+		return
+	var result := game.apply_field_tap()
+	if bool(result.get("applied", false)):
+		pitch_field.apply_field_timer_advance(
+			str(result.get("phase", "")),
+			float(result.get("seconds", 0.0))
+		)
+	pitch_field.show_field_tap(field_position, result)
 
 func _on_progression_changed(message: String) -> void:
 	_log_event(message)
