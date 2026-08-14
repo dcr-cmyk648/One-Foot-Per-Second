@@ -40,7 +40,8 @@ func _run() -> void:
 	_expect(not main._mobile_install_offer_for_state(true, true, false, true), "A Home Screen launch should hide the redundant install pathway")
 	_expect(not main._mobile_install_offer_for_state(true, false, false, false), "Non-mobile browsers should not receive phone-specific instructions")
 	_expect(main.header_subtitle.visible, "The milestone subtitle should remain visible beneath the title on phone")
-	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Phone and desktop should share the same milestone subtitle")
+	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ toddler", "Phone and desktop should share the current toddler-body subtitle")
+	_expect(not main.era_label.text.contains("/"), "Phone campaign chrome should show only the current level")
 	_expect(main.achievement_toast_description != null, "Phone achievement toasts should include the completed condition")
 	_expect(main.achievement_toast_description.get_theme_font_size("font_size") < main.achievement_toast_name.get_theme_font_size("font_size"), "Phone achievement conditions should remain visually subordinate to their names")
 	_expect(main.achievement_toast.size.x <= 352.0, "The expanded achievement toast should stay inside a 390-pixel phone")
@@ -110,8 +111,15 @@ func _run() -> void:
 	_expect(main.update_banner.size.x <= 370.0, "The browser update banner should fit a 390-pixel phone")
 	_expect(main.update_banner_label.text.contains("BACK UP"), "The update banner should warn phone players before reloading")
 	_expect(main.update_now_button.text == "REVIEW", "A phone update should open a warning instead of updating immediately")
-	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.dialog_text.contains("portable backup"), "The update confirmation should recommend exporting a portable backup")
+	main._configure_browser_update_confirmation(true)
+	main.browser_update_confirmation.popup_centered_clamped(Vector2i(340, 300), 0.90)
+	await process_frame
+	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.title == "BACK UP YOUR SAVE", "The phone update confirmation should recommend exporting a backup")
 	_expect(main.browser_update_confirmation.dialog_autowrap and main.browser_update_confirmation.min_size.x <= 360, "The update warning should wrap inside a 390-pixel phone viewport")
+	_expect(main.browser_update_confirmation.size.x <= 350 and main.browser_update_confirmation.size.y <= 760, "The complete phone update warning should fit inside a 390-by-844 display")
+	var update_cancel: Button = main.browser_update_confirmation.get_cancel_button()
+	_expect(update_cancel.position.y + update_cancel.size.y <= main.browser_update_confirmation.size.y, "The phone update warning's safe cancel action should remain inside the dialog")
+	main.browser_update_confirmation.hide()
 	main._snooze_browser_update()
 	_expect(not main.update_banner.visible, "Choosing Later should dismiss the browser update banner")
 	main.is_web_build = false
@@ -127,6 +135,10 @@ func _run() -> void:
 		main.mobile_overlay_xp_label.text == "XP %s" % main.xp_label.text,
 		"The Upgrades overlay XP balance should match the live game balance"
 	)
+	main.game.xp = 12.6
+	main._refresh_interface()
+	_expect(main.xp_label.text == "13", "Phone XP should become a rounded whole number above one")
+	_expect(main.mobile_overlay_xp_label.text == "XP 13", "The phone Upgrades balance should share whole-XP formatting")
 	_expect(main.mobile_upgrade_stats_panel.visible, "The phone upgrade overlay should keep current stats visible")
 	_expect(main.mobile_upgrade_stat_labels.size() == 9, "The phone upgrade overlay should expose every trainable base-stat axis")
 	_expect(
@@ -152,7 +164,8 @@ func _run() -> void:
 	)
 	_expect(main.mobile_tab_previous_button.icon != null and main.mobile_tab_next_button.icon != null, "Phone tab traversal should not depend on font arrow glyphs")
 	_expect(not main.upgrade_tabs.get_tab_bar().visible, "The native TabBar and its tiny overflow arrows should be absent on phone layouts")
-	_expect(main.mobile_tab_label.text.begins_with("TRAIN TAB"), "The large phone navigation should identify the current tab without the native strip")
+	_expect(main.mobile_tab_label.text.begins_with("TRAIN") and not main.mobile_tab_label.text.contains("TAB"), "The large phone navigation should identify the current section without repetitive TAB copy")
+	_expect(main.mobile_tab_label_card.visible and main.mobile_tab_label.get_theme_font_size("font_size") >= 18, "The current phone upgrade section should use a readable card")
 	main.pitch_field.batter_phase = "leaving"
 	main.pitch_field.batter_phase_age = 0.5
 	main.pitch_field.batter_phase_duration = 1.0

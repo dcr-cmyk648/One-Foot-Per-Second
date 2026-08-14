@@ -24,7 +24,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("No Hitter — v0.12.0 progressive-interface audit")
+	print("No Hitter — progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -55,7 +55,10 @@ func _run() -> void:
 	_expect(play_panel.size.x > upgrade_panel.size.x * 2.0, "The field should receive most of the horizontal canvas")
 	_expect(main.pitch_field.process_priority < main.process_priority, "The field clock must advance before the simulation clock to prevent catch-up bursts")
 	_expect(not main.prestige_header_stack.visible, "Fresh UI reveals a prestige currency")
-	_expect(main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Fresh UI reveals the Rebirth tab")
+	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Ordinary body growth should be visible from the first pitch")
+	_expect(main.rebirth_tab.name == "GROW UP" and main.human_growth_section.visible, "The ordinary body track should live in a plainly named GROW UP tab")
+	_expect(not main.genetic_section.visible, "Fresh GROW UP content must not reveal genetic enhancements")
+	_expect(main.body_growth_buttons.size() == Content.BODY_GROWTH_STAGES.size() - 1, "Every later human body stage should have one ordered growth row")
 	_expect(not main.automation_section.visible, "Fresh UI reveals future automation")
 	_expect(not main.stat_rows.arms.visible, "Fresh Stats reveal extra arms")
 	_expect(not main.stat_rows.clones.visible, "Fresh Stats reveal clone bodies")
@@ -66,7 +69,7 @@ func _run() -> void:
 	_expect(not main.guide_label.text.contains("clone"), "Fresh Guide implies clones")
 	_expect(not main.guide_label.text.contains("eldritch"), "Fresh Guide implies eldritch magic")
 	_expect(not main.guide_label.text.contains("God"), "Fresh Guide implies the divine layer")
-	_expect(main.era_label.text.contains("/ 30"), "Fresh campaign header should present only human baseball")
+	_expect(main.era_label.text.begins_with("LEVEL 01") and not main.era_label.text.contains("/"), "The campaign header should show only the current level")
 	_expect(main.upgrade_tabs.find_child("LOCKER", false, false) == null, "The full-width Locker tab should be removed")
 	_expect(main.upgrade_tabs.find_child("PITCH", false, false) != null, "Pitch types should have their own tab")
 	_expect(main.upgrade_tabs.find_child("BALL", false, false) != null, "Ball upgrades should have their own tab")
@@ -103,8 +106,8 @@ func _run() -> void:
 	_expect(is_equal_approx(main.game.pitch_credit, 1.0 / 60.0), "Clicking unobstructed field space should advance the opening timer by one third of its former amount")
 	_expect(main.pitch_field.field_tap_effects.size() == 1, "A field click should create its local feedback ring")
 	_expect(main.game.has_achievement("first_field_tap"), "The first active field tap should unlock its achievement")
-	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast")
-	_expect(main.achievement_toast_description.text == "Hurry an active timer with a field tap.", "An achievement toast should state the completed condition")
+	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast (got %s)" % main.achievement_toast_name.text)
+	_expect(main.achievement_toast_description.text == "Hurry an active timer with a field tap.", "An achievement toast should state the completed condition (got %s)" % main.achievement_toast_description.text)
 	_expect(main.achievement_toast_description.get_theme_font_size("font_size") < main.achievement_toast_name.get_theme_font_size("font_size"), "The completed condition should use deliberately smaller toast text")
 	_expect(main.achievement_count_label.text == "1 / 101 UNLOCKED", "The achievement summary should update immediately after an unlock")
 	main.game._clear_pitch_cycle()
@@ -164,6 +167,12 @@ func _run() -> void:
 	_expect(main.browser_save_slot_entries.size() == 3, "The shared interface should build three phone manual-save slots")
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE ANYWAY", "Browser updates should require an explicit backup-aware confirmation")
 	_expect(main._browser_save_has_more_progress({"lifetime_pitches": 100.0}, {"lifetime_pitches": 1.0}), "Browser recovery should recognize a demonstrably more advanced mirror")
+	var normal_elapsed: Dictionary = main._split_browser_elapsed(0.20, 0.20)
+	_expect(is_equal_approx(float(normal_elapsed.live), 0.20) and is_zero_approx(float(normal_elapsed.offline)), "Normal browser frames should remain live simulation time")
+	var resumed_elapsed: Dictionary = main._split_browser_elapsed(600.0, 600.0)
+	_expect(is_equal_approx(float(resumed_elapsed.live), 0.25) and is_equal_approx(float(resumed_elapsed.offline), 599.75), "A huge Safari resume delta should become offline catch-up instead of disappearing")
+	var lifecycle_consumed_elapsed: Dictionary = main._split_browser_elapsed(0.01, 600.0)
+	_expect(is_equal_approx(float(lifecycle_consumed_elapsed.live), 0.25) and is_zero_approx(float(lifecycle_consumed_elapsed.offline)), "A lifecycle-consumed resume frame must not replay its giant delta as active time")
 	main.game.last_load_message = "Synthetic unreadable save."
 	main.game.save_writes_locked = true
 	main._show_save_recovery_required()
@@ -186,7 +195,14 @@ func _run() -> void:
 	_expect(main.offline_progress_dialog.dialog_text.contains("Offline efficiency: 1%"), "The return popup should explain the multiplier used")
 	main.offline_progress_dialog.hide()
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "The destructive reset window should begin closed and locked")
-	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Fresh human baseball needs the regular-guy subtitle")
+	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ toddler", "Fresh human baseball needs the toddler subtitle")
+	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Toddler", "The default loadout should identify the player's current body")
+	main.game.body_growth_level = 1
+	main._refresh_interface()
+	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ little kid", "Growing should immediately update the milestone subtitle")
+	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Little Kid", "Growing should immediately update the body loadout")
+	main.game.body_growth_level = 0
+	main._refresh_interface()
 	main.game.purchased_milestones.append("steroids")
 	main._refresh_interface()
 	_expect(main.header_subtitle.text == "A baseball game about a big boi", "The first steroid use should update the subtitle")
@@ -312,17 +328,25 @@ func _run() -> void:
 	if "--capture-ui" in OS.get_cmdline_user_args():
 		await _capture_visible_tabs(main, "fresh")
 
-	main.game.genetic_offer_unlocked = true
 	main.game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
+	main.game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
+	main.game.alien_exhibition_seconds = BaseballGameState.EXHIBITION_SECONDS
 	main._refresh_interface()
 	await process_frame
-	_expect(main.header_subtitle.text == "A baseball game about a guy who found aliens", "Alien contact should update the subtitle without revealing later layers")
+	_expect(main.header_subtitle.text == "A baseball game about a toddler who found aliens", "Alien contact should update the subtitle using the current body")
+	_expect(main.alien_help_button.visible and main.alien_help_button.text == "HELP", "A witnessed impossible inning should quietly reveal the red HELP action")
+	_expect(not main.genetic_section.visible and not main.rebirth_story_label.text.contains("genetic"), "The impossible exhibition must not spoil its solution before HELP is clicked")
+	main._accept_alien_help()
+	await process_frame
+	_expect(main.alien_help_dialog.visible and main.alien_help_dialog.dialog_text.contains("Come with me if you want to… be really good at baseball"), "HELP should reveal the portal stranger's Time Machine scene")
+	main.alien_help_dialog.hide()
+	_expect(main.game.genetic_offer_unlocked and not main.alien_help_button.visible, "Accepting portal help should persistently reveal Time Travel and dismiss HELP")
 	_expect(main.prestige_header_stack.visible, "Genetic offer did not reveal DNA")
-	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer did not reveal Rebirth")
+	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer should remain available through GROW UP")
 	_expect(main.genetic_section.visible, "Genetic offer did not reveal mutations")
 	_expect(not main.eldritch_section.visible, "Genetic offer prematurely reveals eldritch upgrades")
 	_expect(not main.divine_section.visible, "Genetic offer prematurely reveals divine rewards")
-	_expect(main.era_label.text.contains("/ 40"), "Genetic reveal should expose the alien campaign, not later layers")
+	_expect(main.era_label.text.begins_with("LEVEL 31") and not main.era_label.text.contains("/"), "Alien contact should retain the current-level-only header")
 	_expect(main.guide_label.text.contains("DNA"), "Genetic reveal did not expand the Guide")
 	_expect(not main.guide_label.text.contains("Arcana"), "Genetic Guide prematurely reveals Arcana")
 	_expect(not main.inventory_slot_buttons.relic.disabled and main.inventory_slot_buttons.relic.text == "R", "Finishing human baseball should reveal the Relic square")
@@ -331,12 +355,13 @@ func _run() -> void:
 
 	main.game.eldritch_offer_unlocked = true
 	main.game.highest_unlocked = Content.ELDRITCH_EXHIBITION_INDEX
+	main.game.current_opponent = Content.ELDRITCH_EXHIBITION_INDEX
 	main._refresh_interface()
 	await process_frame
 	_expect(main.header_subtitle.text == "A baseball game about one guy versus the void", "The eldritch exhibition should receive its own discovered-milestone subtitle")
 	_expect(main.eldritch_section.visible, "Eldritch offer did not reveal magic")
 	_expect(not main.divine_section.visible, "Eldritch offer prematurely reveals divine rewards")
-	_expect(main.era_label.text.contains("/ 45"), "Eldritch reveal should expose the complete opponent ladder")
+	_expect(main.era_label.text.begins_with("LEVEL 41") and not main.era_label.text.contains("/"), "Eldritch contact should retain the current-level-only header")
 	_expect(main.guide_label.text.contains("Arcana"), "Eldritch reveal did not expand the Guide")
 	_expect(not main.guide_label.text.contains("God restore"), "Eldritch Guide prematurely reveals the divine offer")
 	_audit_catalog_visibility(main, 2, "eldritch")

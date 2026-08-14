@@ -674,7 +674,7 @@ const ACHIEVEMENTS := [
 	{"id": "reach_level_15", "tier": "human", "name": "Varsity Adjacent", "metric": "level", "threshold": 14.0, "description": "Reach Level 15."},
 	{"id": "reach_level_20", "tier": "human", "name": "College Material", "metric": "level", "threshold": 19.0, "description": "Reach Level 20."},
 	{"id": "reach_level_25", "tier": "human", "name": "The Long Bus Ride", "metric": "level", "threshold": 24.0, "description": "Reach Level 25."},
-	{"id": "reach_level_30", "tier": "human", "name": "A Regular Ol’ Big Leaguer", "metric": "level", "threshold": 29.0, "description": "Reach Level 30."},
+	{"id": "human_champion_toddler", "tier": "human", "name": "Past Your Bedtime", "metric": "human_champion_toddler", "threshold": 1.0, "secret": true, "description": "Complete the entire human league without growing up."},
 	{"id": "complete_human_baseball", "tier": "human", "name": "The Human Limit", "metric": "level", "threshold": 30.0, "reveal_level": 29, "description": "Master the final human batter."},
 	{"id": "distance_6ft", "tier": "human", "name": "Personal Space", "metric": "distance", "threshold": 1.0, "description": "Pitch from 6 feet."},
 	{"id": "distance_30ft", "tier": "human", "name": "There Is Now a Mound", "metric": "distance", "threshold": 4.0, "description": "Pitch from 30 feet."},
@@ -703,7 +703,7 @@ const ACHIEVEMENTS := [
 	{"id": "fully_equipped", "tier": "human", "name": "Dressed for the Job", "metric": "equipped_slots", "threshold": 6.0, "description": "Equip all six human clothing slots at once."},
 
 	# Genetic and alien baseball — 25 achievements.
-	{"id": "genetic_offer", "tier": "genetic", "name": "The Commissioner Has a Proposal", "metric": "genetic_offer", "threshold": 1.0, "description": "Hear Xylophax’s complete genetic proposal."},
+	{"id": "genetic_offer", "tier": "genetic", "name": "Come With Me If You Want to Pitch", "metric": "genetic_offer", "threshold": 1.0, "description": "Accept the portal stranger’s deeply irresponsible baseball plan."},
 	{"id": "genetic_rebirth_1", "tier": "genetic", "name": "Born Again, But Baseball", "metric": "genetic_rebirths", "threshold": 1.0, "description": "Complete your first genetic rebirth."},
 	{"id": "genetic_rebirth_5", "tier": "genetic", "name": "Prenatal Free Agent", "metric": "genetic_rebirths", "threshold": 5.0, "description": "Complete five genetic rebirths."},
 	{"id": "dna_10", "tier": "genetic", "name": "Double Helix, Double Play", "metric": "lifetime_dna", "threshold": 10.0, "description": "Earn 10 lifetime DNA."},
@@ -758,6 +758,78 @@ const ACHIEVEMENTS := [
 	{"id": "divine_halo_1", "tier": "divine", "name": "After the Afterlife", "metric": "divine_halos", "threshold": 1.0, "description": "Earn your first extra Halo."},
 	{"id": "divine_halo_5", "tier": "divine", "name": "Halo Hall of Fame", "metric": "divine_halos", "threshold": 5.0, "description": "Earn five extra Halos."},
 	{"id": "no_hitter", "tier": "divine", "name": "No Hitter", "metric": "no_hitter", "threshold": 1.0, "secret": true, "description": "Defeat the entire campaign through Octathulhu without allowing a single fair hit."},
+]
+
+# Ordinary aging is an optional XP track. Each purchased stage applies the
+# listed incremental body bonuses, while the stage's visual size is absolute.
+# Nothing here raises the human speed cap, so a deliberately stubborn toddler
+# can still finish human baseball through training, equipment, and facilities.
+const BODY_GROWTH_STAGES := [
+	{
+		"id": "toddler",
+		"name": "Regular Ol’ Toddler",
+		"noun": "toddler",
+		"cost": 0.0,
+		"required_level": 0,
+		"visual_size": 1.00,
+		"effects": {"speed": 1.00, "quality": 0.00, "recovery": 1.00},
+		"description": "Speed ×1.00; Quality +0.00; Recovery ×1.00.",
+	},
+	{
+		"id": "little_kid",
+		"name": "Grow into a Little Kid",
+		"body_name": "Regular Ol’ Little Kid",
+		"noun": "little kid",
+		"cost": 10.0,
+		"required_level": 1,
+		"visual_size": 1.10,
+		"effects": {"speed": 1.08, "quality": 0.02, "recovery": 1.03},
+		"description": "Speed ×1.08; Quality +0.02; Recovery ×1.03.",
+	},
+	{
+		"id": "big_kid",
+		"name": "Grow into a Big Kid",
+		"body_name": "Regular Ol’ Big Kid",
+		"noun": "big kid",
+		"cost": 500.0,
+		"required_level": 5,
+		"visual_size": 1.21,
+		"effects": {"speed": 1.12, "quality": 0.03, "recovery": 1.04},
+		"description": "Speed ×1.12; Quality +0.03; Recovery ×1.04.",
+	},
+	{
+		"id": "teenager",
+		"name": "Become a Gangly Teenager",
+		"body_name": "Gangly Teenager",
+		"noun": "teenager",
+		"cost": 100000.0,
+		"required_level": 11,
+		"visual_size": 1.34,
+		"effects": {"speed": 1.18, "quality": 0.05, "recovery": 1.06},
+		"description": "Speed ×1.18; Quality +0.05; Recovery ×1.06.",
+	},
+	{
+		"id": "young_adult",
+		"name": "Become a Young Adult",
+		"body_name": "Young Adult",
+		"noun": "young adult",
+		"cost": 25000000.0,
+		"required_level": 18,
+		"visual_size": 1.47,
+		"effects": {"speed": 1.25, "quality": 0.08, "recovery": 1.08},
+		"description": "Speed ×1.25; Quality +0.08; Recovery ×1.08.",
+	},
+	{
+		"id": "regular_guy",
+		"name": "Finish Growing Up",
+		"body_name": "Regular Ol’ Guy",
+		"noun": "guy",
+		"cost": 10000000000.0,
+		"required_level": 24,
+		"visual_size": 1.60,
+		"effects": {"speed": 1.35, "quality": 0.12, "recovery": 1.10},
+		"description": "Speed ×1.35; Quality +0.12; Recovery ×1.10.",
+	},
 ]
 
 const TRAINING := [
@@ -2063,6 +2135,12 @@ static func trait_description(trait_id: String) -> String:
 
 static func training_by_id(id: String) -> Dictionary:
 	for item in TRAINING:
+		if item.id == id:
+			return item
+	return {}
+
+static func body_growth_by_id(id: String) -> Dictionary:
+	for item in BODY_GROWTH_STAGES:
 		if item.id == id:
 			return item
 	return {}

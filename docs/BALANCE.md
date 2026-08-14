@@ -1,4 +1,4 @@
-# No Hitter — v0.12.0 Balance Audit
+# No Hitter — v0.13.0 Balance Audit
 
 ## Outcome
 
@@ -6,19 +6,19 @@ The complete campaign is long but finite, every prestige layer changes the strat
 
 | Milestone | Approximate active-production time |
 |---|---:|
-| Human baseball cleared | 41 h 30 m |
-| Xylophax's first exhibition completed | 42 h |
-| First useful replay harvest | 3 d |
-| Mid-alien harvest | 4 d 21 h 30 m |
-| First four-digit DNA harvest | 11 d |
-| Final pre-eldritch climb completed | 30 d 3 h |
-| First eldritch ascension | 30 d 6 h |
-| First magic-assisted DNA rebirth | 34 d 3 h |
-| Deeper eldritch ascension | 44 d 3 h |
-| Octathulhu unlocked at 1c | 58 d 12 h |
-| First cosmic victory | 58 d 15 h |
+| Human baseball cleared | 1 d 9 h |
+| Portal HELP / first genetic rebirth | 1 d 9 h 30 m |
+| First useful replay harvest | 2 d 11 h 30 m |
+| Mid-alien harvest | 4 d 5 h |
+| First four-digit DNA harvest | 8 d 12 h |
+| Final pre-eldritch climb completed | 27 d 15 h |
+| First eldritch ascension | 27 d 18 h |
+| First magic-assisted DNA rebirth | 31 d 15 h |
+| Deeper eldritch ascension | 41 d 15 h |
+| Octathulhu unlocked at 1c | 56 d |
+| First cosmic victory | 56 d 3 h |
 
-These are deterministic open-game baselines with frequent purchasing and strategically timed resets. A player who explores, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study can raise the current body to 25%, so the game meaningfully rewards being left open without making a closed session worthless.
+These are deterministic open-game baselines with frequent purchasing, every affordable age, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances the first witnessed alien minute. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study can raise the current body to 25%, so the game meaningfully rewards being left open without making a closed session worthless.
 
 The runner obeys the same human cadence as the field: one wind-up, one unresolved ball, full flight, impact, lineup change if needed, then the next wind-up. That is intentionally slower than a generic pitches-per-second spreadsheet and prevents hidden pitches from occurring while the visible ball or batter is unresolved.
 
@@ -87,24 +87,24 @@ The 101 achievements are deliberately modest individually and additive rather th
 achievement XP multiplier = 1 + completed achievements × 0.01
 ```
 
-Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; after per-Strike adaptation and the 12% mastery-target adjustment, the current first human lifetime is roughly 41 h 30 m and the first cosmic victory is 58 d 15 h. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; after optional aging, per-Strike adaptation, and the larger mastery targets, the current first human lifetime is roughly 33 hours and the first cosmic victory is 56 d 3 h. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
 
 ## Complete reset cadence
 
 The current greedy audit uses twelve lower-layer resets, approximately:
 
-1. `+23 DNA` after the initial Xylophax offer.
+1. `+23 DNA` after noticing HELP and accepting the portal stranger's offer.
 2. `+35 DNA` after the first human replay.
 3. `+173 DNA` in the alien circuit.
-4. `+1,494 DNA` on a deeper alien run.
-5. `+2,896 DNA` on the next championship harvest.
+4. `+1,429 DNA` on a deeper alien run.
+5. `+2,899 DNA` on the next championship harvest.
 6. `+3,947 DNA` for the final pre-eldritch build-out.
-7. `+228 Arcana` after N'Kthra; most is immediately invested.
-8. `+261 DNA` during the first magic-assisted replay.
-9. `+77,798 DNA` after a deep new-reality harvest.
-10. `+861 Arcana` on the deeper eldritch ascension.
-11. `+867 DNA` in the next reality.
-12. `+254,127 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
+7. `+227 Arcana` after N'Kthra; most is immediately invested.
+8. `+276 DNA` during the first magic-assisted replay.
+9. `+68,096 DNA` after a deep new-reality harvest.
+10. `+796 Arcana` on the deeper eldritch ascension.
+11. `+921 DNA` in the next reality.
+12. `+301,863 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
 
 The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
 
@@ -116,11 +116,24 @@ The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jump
 - Alien biology caps at Mach 12; the alien championship gate requires Mach 3.
 - Eldritch bodies can reach exactly 1c; Octathulhu rejects anything slower.
 - Fresh recovery is `0.25 pitches/s`: a four-second wind-up before flight.
-- The tested early curve remains about `0.26/s` at level 3, `0.68/s` at level 10, `1.42/s` at level 20, and `2.71/s` at the first human finale. Human play still permits only one unresolved pitch, so travel time remains visible even when recovery improves.
+- The tested age-buying curve remains about `0.26/s` at level 3, `0.73/s` at level 10, `1.74/s` at level 20, and `3.65/s` at the first human finale. Human play still permits only one unresolved pitch, so travel time remains visible even when recovery improves.
 
 Speed purchases stop at the current body's cap. The ordinary button says only `Base speed +0.15 ft/s`; the cap and its spoiler-light hint appear only after the player actually reaches it and tries to buy more.
 
 ## Cost and content cadence
+
+The optional body track is sequential and sits in GROW UP:
+
+| Body | Unlock level | Cost | Incremental effect | Visual-size floor |
+|---|---:|---:|---|---:|
+| Regular Ol’ Toddler | 1 | — | baseline | ×1.00 |
+| Little Kid | 2 | 10 XP | speed ×1.08; quality +0.02; recovery ×1.03 | ×1.10 |
+| Big Kid | 6 | 500 XP | speed ×1.12; quality +0.03; recovery ×1.04 | ×1.21 |
+| Gangly Teenager | 12 | 100K XP | speed ×1.18; quality +0.05; recovery ×1.06 | ×1.34 |
+| Young Adult | 19 | 25M XP | speed ×1.25; quality +0.08; recovery ×1.08 | ×1.47 |
+| Regular Ol’ Guy | 25 | 10B XP | speed ×1.35; quality +0.12; recovery ×1.10 | ×1.60 |
+
+These bonuses do not raise the human cap. Skipping them is a valid challenge route rather than a progression softlock.
 
 Ordinary Training has one clear purchase per displayed base stat:
 
@@ -166,12 +179,16 @@ The automated suite explicitly checks that:
 - choosing another unlocked batter during flight resolves that same pitch against the chosen target;
 - missed Strikes and Balls continue through the plate without an unexplained speed change;
 - the pitch and on-deck meters reflect their authoritative cooldowns;
+- each purchased body age affects speed, quality, recovery, subtitle, loadout, and rendered size while every reset begins as a toddler;
+- the toddler human-league clear unlocks only when no age has been purchased;
+- Xylophax remains 100% Grand Slam under arbitrary stats and reveals HELP only after a witnessed minute, never from offline time;
 - all eight outcome cards remain compact and expose detail through tooltips;
 - loot obeys its restrained rarity curve, Power sorting, no-auto-equip default, prestige-only auto-equip, item amplification, caps, starred protection, Scrap conversion, resets, inheritance, and save rules;
 - every level-gated catalog is displayed in unlock order, and alternate speed/distance/Strikeout gates conceal effects until met;
 - the achievement catalog contains 101 unique entries, stacks exactly +1% XP apiece, persists through prestige and save/load, and keeps every unencountered entry anonymous;
 - each one-time catalog filter is independent, saved, touch-sized on phone, and never hides locked or available purchases;
 - progressive interface layers remain hidden until their story boundary;
+- a giant iOS-style resumed frame is split into a small live tick and one offline catch-up interval;
 - all 45 levels, costs, deterministic era-name combinations, signature names, traits, prestige boundaries, and migrations remain valid;
 - Octathulhu cannot be completed below 1c and cosmic victory fires only once.
 

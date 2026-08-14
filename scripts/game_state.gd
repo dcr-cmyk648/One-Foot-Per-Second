@@ -11,7 +11,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 17
+const SAVE_VERSION := 18
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -124,6 +124,8 @@ var eldritch_offer_unlocked := false
 var alien_exhibition_seconds := 0.0
 var eldritch_exhibition_seconds := 0.0
 var cosmos_conquered := false
+var body_growth_level := 0
+var human_league_completed_as_toddler := false
 # A legitimate No Hitter attempt begins when God restores a completed universe.
 # Lower prestige layers preserve it; any fair-contact outcome, including one
 # rescued by clones or portals, permanently spoils that universe's attempt.
@@ -439,6 +441,23 @@ func is_story_offer_ready() -> bool:
 		or (is_eldritch_exhibition_blocked() and eldritch_offer_unlocked)
 	)
 
+func is_alien_help_available() -> bool:
+	return (
+		is_alien_exhibition_blocked()
+		and not genetic_offer_unlocked
+		and alien_exhibition_seconds >= EXHIBITION_SECONDS
+	)
+
+func accept_alien_help() -> bool:
+	if not is_alien_help_available():
+		return false
+	genetic_offer_unlocked = true
+	progression_changed.emit(
+		"TIME TRAVEL UNLOCKED: A portal stranger has a deeply irresponsible baseball plan."
+	)
+	check_achievements()
+	return true
+
 func is_speed_gate_blocked(opponent_index: int = current_opponent) -> bool:
 	if opponent_index == Content.HUMAN_FINAL_INDEX and not genetic_offer_unlocked:
 		return get_velocity_fps() < HUMAN_SPEED_CAP_FPS * 0.999
@@ -461,15 +480,12 @@ func get_speed_gate_status_text(opponent_index: int = current_opponent) -> Strin
 		_:
 			return ""
 
-func _advance_story_encounters(seconds: float) -> void:
-	if is_alien_exhibition_blocked() and not genetic_offer_unlocked:
+func _advance_story_encounters(seconds: float, alien_witnessed: bool) -> void:
+	if is_alien_exhibition_blocked() and not genetic_offer_unlocked and alien_witnessed:
+		var previous_seconds := alien_exhibition_seconds
 		alien_exhibition_seconds = minf(alien_exhibition_seconds + maxf(seconds, 0.0), EXHIBITION_SECONDS)
-		if alien_exhibition_seconds >= EXHIBITION_SECONDS:
-			genetic_offer_unlocked = true
-			progression_changed.emit(
-				"XYLOPHAX'S OFFER: Add arms in the womb, borrow a Time Machine, and be born better."
-			)
-			check_achievements()
+		if previous_seconds < EXHIBITION_SECONDS and alien_exhibition_seconds >= EXHIBITION_SECONDS:
+			progression_changed.emit("Something red has appeared near the impossible exhibition.")
 	if is_eldritch_exhibition_blocked() and not eldritch_offer_unlocked:
 		eldritch_exhibition_seconds = minf(eldritch_exhibition_seconds + maxf(seconds, 0.0), EXHIBITION_SECONDS)
 		if eldritch_exhibition_seconds >= EXHIBITION_SECONDS:
@@ -482,11 +498,13 @@ func _advance_story_encounters(seconds: float) -> void:
 func get_story_status_text() -> String:
 	if is_alien_exhibition_blocked():
 		if genetic_offer_unlocked:
-			return "GENETIC OFFER READY • Open REBIRTH and use the Time Machine."
-		return "COURTESY EXHIBITION • 100% GRAND SLAMS • Offer in %ds" % int(ceil(EXHIBITION_SECONDS - alien_exhibition_seconds))
+			return "TIME TRAVEL READY • Open GROW UP when you are ready to be born again."
+		if is_alien_help_available():
+			return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%"
+		return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100% • OBSERVE %ds" % int(ceil(EXHIBITION_SECONDS - alien_exhibition_seconds))
 	if is_eldritch_exhibition_blocked():
 		if eldritch_offer_unlocked:
-			return "ELDRITCH OFFER READY • Open REBIRTH and abandon this reality."
+			return "ELDRITCH OFFER READY • Open GROW UP and abandon this reality."
 		return "IMPOSSIBLE EXHIBITION • 100% GRAND SLAMS • Revelation in %ds" % int(ceil(EXHIBITION_SECONDS - eldritch_exhibition_seconds))
 	return ""
 
@@ -520,6 +538,8 @@ func reset_fresh() -> void:
 	alien_exhibition_seconds = 0.0
 	eldritch_exhibition_seconds = 0.0
 	cosmos_conquered = false
+	body_growth_level = 0
+	human_league_completed_as_toddler = false
 	no_hitter_attempt_valid = false
 	training_levels = {
 		"velocity": 0,
@@ -708,7 +728,7 @@ func advance(delta: float) -> void:
 		return
 	var elapsed := simulation_accumulator
 	simulation_accumulator = 0.0
-	_advance_story_encounters(elapsed)
+	_advance_story_encounters(elapsed, true)
 	_resolve_elapsed(elapsed, true, true)
 	_run_automation(elapsed)
 
@@ -780,7 +800,9 @@ func simulate_offline(seconds: float) -> Dictionary:
 	last_offline_seconds = bounded_seconds
 	if bounded_seconds < 1.0:
 		return {}
-	_advance_story_encounters(bounded_seconds)
+	# The first impossible alien is a witnessed story beat. Closing or
+	# suspending the game cannot quietly reveal its escape hatch.
+	_advance_story_encounters(bounded_seconds, false)
 	var efficiency := get_offline_xp_efficiency()
 	var summary := _resolve_elapsed(bounded_seconds, false, false, efficiency)
 	summary["offline_seconds"] = bounded_seconds
@@ -795,7 +817,7 @@ func simulate_active_time(seconds: float) -> Dictionary:
 	var bounded_seconds := clampf(seconds, 0.0, MAX_OFFLINE_SECONDS)
 	if bounded_seconds <= 0.0:
 		return {}
-	_advance_story_encounters(bounded_seconds)
+	_advance_story_encounters(bounded_seconds, true)
 	var summary := _resolve_elapsed(bounded_seconds, false, false)
 	summary["simulated_active_seconds"] = bounded_seconds
 	last_batch = summary
@@ -2355,10 +2377,66 @@ func _logistic(value: float) -> float:
 		return 0.0
 	return 1.0 / (1.0 + exp(-value))
 
+func get_body_growth_stage() -> Dictionary:
+	var index := clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1)
+	return Content.BODY_GROWTH_STAGES[index]
+
+func get_body_growth_name() -> String:
+	var stage := get_body_growth_stage()
+	return str(stage.get("body_name", stage.get("name", "Regular Ol’ Toddler")))
+
+func get_body_growth_noun() -> String:
+	return str(get_body_growth_stage().get("noun", "pitcher"))
+
+func get_body_growth_visual_size() -> float:
+	return float(get_body_growth_stage().get("visual_size", 1.0))
+
+func get_body_growth_effect_multiplier(effect_id: String) -> float:
+	var multiplier := 1.0
+	for index in range(1, clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1) + 1):
+		var effects: Dictionary = Content.BODY_GROWTH_STAGES[index].get("effects", {})
+		multiplier *= float(effects.get(effect_id, 1.0))
+	return minf(multiplier, MAX_NUMBER)
+
+func get_body_growth_quality_bonus() -> float:
+	var bonus := 0.0
+	for index in range(1, clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1) + 1):
+		var effects: Dictionary = Content.BODY_GROWTH_STAGES[index].get("effects", {})
+		bonus += float(effects.get("quality", 0.0))
+	return bonus
+
+func get_body_growth_cost(id: String) -> float:
+	var definition := Content.body_growth_by_id(id)
+	if definition.is_empty():
+		return MAX_NUMBER
+	return rounded_cost(float(definition.get("cost", 0.0)))
+
+func can_buy_body_growth(id: String) -> bool:
+	var definition := Content.body_growth_by_id(id)
+	if definition.is_empty():
+		return false
+	var stage_index := Content.BODY_GROWTH_STAGES.find(definition)
+	return (
+		stage_index == body_growth_level + 1
+		and highest_unlocked >= int(definition.get("required_level", 0))
+		and xp >= get_body_growth_cost(id)
+	)
+
+func buy_body_growth(id: String) -> bool:
+	if not can_buy_body_growth(id):
+		return false
+	var definition := Content.body_growth_by_id(id)
+	xp -= get_body_growth_cost(id)
+	body_growth_level += 1
+	progression_changed.emit("GREW UP: %s" % get_body_growth_name())
+	check_achievements()
+	return true
+
 func get_body_velocity_fps() -> float:
 	var velocity := get_trained_base_velocity_fps()
 	if has_divine_blessing("let_there_be_fastballs"):
 		velocity *= 10.0
+	velocity *= get_body_growth_effect_multiplier("speed")
 	velocity *= get_milestone_effect_multiplier("speed")
 	velocity *= pow(1.80, int(genetic_levels.fast_twitch_everything))
 	velocity *= pow(12.0, int(eldritch_levels.velocity_without_distance))
@@ -2428,11 +2506,13 @@ func get_pitcher_size_multiplier() -> float:
 		+ log(maxf(get_time_multiplier(), 1.0)) / log(2.0)
 	) * 2.0
 	var strength := quality_strength + rate_strength + speed_strength + payload_strength + anatomy_strength
-	return 1.0 + (1.0 - exp(-strength / 70.0))
+	var growth_floor := clampf(get_body_growth_visual_size(), 1.0, 2.0)
+	return growth_floor + (2.0 - growth_floor) * (1.0 - exp(-strength / 70.0))
 
 func get_recovery_rate() -> float:
 	var recovery_rank := clampi(int(training_levels.recovery), 0, RECOVERY_MAX_RANK)
 	var rate := BASE_RECOVERY_RATE + float(recovery_rank) * RECOVERY_PER_RANK
+	rate *= get_body_growth_effect_multiplier("recovery")
 	rate *= get_milestone_effect_multiplier("recovery")
 	rate *= pow(1.18, int(genetic_levels.elastic_ucl_colony))
 	rate *= 1.0 + float(get_equipment_bonuses().rate_bonus)
@@ -2617,6 +2697,8 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			return float(eldritch_levels.get(str(key), 0))
 		"cosmos":
 			return 1.0 if cosmos_conquered or divine_ascensions > 0 else 0.0
+		"human_champion_toddler":
+			return 1.0 if human_league_completed_as_toddler else 0.0
 		"no_hitter":
 			return 1.0 if cosmos_conquered and no_hitter_attempt_valid else 0.0
 		"divine_ascensions":
@@ -2648,7 +2730,7 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
 		"training", "genetic_upgrade", "eldritch_upgrade":
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
-		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos", "no_hitter":
+		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos", "human_champion_toddler", "no_hitter":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
 	return {
 		"current": current,
@@ -2685,7 +2767,7 @@ func _get_quality_without_pitch(pitch_speed_fps: float) -> float:
 	var command_score := float(training_levels.command) * QUALITY_PER_RANK
 	var diversity_bonus := maxf(float(unlocked_pitches.size() - 1) * 0.08, 0.0)
 	var trained_quality := (
-		velocity_score + command_score + diversity_bonus
+		velocity_score + command_score + diversity_bonus + get_body_growth_quality_bonus()
 	) * get_milestone_effect_multiplier("quality")
 	trained_quality += float(genetic_levels.compound_pitching_eye) * 1.25
 	trained_quality += float(eldritch_levels.eyes_behind_moon) * 2.0
@@ -2847,6 +2929,8 @@ func _check_opponent_unlock() -> String:
 		progression_changed.emit(victory_message)
 		check_achievements()
 		return victory_message
+	if highest_unlocked == Content.HUMAN_FINAL_INDEX and body_growth_level == 0:
+		human_league_completed_as_toddler = true
 	highest_unlocked += 1
 	var message := "UNLOCKED: %s" % opponents[highest_unlocked].name
 	if auto_advance_enabled and has_genetic_upgrade("migratory_instinct"):
@@ -3283,6 +3367,7 @@ func _reset_body_progress() -> void:
 	_invalidate_milestone_effect_cache()
 	current_opponent = 0
 	highest_unlocked = 0
+	body_growth_level = 0
 	selected_distance_index = 0
 	_clear_pitch_cycle()
 	plate_strikes = 0
@@ -3640,6 +3725,8 @@ func to_save_data() -> Dictionary:
 		"alien_exhibition_seconds": alien_exhibition_seconds,
 		"eldritch_exhibition_seconds": eldritch_exhibition_seconds,
 		"cosmos_conquered": cosmos_conquered,
+		"body_growth_level": body_growth_level,
+		"human_league_completed_as_toddler": human_league_completed_as_toddler,
 		"no_hitter_attempt_valid": no_hitter_attempt_valid,
 		"auto_advance_enabled": auto_advance_enabled,
 		"auto_train_enabled": auto_train_enabled,
@@ -3689,6 +3776,22 @@ func apply_save_data(data: Dictionary) -> void:
 	next_loot_id = maxi(int(data.get("next_loot_id", 1)), 1)
 	highest_unlocked = clampi(int(data.get("highest_unlocked", 0)), 0, opponents.size() - 1)
 	current_opponent = clampi(int(data.get("current_opponent", 0)), 0, highest_unlocked)
+	if saved_version >= 18:
+		body_growth_level = clampi(
+			int(data.get("body_growth_level", 0)),
+			0,
+			Content.BODY_GROWTH_STAGES.size() - 1
+		)
+		human_league_completed_as_toddler = bool(data.get("human_league_completed_as_toddler", false))
+	else:
+		# Aging did not exist in older saves. Infer a sensible body from the
+		# campaign level so established players do not suddenly become toddlers,
+		# but never infer the secret toddler-clear achievement.
+		body_growth_level = 0
+		for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
+			if highest_unlocked >= int(Content.BODY_GROWTH_STAGES[stage_index].required_level):
+				body_growth_level = stage_index
+		human_league_completed_as_toddler = false
 	plate_strikes = clampi(int(data.get("plate_strikes", 0)), 0, maxi(get_strikes_required(current_opponent) - 1, 0))
 	plate_balls = clampi(int(data.get("plate_balls", 0)), 0, maxi(get_balls_required(current_opponent) - 1, 0))
 	batter_cooldown_remaining = clampf(float(data.get("batter_cooldown_remaining", 0.0)), 0.0, MAX_BATTER_DOWNTIME_SECONDS)
@@ -4087,10 +4190,26 @@ static func format_number(value: float, decimals: int = 2) -> String:
 		scaled /= 1000.0
 		suffix_index += 1
 	if suffix_index >= 0 and absolute < 1.0e15:
+		if decimals <= 0:
+			if round(scaled) >= 1000.0 and suffix_index < suffixes.size() - 1:
+				scaled /= 1000.0
+				suffix_index += 1
+			return "%s%.0f%s" % ["-" if value < 0.0 else "", scaled, suffixes[suffix_index]]
 		return "%s%.2f%s" % ["-" if value < 0.0 else "", scaled, suffixes[suffix_index]]
 	var exponent := int(floor(log(absolute) / log(10.0)))
 	var mantissa := absolute / pow(10.0, exponent)
+	if decimals <= 0:
+		if round(mantissa) >= 10.0:
+			mantissa /= 10.0
+			exponent += 1
+		return "%s%.0fe%d" % ["-" if value < 0.0 else "", mantissa, exponent]
 	return "%s%.3fe%d" % ["-" if value < 0.0 else "", mantissa, exponent]
+
+static func format_xp_total(value: float) -> String:
+	# Fractions matter while the first point is being earned. Once the balance is
+	# spendable, a rounded whole number is quicker to read and matches whole-XP
+	# upgrade prices.
+	return format_number(value, 0) if absf(value) >= 1.0 else format_number(value, 2)
 
 static func format_speed(feet_per_second: float) -> String:
 	if feet_per_second < 88.0:

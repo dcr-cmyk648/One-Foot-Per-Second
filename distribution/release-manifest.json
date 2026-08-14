@@ -1,8 +1,8 @@
 {
   "game": "No Hitter",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "engine": "Godot 4.7.1",
-  "save_version": 17,
+  "save_version": 18,
   "platforms": [
     {
       "id": "macos-universal",

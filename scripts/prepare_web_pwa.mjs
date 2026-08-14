@@ -11,6 +11,18 @@ const webBuild = resolve(webBuildArgument);
 const iconName = "index.192x192.png";
 await copyFile(join(projectRoot, "assets", "icon-192.png"), join(webBuild, iconName));
 
+const indexPath = join(webBuild, "index.html");
+const lifecycleBridge = await readFile(join(projectRoot, "scripts", "web_lifecycle_bridge.js"), "utf8");
+const lifecycleMarker = "<!-- no-hitter-lifecycle-bridge -->";
+let indexHtml = await readFile(indexPath, "utf8");
+if (!indexHtml.includes(lifecycleMarker)) {
+  indexHtml = indexHtml.replace(
+    "</head>",
+    `${lifecycleMarker}\n<script>\n${lifecycleBridge}\n</script>\n</head>`,
+  );
+  await writeFile(indexPath, indexHtml);
+}
+
 const manifestPath = join(webBuild, "index.manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 manifest.id = "./";

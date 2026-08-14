@@ -135,7 +135,48 @@ body {
 	document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') keepAwake(); });
 })();
 </script>
-	</head>
+	<!-- no-hitter-lifecycle-bridge -->
+<script>
+(function () {
+	'use strict';
+	if (!window.OFPS_PWA || window.OFPS_PWA.lifecycleSnapshot) return;
+
+	const nowSeconds = function () { return Date.now() / 1000; };
+	const lifecycle = {
+		serial: 0,
+		state: document.visibilityState === 'hidden' ? 'hidden' : 'visible',
+		hiddenAt: document.visibilityState === 'hidden' ? nowSeconds() : 0,
+		visibleAt: document.visibilityState === 'hidden' ? 0 : nowSeconds(),
+		reason: 'load'
+	};
+
+	function recordLifecycle(nextState, reason) {
+		const timestamp = nowSeconds();
+		if (nextState === 'hidden') {
+			if (lifecycle.state !== 'hidden') lifecycle.hiddenAt = timestamp;
+		} else {
+			lifecycle.visibleAt = timestamp;
+		}
+		lifecycle.state = nextState;
+		lifecycle.reason = reason;
+		lifecycle.serial += 1;
+	}
+
+	window.OFPS_PWA.lifecycleSnapshot = function () {
+		return JSON.stringify(lifecycle);
+	};
+
+	document.addEventListener('visibilitychange', function () {
+		recordLifecycle(document.visibilityState === 'hidden' ? 'hidden' : 'visible', 'visibilitychange');
+	});
+	window.addEventListener('pagehide', function () { recordLifecycle('hidden', 'pagehide'); });
+	window.addEventListener('pageshow', function () { recordLifecycle('visible', 'pageshow'); });
+	document.addEventListener('freeze', function () { recordLifecycle('hidden', 'freeze'); });
+	document.addEventListener('resume', function () { recordLifecycle('visible', 'resume'); });
+})();
+
+</script>
+</head>
 	<body>
 		<canvas id="canvas">
 			Your browser does not support the canvas tag.
@@ -153,7 +194,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":439148,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":450412,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

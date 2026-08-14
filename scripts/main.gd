@@ -72,6 +72,7 @@ var ball_upgrade_buttons := {}
 var milestone_buttons := {}
 var catalog_hide_purchased_toggles := {}
 var scale_buttons := {}
+var body_growth_buttons := {}
 var genetic_buttons := {}
 var eldritch_buttons := {}
 var divine_buttons := {}
@@ -93,13 +94,16 @@ var achievement_toast_name: Label
 var achievement_toast_description: Label
 var achievement_toast_queue: Array[Dictionary] = []
 var achievement_toast_showing := false
+var achievement_toast_tween: Tween
 var automation_section: VBoxContainer
+var human_growth_section: VBoxContainer
 var genetic_section: VBoxContainer
 var eldritch_section: VBoxContainer
 var divine_section: VBoxContainer
 var guide_label: Label
 var rebirth_story_label: Label
 var ascension_currency_label: Label
+var body_growth_status_label: Label
 var genetic_reset_button: Button
 var eldritch_reset_button: Button
 var divine_halo_button: Button
@@ -150,6 +154,8 @@ var mobile_install_dialog: AcceptDialog
 var mobile_inspection_dialog: AcceptDialog
 var offline_progress_dialog: AcceptDialog
 var browser_update_confirmation: ConfirmationDialog
+var alien_help_dialog: AcceptDialog
+var alien_help_button: Button
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
 var web_file_input: Variant = null
@@ -164,6 +170,9 @@ var is_web_build := false
 var web_storage_persistent := true
 var web_backgrounded_at := 0.0
 var web_last_wall_clock := 0.0
+var web_lifecycle_serial := -1
+var web_last_recovered_hidden_at := 0.0
+var web_lifecycle_poll_elapsed := 1.0
 var web_update_check_elapsed := WEB_UPDATE_CHECK_INTERVAL - 5.0
 var web_update_status_elapsed := 0.0
 var web_update_ready := false
@@ -189,6 +198,7 @@ var mobile_overlay_control: Control
 var mobile_overlay_home: Control
 var mobile_overlay_home_index := -1
 var mobile_tab_navigation: HBoxContainer
+var mobile_tab_label_card: PanelContainer
 var mobile_tab_label: Label
 var mobile_tab_previous_button: Button
 var mobile_tab_next_button: Button
@@ -276,6 +286,7 @@ func _process(delta: float) -> void:
 		return
 	_update_locker_item_hold(delta)
 	if is_web_build:
+		_poll_browser_lifecycle(delta)
 		_update_browser_release_status(delta)
 	if is_web_build and web_backgrounded_at > 0.0:
 		web_last_wall_clock = Time.get_unix_time_from_system()
@@ -384,13 +395,18 @@ func _browser_save_has_more_progress(candidate: Dictionary, baseline: Dictionary
 	var numeric_fields := [
 		"lifetime_pitches", "lifetime_xp", "lifetime_strikeouts", "lifetime_loot_found",
 		"lifetime_field_taps", "lifetime_genetic_rebirths", "lifetime_eldritch_ascensions",
-		"divine_ascensions", "divine_halos",
+		"divine_ascensions", "divine_halos", "body_growth_level",
 	]
 	for field in numeric_fields:
 		var candidate_value := float(candidate.get(field, 0.0))
 		var baseline_value := float(baseline.get(field, 0.0))
 		if candidate_value > baseline_value + maxf(absf(baseline_value) * 0.000000001, 0.000001):
 			return true
+	if (
+		bool(candidate.get("human_league_completed_as_toddler", false))
+		and not bool(baseline.get("human_league_completed_as_toddler", false))
+	):
+		return true
 	return (candidate.get("unlocked_achievements", []) as Array).size() > (baseline.get("unlocked_achievements", []) as Array).size()
 
 func _clear_browser_recovery_mirrors() -> void:
@@ -422,7 +438,7 @@ func _format_browser_save_slot(slot_index: int, data: Dictionary) -> String:
 	return "%s\nLEVEL %d • %s XP • %02d/%02d %02d:%02d" % [
 		heading,
 		clampi(int(data.get("current_opponent", 0)) + 1, 1, Content.OPPONENT_NAMES.size()),
-		BaseballGameState.format_number(maxf(float(data.get("xp", 0.0)), 0.0)),
+		BaseballGameState.format_xp_total(maxf(float(data.get("xp", 0.0)), 0.0)),
 		int(timestamp.get("month", 0)),
 		int(timestamp.get("day", 0)),
 		int(timestamp.get("hour", 0)),
@@ -484,18 +500,13 @@ func _notification(what: int) -> void:
 			game.save_game()
 		get_tree().quit()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_web_build and game != null:
-		web_backgrounded_at = Time.get_unix_time_from_system()
-		if not development_session and not game.save_writes_locked:
-			game.save_game()
+		_mark_browser_background(Time.get_unix_time_from_system())
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN and is_web_build and game != null:
 		var now := Time.get_unix_time_from_system()
 		# Returning to a long-running idle tab is the most useful time to ask the
 		# service worker whether a newer release has landed.
 		web_update_check_elapsed = WEB_UPDATE_CHECK_INTERVAL
-		if web_backgrounded_at > 0.0:
-			_apply_browser_offline_catchup(maxf(now - web_backgrounded_at, 0.0))
-		web_backgrounded_at = 0.0
-		web_last_wall_clock = now
+		_resume_browser_background(web_backgrounded_at, now)
 		_refresh_mobile_install_offer()
 
 func _configure_platform_ui() -> void:
@@ -693,7 +704,33 @@ func _snooze_browser_update() -> void:
 func _request_browser_update() -> void:
 	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
 		return
-	browser_update_confirmation.popup_centered_clamped(Vector2i(570, 285), 0.94)
+	_configure_browser_update_confirmation(mobile_layout)
+	if mobile_layout:
+		browser_update_confirmation.popup_centered_clamped(Vector2i(340, 300), 0.90)
+	else:
+		browser_update_confirmation.popup_centered_clamped(Vector2i(570, 285), 0.94)
+
+func _configure_browser_update_confirmation(for_mobile: bool) -> void:
+	if for_mobile:
+		browser_update_confirmation.title = "BACK UP YOUR SAVE"
+		browser_update_confirmation.dialog_text = (
+			"Updates should keep this save, but phone storage can still be cleared.\n\n"
+			+ "Recommended: cancel, open SAVE, and EXPORT a backup first."
+		)
+		browser_update_confirmation.ok_button_text = "UPDATE"
+		browser_update_confirmation.cancel_button_text = "EXPORT FIRST"
+		browser_update_confirmation.min_size = Vector2i(280, 220)
+	else:
+		browser_update_confirmation.title = "BACK UP BEFORE UPDATING"
+		browser_update_confirmation.dialog_text = (
+			"Browser updates should preserve local progress, and this build keeps a second browser save mirror. "
+			+ "Browser or Home Screen storage can still be cleared or isolated by the operating system.\n\n"
+			+ "Recommended: choose CANCEL, open SAVE, and use EXPORT to download a portable backup. "
+			+ "Continue only if you already have a backup or accept that risk."
+		)
+		browser_update_confirmation.ok_button_text = "UPDATE ANYWAY"
+		browser_update_confirmation.cancel_button_text = "CANCEL — EXPORT FIRST"
+		browser_update_confirmation.min_size = Vector2i(360, 250)
 
 func _install_browser_update() -> void:
 	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
@@ -719,6 +756,64 @@ func _install_browser_update() -> void:
 		update_banner_label.text = "UPDATE READY — RELOAD THIS PAGE"
 		_log_event("The browser could not activate the update automatically. Reload this page to try again.")
 
+func _poll_browser_lifecycle(delta: float) -> void:
+	if not is_web_build or game == null:
+		return
+	web_lifecycle_poll_elapsed += maxf(delta, 0.0)
+	if web_lifecycle_poll_elapsed < 0.25:
+		return
+	web_lifecycle_poll_elapsed = 0.0
+	var raw_snapshot: Variant = JavaScriptBridge.eval(
+		"window.OFPS_PWA && window.OFPS_PWA.lifecycleSnapshot ? window.OFPS_PWA.lifecycleSnapshot() : ''",
+		true
+	)
+	var parsed: Variant = JSON.parse_string(str(raw_snapshot))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var snapshot: Dictionary = parsed
+	var serial := int(snapshot.get("serial", -1))
+	if serial <= web_lifecycle_serial:
+		return
+	web_lifecycle_serial = serial
+	var lifecycle_state := str(snapshot.get("state", "visible"))
+	var hidden_at := maxf(float(snapshot.get("hiddenAt", 0.0)), 0.0)
+	if lifecycle_state == "hidden":
+		_mark_browser_background(hidden_at)
+	else:
+		_resume_browser_background(hidden_at, Time.get_unix_time_from_system())
+
+func _mark_browser_background(hidden_at: float) -> void:
+	if not is_web_build or game == null:
+		return
+	var bounded_hidden_at := hidden_at if hidden_at > 0.0 else Time.get_unix_time_from_system()
+	if web_backgrounded_at > 0.0:
+		web_backgrounded_at = minf(web_backgrounded_at, bounded_hidden_at)
+		return
+	web_backgrounded_at = bounded_hidden_at
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+		_write_browser_save_mirror()
+		JavaScriptBridge.force_fs_sync()
+
+func _resume_browser_background(hidden_at: float, now: float) -> void:
+	if not is_web_build:
+		return
+	var effective_hidden_at := hidden_at
+	if web_backgrounded_at > 0.0:
+		effective_hidden_at = (
+			minf(effective_hidden_at, web_backgrounded_at)
+			if effective_hidden_at > 0.0
+			else web_backgrounded_at
+		)
+	if (
+		effective_hidden_at > 0.0
+		and effective_hidden_at > web_last_recovered_hidden_at + 1.0
+	):
+		_apply_browser_offline_catchup(maxf(now - effective_hidden_at, 0.0))
+		web_last_recovered_hidden_at = effective_hidden_at
+	web_backgrounded_at = 0.0
+	web_last_wall_clock = now
+
 func _consume_browser_wall_clock(delta: float) -> float:
 	if not is_web_build:
 		return delta
@@ -728,11 +823,24 @@ func _consume_browser_wall_clock(delta: float) -> float:
 		return delta
 	var wall_seconds := maxf(now - web_last_wall_clock, 0.0)
 	web_last_wall_clock = now
-	if wall_seconds <= maxf(delta + 1.0, 2.0):
-		return delta
-	var live_seconds := minf(delta, 0.25)
-	_apply_browser_offline_catchup(maxf(wall_seconds - live_seconds, 0.0))
-	return live_seconds
+	var split := _split_browser_elapsed(wall_seconds, delta)
+	_apply_browser_offline_catchup(float(split.offline))
+	return float(split.live)
+
+func _split_browser_elapsed(wall_seconds: float, delta: float) -> Dictionary:
+	# Safari may resume a frozen Home Screen app with one enormous frame delta,
+	# so comparing wall time to delta loses the entire away period. Treat any
+	# wall gap over one second as suspended time except for a small live frame.
+	if wall_seconds <= 1.0:
+		# A lifecycle resume may already have consumed the wall-clock gap and reset
+		# the reference clock before this same giant frame reaches us. Never replay
+		# that giant delta as foreground simulation a second time.
+		return {"live": minf(maxf(delta, 0.0), 0.25) if delta > 1.0 else delta, "offline": 0.0}
+	var live_seconds := minf(maxf(delta, 0.0), 0.25)
+	return {
+		"live": live_seconds,
+		"offline": maxf(wall_seconds - live_seconds, 0.0),
+	}
 
 func _apply_browser_offline_catchup(seconds: float) -> void:
 	if seconds < 1.0 or game == null:
@@ -798,6 +906,7 @@ func _apply_development_arguments() -> void:
 	if "--fresh" in arguments:
 		development_session = true
 		game.reset_fresh()
+		_clear_achievement_toasts()
 	var preview := ""
 	if "--alien-preview" in arguments:
 		preview = "alien"
@@ -809,6 +918,7 @@ func _apply_development_arguments() -> void:
 		return
 	development_session = true
 	game.reset_fresh()
+	_clear_achievement_toasts()
 	game.highest_unlocked = 34 if preview == "alien" else (43 if preview == "eldritch" else 44)
 	game.current_opponent = 33 if preview == "alien" else game.highest_unlocked
 	game._reset_batter_identity()
@@ -1025,7 +1135,7 @@ func _refresh_mobile_tab_navigation(_tab_index := -1) -> void:
 	var visible_indices := _visible_upgrade_tab_indices()
 	var visible_position := visible_indices.find(upgrade_tabs.current_tab)
 	if mobile_tab_label != null and visible_position >= 0:
-		mobile_tab_label.text = "%s TAB  •  %d / %d" % [
+		mobile_tab_label.text = "%s  •  %d / %d" % [
 			upgrade_tabs.get_tab_title(upgrade_tabs.current_tab),
 			visible_position + 1,
 			visible_indices.size(),
@@ -1175,7 +1285,7 @@ func _build_header(parent: Control) -> void:
 	header_title.add_theme_color_override("font_color", COLOR_ACCENT)
 	header_title_stack.add_child(header_title)
 	header_subtitle = Label.new()
-	header_subtitle.text = "A baseball game about a regular ol’ guy"
+	header_subtitle.text = "A baseball game about a regular ol’ toddler"
 	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	header_subtitle.add_theme_font_size_override("font_size", 13)
 	header_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
@@ -1410,7 +1520,7 @@ func _show_mobile_overlay(control: Control, title: String) -> void:
 		_refresh_browser_save_slots()
 	mobile_overlay_title.text = title
 	mobile_overlay_xp_label.visible = control == upgrade_panel
-	mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_number(game.xp)
+	mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_xp_total(game.xp)
 	mobile_overlay_panel.visible = true
 	mobile_overlay_panel.move_to_front()
 
@@ -1529,15 +1639,17 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	root_margin.add_theme_constant_override("margin_right", 5 if mobile_layout else (10 if dense_wide else 14))
 	root_margin.add_theme_constant_override("margin_top", 5 if mobile_layout else (6 if dense_wide else 12))
 	root_margin.add_theme_constant_override("margin_bottom", 5 if mobile_layout else (6 if dense_wide else 12))
-	update_banner.offset_left = -185.0 if mobile_layout else -280.0
-	update_banner.offset_right = 185.0 if mobile_layout else 280.0
+	update_banner.offset_left = -176.0 if mobile_layout else -280.0
+	update_banner.offset_right = 176.0 if mobile_layout else 280.0
 	update_banner.offset_top = 5.0 if mobile_layout else 10.0
 	update_banner.offset_bottom = 61.0 if mobile_layout else 66.0
 	update_banner_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
 	if not update_now_button.disabled:
 		update_banner_label.text = "UPDATE • BACK UP FIRST" if mobile_layout else "UPDATE READY • EXPORT BACKUP FIRST"
 	update_now_button.text = "REVIEW" if mobile_layout else "REVIEW UPDATE"
+	update_now_button.custom_minimum_size.x = 66.0 if mobile_layout else 0.0
 	update_now_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
+	update_later_button.custom_minimum_size.x = 50.0 if mobile_layout else 0.0
 	update_later_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
 	if achievement_toast != null:
 		achievement_toast.offset_left = -176.0 if mobile_layout else -225.0
@@ -1575,9 +1687,13 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (190.0 if dense_wide else 215.0)
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
 	mobile_upgrade_stats_panel.visible = mobile_layout
+	if mobile_tab_label != null:
+		mobile_tab_label.add_theme_font_size_override("font_size", 18 if mobile_layout else 14)
+	if mobile_tab_label_card != null:
+		mobile_tab_label_card.custom_minimum_size.y = 48.0 if mobile_layout else 40.0
 	for catalog_toggle in catalog_hide_purchased_toggles.values():
 		(catalog_toggle as CheckButton).custom_minimum_size.y = 44.0 if mobile_layout else 0.0
-	for collection in [training_buttons, pitch_buttons, ball_upgrade_buttons, milestone_buttons, genetic_buttons, eldritch_buttons, divine_buttons]:
+	for collection in [training_buttons, pitch_buttons, ball_upgrade_buttons, milestone_buttons, body_growth_buttons, genetic_buttons, eldritch_buttons, divine_buttons]:
 		for entry_value in collection.values():
 			var entry: Dictionary = entry_value
 			(entry.container as PanelContainer).custom_minimum_size.y = 88.0 if mobile_layout else 82.0
@@ -1732,6 +1848,7 @@ func _build_play_area(parent: Control) -> void:
 	_build_field_stat_overlay(pitch_field)
 	_build_inventory_dock(pitch_field)
 	_build_opponent_loadout_dock(pitch_field)
+	_build_alien_help_button(pitch_field)
 
 	field_footer = HBoxContainer.new()
 	field_stack.add_child(field_footer)
@@ -1869,6 +1986,35 @@ func _build_equipment_sidebar(parent: Control) -> void:
 	equipment_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_enable_mobile_inspection(equipment_summary_label, "Owned facilities")
 	sidebar.add_child(equipment_summary_label)
+
+func _build_alien_help_button(parent: Control) -> void:
+	alien_help_button = Button.new()
+	alien_help_button.name = "AlienHelpButton"
+	alien_help_button.text = "HELP"
+	alien_help_button.visible = false
+	alien_help_button.focus_mode = Control.FOCUS_NONE
+	alien_help_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	alien_help_button.tooltip_text = "Something impossible has noticed you."
+	alien_help_button.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	alien_help_button.offset_left = -58.0
+	alien_help_button.offset_right = 58.0
+	alien_help_button.offset_top = 10.0
+	alien_help_button.offset_bottom = 54.0
+	alien_help_button.add_theme_color_override("font_color", Color.WHITE)
+	alien_help_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	alien_help_button.add_theme_font_size_override("font_size", 16)
+	var normal_style := _compact_panel_style(15.0, 8.0, 7)
+	normal_style.bg_color = Color("9f1f35")
+	normal_style.border_color = COLOR_BAD
+	var hover_style := normal_style.duplicate() as StyleBoxFlat
+	hover_style.bg_color = Color("c52d46")
+	var pressed_style := normal_style.duplicate() as StyleBoxFlat
+	pressed_style.bg_color = Color("721426")
+	alien_help_button.add_theme_stylebox_override("normal", normal_style)
+	alien_help_button.add_theme_stylebox_override("hover", hover_style)
+	alien_help_button.add_theme_stylebox_override("pressed", pressed_style)
+	alien_help_button.pressed.connect(_accept_alien_help)
+	parent.add_child(alien_help_button)
 
 func _build_inventory_dock(parent: Control) -> void:
 	inventory_dock = HBoxContainer.new()
@@ -2597,13 +2743,23 @@ func _build_upgrade_area(parent: Control) -> void:
 	mobile_tab_navigation.visible = false
 	mobile_tab_navigation.add_theme_constant_override("separation", 8)
 	upgrade_stack.add_child(mobile_tab_navigation)
+	mobile_tab_label_card = PanelContainer.new()
+	mobile_tab_label_card.name = "CurrentUpgradeTabCard"
+	mobile_tab_label_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_tab_label_card.custom_minimum_size.y = 44.0
+	var tab_card_style := _compact_panel_style(10.0, 5.0, 8)
+	tab_card_style.bg_color = Color("17263b")
+	tab_card_style.border_color = Color("3b5b7e")
+	mobile_tab_label_card.add_theme_stylebox_override("panel", tab_card_style)
+	mobile_tab_navigation.add_child(mobile_tab_label_card)
 	mobile_tab_label = Label.new()
-	mobile_tab_label.text = "BROWSE TABS"
+	mobile_tab_label.text = "TRAIN"
 	mobile_tab_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_tab_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mobile_tab_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mobile_tab_label.add_theme_font_size_override("font_size", 11)
-	mobile_tab_label.add_theme_color_override("font_color", COLOR_MUTED)
-	mobile_tab_navigation.add_child(mobile_tab_label)
+	mobile_tab_label.add_theme_font_size_override("font_size", 18)
+	mobile_tab_label.add_theme_color_override("font_color", COLOR_ACCENT)
+	mobile_tab_label_card.add_child(mobile_tab_label)
 	mobile_tab_previous_button = Button.new()
 	mobile_tab_previous_button.name = "PreviousUpgradeTab"
 	_ensure_navigation_icons()
@@ -2820,7 +2976,7 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 		automation_toggles[definition.id] = {"button": toggle, "definition": definition}
 
 func _build_rebirth_tab(tabs: TabContainer) -> void:
-	var content := _create_scroll_tab(tabs, "RESET")
+	var content := _create_scroll_tab(tabs, "GROW UP")
 	rebirth_tab = content.get_parent() as Control
 	rebirth_story_label = Label.new()
 	rebirth_story_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2832,10 +2988,26 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	ascension_currency_label.add_theme_color_override("font_color", COLOR_TEXT)
 	content.add_child(ascension_currency_label)
 
+	human_growth_section = VBoxContainer.new()
+	human_growth_section.add_theme_constant_override("separation", 7)
+	content.add_child(human_growth_section)
+	_section_label(human_growth_section, "I • ORDINARY BIOLOGICAL DEVELOPMENT")
+	body_growth_status_label = Label.new()
+	body_growth_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body_growth_status_label.add_theme_font_size_override("font_size", 12)
+	body_growth_status_label.add_theme_color_override("font_color", COLOR_MUTED)
+	human_growth_section.add_child(body_growth_status_label)
+	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
+		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
+		var entry := _upgrade_row(_definition_tooltip(definition, ["speed", "quality", "recovery"]))
+		(entry.button as Button).pressed.connect(_buy_body_growth.bind(str(definition.id)))
+		human_growth_section.add_child(entry.container)
+		body_growth_buttons[definition.id] = entry
+
 	genetic_section = VBoxContainer.new()
 	genetic_section.add_theme_constant_override("separation", 7)
 	content.add_child(genetic_section)
-	_section_label(genetic_section, "I • GENETIC REBIRTH — THE TIME MACHINE IS FOR OBSTETRICS")
+	_section_label(genetic_section, "II • GENETIC REBIRTH — THE TIME MACHINE IS FOR OBSTETRICS")
 	genetic_reset_button = _upgrade_button("Reset the current body for DNA based on all XP earned by that body.")
 	genetic_reset_button.pressed.connect(_request_genetic_rebirth)
 	genetic_section.add_child(genetic_reset_button)
@@ -2848,7 +3020,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	eldritch_section = VBoxContainer.new()
 	eldritch_section.add_theme_constant_override("separation", 7)
 	content.add_child(eldritch_section)
-	_section_label(eldritch_section, "II • ELDRITCH ASCENSION — DESTROY THIS REALITY RESPONSIBLY")
+	_section_label(eldritch_section, "III • ELDRITCH ASCENSION — DESTROY THIS REALITY RESPONSIBLY")
 	eldritch_reset_button = _upgrade_button("Reset the body, DNA, and every genetic enhancement for Arcana based on total DNA earned in this reality.")
 	eldritch_reset_button.pressed.connect(_request_eldritch_ascension)
 	eldritch_section.add_child(eldritch_reset_button)
@@ -2861,7 +3033,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	divine_section = VBoxContainer.new()
 	divine_section.add_theme_constant_override("separation", 7)
 	content.add_child(divine_section)
-	_section_label(divine_section, "III • DIVINE GRAND SLAM — ONE BLESSING PER SAVED UNIVERSE")
+	_section_label(divine_section, "IV • DIVINE GRAND SLAM — ONE BLESSING PER SAVED UNIVERSE")
 	for definition in Content.DIVINE_BLESSINGS:
 		var entry := _upgrade_row(str(definition.description))
 		(entry.button as Button).pressed.connect(_request_divine_ascension.bind(str(definition.id)))
@@ -3138,6 +3310,7 @@ func _build_confirmation_dialog() -> void:
 	_build_mobile_inspection_dialog()
 	_build_offline_progress_dialog()
 	_build_browser_update_confirmation()
+	_build_alien_help_dialog()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
 	add_child(body_limit_dialog)
@@ -3156,19 +3329,26 @@ func _build_confirmation_dialog() -> void:
 
 func _build_browser_update_confirmation() -> void:
 	browser_update_confirmation = ConfirmationDialog.new()
-	browser_update_confirmation.title = "BACK UP BEFORE UPDATING"
 	browser_update_confirmation.dialog_autowrap = true
-	browser_update_confirmation.min_size = Vector2i(360, 250)
-	browser_update_confirmation.dialog_text = (
-		"Browser updates should preserve local progress, and this build keeps a second browser save mirror. "
-		+ "Browser or Home Screen storage can still be cleared or isolated by the operating system.\n\n"
-		+ "Recommended: choose CANCEL, open SAVE, and use EXPORT to download a portable backup. "
-		+ "Continue only if you already have a backup or accept that risk."
-	)
-	browser_update_confirmation.ok_button_text = "UPDATE ANYWAY"
-	browser_update_confirmation.cancel_button_text = "CANCEL — EXPORT FIRST"
+	_configure_browser_update_confirmation(false)
 	browser_update_confirmation.confirmed.connect(_install_browser_update)
 	add_child(browser_update_confirmation)
+
+func _build_alien_help_dialog() -> void:
+	alien_help_dialog = AcceptDialog.new()
+	alien_help_dialog.name = "AlienHelpDialog"
+	alien_help_dialog.title = "A MAN STEPS OUT OF A PORTAL"
+	alien_help_dialog.dialog_autowrap = true
+	alien_help_dialog.min_size = Vector2i(320, 260)
+	alien_help_dialog.dialog_text = (
+		"He watches Xylophax turn another perfect pitch into an unavoidable Grand Slam. "
+		+ "Then he lowers his sunglasses.\n\n"
+		+ "‘Come with me if you want to… be really good at baseball.’\n\n"
+		+ "He has a Time Machine and an alarming prenatal genetics waiver. Time Travel is now "
+		+ "permanently available in GROW UP whenever this body has earned enough XP."
+	)
+	alien_help_dialog.get_ok_button().text = "GET IN THE PORTAL"
+	add_child(alien_help_dialog)
 
 func _build_offline_progress_dialog() -> void:
 	offline_progress_dialog = AcceptDialog.new()
@@ -3393,15 +3573,12 @@ func _refresh_reveal_visibility() -> void:
 		)
 
 	if reveal_mask != last_reveal_mask:
-		var rebirth_index := rebirth_tab.get_index()
-		upgrade_tabs.set_tab_hidden(rebirth_index, not genetic_revealed)
-		if not genetic_revealed and upgrade_tabs.current_tab == rebirth_index:
-			upgrade_tabs.current_tab = 0
 		automation_section.visible = genetic_revealed
-		genetic_section.visible = genetic_revealed
-		eldritch_section.visible = eldritch_revealed
-		divine_section.visible = divine_revealed
 		last_reveal_mask = reveal_mask
+	genetic_section.visible = genetic_revealed
+	eldritch_section.visible = eldritch_revealed
+	divine_section.visible = divine_revealed
+	ascension_currency_label.visible = genetic_revealed
 
 	header_subtitle.text = _get_game_subtitle()
 	header_subtitle.tooltip_text = header_subtitle.text
@@ -3430,12 +3607,12 @@ func _get_game_subtitle() -> String:
 	if game.eldritch_offer_unlocked or game.highest_unlocked >= Content.ELDRITCH_EXHIBITION_INDEX:
 		return "A baseball game about one guy versus the void"
 	if game.genetic_rebirths > 0 or game.lifetime_genetic_rebirths > 0:
-		return "A baseball game about a genetically modified guy"
+		return "A baseball game about a genetically modified %s" % game.get_body_growth_noun()
 	if game.genetic_offer_unlocked or game.highest_unlocked >= Content.ALIEN_EXHIBITION_INDEX:
-		return "A baseball game about a guy who found aliens"
+		return "A baseball game about a %s who found aliens" % game.get_body_growth_noun()
 	if game.has_milestone("steroids"):
 		return "A baseball game about a big boi"
-	return "A baseball game about a regular ol’ guy"
+	return "A baseball game about a regular ol’ %s" % game.get_body_growth_noun()
 
 func _refresh_guide_text(
 	genetic_revealed: bool,
@@ -3496,7 +3673,7 @@ func _refresh_guide_text(
 	]
 	if genetic_revealed:
 		sections.append(
-			"Xylophax's proposal unlocks prenatal genetic editing and the Time Machine. Genetic rebirth "
+			"The portal stranger unlocks prenatal genetic editing and the Time Machine. Genetic rebirth "
 			+ "resets the baseball climb and Locker for DNA: floor((body XP / 10B)^(1/3)), before multipliers. "
 			+ "Mutations survive later genetic rebirths. Alien batters require four through nine strikes; new "
 			+ "arms, count compression, fielding reflexes, and automation provide new ways to handle them."
@@ -3618,9 +3795,9 @@ func _refresh_interface() -> void:
 		* game.get_xp_multiplier()
 	)
 	_refresh_reveal_visibility()
-	xp_label.text = BaseballGameState.format_number(game.xp)
+	xp_label.text = BaseballGameState.format_xp_total(game.xp)
 	if mobile_overlay_xp_label != null:
-		mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_number(game.xp)
+		mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_xp_total(game.xp)
 	rate_label.text = BaseballGameState.format_number(estimated_xp_per_second)
 	if development_session:
 		save_button.disabled = true
@@ -3633,11 +3810,13 @@ func _refresh_interface() -> void:
 		export_save_button.disabled = false
 		load_save_button.disabled = false
 		hard_reset_button.disabled = false
-	era_label.text = "LEVEL %02d / %02d  •  %s" % [
+	era_label.text = "LEVEL %02d  •  %s" % [
 		game.current_opponent + 1,
-		_visible_campaign_level_count(),
 		opponent.era,
 	]
+	alien_help_button.visible = game.is_alien_help_available()
+	if alien_help_button.visible:
+		alien_help_button.move_to_front()
 	previous_button.disabled = game.current_opponent <= 0
 	next_button.disabled = game.current_opponent >= game.highest_unlocked
 	previous_button.tooltip_text = "Select the previous unlocked batter. A released pitch keeps flying and will resolve against the selected batter."
@@ -3650,7 +3829,7 @@ func _refresh_interface() -> void:
 		if game.cosmos_conquered:
 			next_button.text = "DIVINE OFFER READY"
 		elif game.is_story_exhibition_blocked():
-			next_button.text = "REBIRTH REQUIRED" if not game.get_story_status_text().contains("Offer in") and not game.get_story_status_text().contains("Revelation in") else "EXHIBITION ACTIVE"
+			next_button.text = "REBIRTH REQUIRED" if game.is_story_offer_ready() else "EXHIBITION ACTIVE"
 		elif game.current_opponent < game.highest_unlocked:
 			next_button.text = "NEXT BATTER >"
 		elif game.current_opponent == game.opponents.size() - 1:
@@ -3864,17 +4043,27 @@ func _refresh_equipment() -> void:
 	var arm_count := int(game.get_arm_count())
 	var pitcher_count := int(game.get_clone_count())
 	if _has_eldritch_reveal():
-		body_value.text = "%d %s • %d %s" % [
+		body_value.text = "%s • %d %s • %d %s" % [
+			game.get_body_growth_name(),
 			arm_count,
 			"arm" if arm_count == 1 else "arms",
 			pitcher_count,
 			"pitcher" if pitcher_count == 1 else "pitchers",
 		]
 	elif _has_genetic_reveal():
-		body_value.text = "%d-%s pitcher" % [arm_count, "arm" if arm_count == 1 else "armed"]
+		body_value.text = "%s • %d-%s pitcher" % [
+			game.get_body_growth_name(),
+			arm_count,
+			"arm" if arm_count == 1 else "armed",
+		]
 	else:
-		body_value.text = "Pitcher"
-	body_value.tooltip_text = body_value.text
+		body_value.text = game.get_body_growth_name()
+	body_value.tooltip_text = "%s\nGrowth speed ×%.3f • quality +%.3f • recovery ×%.3f" % [
+		body_value.text,
+		game.get_body_growth_effect_multiplier("speed"),
+		game.get_body_growth_quality_bonus(),
+		game.get_body_growth_effect_multiplier("recovery"),
+	]
 	body_effect.text = "%s cooldown • %d ball%s/release\nBody size ×%.3f" % [
 		BaseballGameState.format_duration(game.get_pitch_cooldown_seconds()),
 		game.get_volley_size(),
@@ -4126,7 +4315,7 @@ func _refresh_purchase_buttons() -> void:
 		toggle.set_pressed_no_signal(enabled)
 
 func _refresh_rebirth_buttons() -> void:
-	var story := "Beat the 30 human opponents to meet the first impossible batter."
+	var story := "%s. Growing up is optional; every ordinary age remains within human limits." % game.get_body_growth_name()
 	if game.cosmos_conquered:
 		story = "GOD: ‘You saved the universe with baseball. I admit I did not have that one.’ Choose one blessing; everything else will be restored."
 	elif game.is_eldritch_exhibition_blocked():
@@ -4134,19 +4323,59 @@ func _refresh_rebirth_buttons() -> void:
 	elif game.eldritch_ascensions > 0:
 		story = "Your consciousness inhabits reality %d. Octathulhu remains technically beatable under the oldest rules of baseball." % (game.eldritch_ascensions + 1)
 	elif game.is_alien_exhibition_blocked():
-		story = "Xylophax hits every pitch for a Grand Slam. After one minute it offers prenatal genetic editing and a Time Machine for the prenatal part."
+		if game.genetic_offer_unlocked:
+			story = "The portal stranger’s Time Machine can restart this life with prenatal baseball modifications."
+		elif game.is_alien_help_available():
+			story = "Xylophax cannot miss. Nothing you own changes the odds. Something red has appeared on the field."
+		else:
+			story = "Xylophax turns every pitch into an unavoidable Grand Slam. Nothing you own changes the odds. Keep watching."
 	elif game.genetic_rebirths > 0:
 		story = "Body %d is legally human in several permissive jurisdictions. Beat the alien leagues at up to Mach 12." % (game.genetic_rebirths + 1)
 	if game.genetic_rebirths > 0 and not game.eldritch_offer_unlocked:
 		story += " Rebirth when the quoted DNA buys a useful mutation; a shallow human loop followed by a deeper alien harvest is usually efficient."
 	rebirth_story_label.text = story
+	var cumulative_speed := game.get_body_growth_effect_multiplier("speed")
+	var cumulative_recovery := game.get_body_growth_effect_multiplier("recovery")
+	body_growth_status_label.text = "%s  •  SIZE ×%.2f  •  SPEED ×%.3f  •  QUALITY +%.3f  •  RECOVERY ×%.3f" % [
+		game.get_body_growth_name(),
+		game.get_body_growth_visual_size(),
+		cumulative_speed,
+		game.get_body_growth_quality_bonus(),
+		cumulative_recovery,
+	]
+	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
+		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
+		var id := str(definition.id)
+		var entry: Dictionary = body_growth_buttons[id]
+		var tooltip := _definition_tooltip(definition, ["speed", "quality", "recovery"])
+		if stage_index <= game.body_growth_level:
+			_set_upgrade_row(
+				entry,
+				"%s\n%s" % [definition.name, definition.description],
+				true,
+				tooltip,
+				"GROWN"
+			)
+		elif stage_index > game.body_growth_level + 1:
+			var previous_stage: Dictionary = Content.BODY_GROWTH_STAGES[stage_index - 1]
+			_set_catalog_lock_text(entry, definition, ["GROW THROUGH %s" % str(previous_stage.get("body_name", previous_stage.name)).to_upper()])
+		elif game.highest_unlocked < int(definition.required_level):
+			_set_catalog_lock(entry, definition)
+		else:
+			var growth_cost := game.get_body_growth_cost(id)
+			_set_upgrade_row(
+				entry,
+				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(growth_cost), definition.description],
+				not game.can_buy_body_growth(id),
+				tooltip
+			)
 	if _has_divine_reveal():
 		ascension_currency_label.text = (
 			"DNA %s  •  Arcana %s  •  Body XP %s  •  Reality DNA %s  •  Universes saved %d"
 			% [
 				BaseballGameState.format_number(float(game.dna), 0),
 				BaseballGameState.format_number(float(game.arcana), 0),
-				BaseballGameState.format_number(game.run_xp),
+				BaseballGameState.format_xp_total(game.run_xp),
 				BaseballGameState.format_number(game.reality_dna_earned, 0),
 				game.divine_ascensions,
 			]
@@ -4155,18 +4384,18 @@ func _refresh_rebirth_buttons() -> void:
 		ascension_currency_label.text = "DNA %s  •  Arcana %s  •  Body XP %s  •  Reality DNA %s" % [
 			BaseballGameState.format_number(float(game.dna), 0),
 			BaseballGameState.format_number(float(game.arcana), 0),
-			BaseballGameState.format_number(game.run_xp),
+			BaseballGameState.format_xp_total(game.run_xp),
 			BaseballGameState.format_number(game.reality_dna_earned, 0),
 		]
 	else:
 		ascension_currency_label.text = "DNA %s  •  Body XP %s" % [
 			BaseballGameState.format_number(float(game.dna), 0),
-			BaseballGameState.format_number(game.run_xp),
+			BaseballGameState.format_xp_total(game.run_xp),
 		]
 
 	var potential_dna := game.get_potential_dna()
 	if not game.genetic_offer_unlocked:
-		genetic_reset_button.text = "GENETIC REBIRTH LOCKED\nBeat human baseball, then survive Xylophax for one minute."
+		genetic_reset_button.text = "GENETIC REBIRTH LOCKED\nReach Xylophax, witness one impossible minute, and find help."
 		genetic_reset_button.disabled = true
 	elif game.highest_unlocked < Content.ALIEN_EXHIBITION_INDEX:
 		genetic_reset_button.text = "GENETIC REBIRTH NOT READY\nReach Xylophax again; current body XP still determines the award."
@@ -4287,7 +4516,7 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 		BaseballGameState.format_number(float(pitch_field.get_visual_capacity()), 0),
 	]
 	stat_labels.lifetime_pitches.text = BaseballGameState.format_number(game.lifetime_pitches)
-	stat_labels.lifetime_xp.text = BaseballGameState.format_number(game.lifetime_xp)
+	stat_labels.lifetime_xp.text = BaseballGameState.format_xp_total(game.lifetime_xp)
 	stat_labels.achievements.text = "%d / %d • +%d%% • XP ×%.2f" % [
 		game.unlocked_achievements.size(),
 		Content.ACHIEVEMENTS.size(),
@@ -4326,13 +4555,23 @@ func _show_next_achievement_toast() -> void:
 	achievement_toast.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	achievement_toast.visible = true
 	achievement_toast.move_to_front()
-	var tween := create_tween()
-	tween.tween_property(achievement_toast, "modulate:a", 1.0, 0.16)
-	tween.tween_interval(2.35)
-	tween.tween_property(achievement_toast, "modulate:a", 0.0, 0.30)
-	tween.tween_callback(_finish_achievement_toast)
+	achievement_toast_tween = create_tween()
+	achievement_toast_tween.tween_property(achievement_toast, "modulate:a", 1.0, 0.16)
+	achievement_toast_tween.tween_interval(2.35)
+	achievement_toast_tween.tween_property(achievement_toast, "modulate:a", 0.0, 0.30)
+	achievement_toast_tween.tween_callback(_finish_achievement_toast)
+
+func _clear_achievement_toasts() -> void:
+	if achievement_toast_tween != null and achievement_toast_tween.is_valid():
+		achievement_toast_tween.kill()
+	achievement_toast_tween = null
+	achievement_toast_queue.clear()
+	achievement_toast_showing = false
+	if achievement_toast != null:
+		achievement_toast.visible = false
 
 func _finish_achievement_toast() -> void:
+	achievement_toast_tween = null
 	achievement_toast.visible = false
 	achievement_toast_showing = false
 	_show_next_achievement_toast()
@@ -4437,6 +4676,15 @@ func _previous_opponent() -> void:
 func _next_opponent() -> void:
 	game.set_current_opponent(game.current_opponent + 1)
 
+func _accept_alien_help() -> void:
+	if not game.accept_alien_help():
+		return
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+	var popup_size := Vector2i(350, 350) if mobile_layout else Vector2i(560, 300)
+	alien_help_dialog.popup_centered_clamped(popup_size, 0.92)
+	_refresh_interface()
+
 func _move_closer() -> void:
 	game.set_distance_index(game.selected_distance_index - 1)
 	_refresh_interface()
@@ -4450,6 +4698,11 @@ func _buy_training(id: String) -> void:
 		_show_body_limit_dialog()
 		return
 	game.buy_training(id)
+	_refresh_interface()
+
+func _buy_body_growth(id: String) -> void:
+	if game.buy_body_growth(id) and not development_session and not game.save_writes_locked:
+		game.save_game()
 	_refresh_interface()
 
 func _show_body_limit_dialog() -> void:
@@ -4737,7 +4990,7 @@ func _stage_import_save(text: String, source_name: String) -> void:
 		source_name if not source_name.is_empty() else "selected backup",
 		saved_version,
 		saved_level,
-		BaseballGameState.format_number(saved_xp),
+		BaseballGameState.format_xp_total(saved_xp),
 	]
 	import_save_confirmation.popup_centered(Vector2i(610, 260))
 

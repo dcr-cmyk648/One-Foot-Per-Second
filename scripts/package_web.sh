@@ -86,6 +86,8 @@ if ! /usr/bin/grep -q 'apple-mobile-web-app-capable' "${OFPS_WEB_BUILD_DIR}/inde
 		|| ! /usr/bin/grep -q 'rel="apple-touch-icon"' "${OFPS_WEB_BUILD_DIR}/index.html" \
 		|| ! /usr/bin/grep -q 'beforeinstallprompt' "${OFPS_WEB_BUILD_DIR}/index.html" \
 		|| ! /usr/bin/grep -q 'wakeLock.request' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q 'lifecycleSnapshot' "${OFPS_WEB_BUILD_DIR}/index.html" \
+		|| ! /usr/bin/grep -q "addEventListener('pagehide'" "${OFPS_WEB_BUILD_DIR}/index.html" \
 		|| ! /usr/bin/grep -q '"display":"standalone"' "${OFPS_WEB_BUILD_DIR}/index.manifest.json" \
 		|| ! /usr/bin/grep -q '"sizes":"192x192"' "${OFPS_WEB_BUILD_DIR}/index.manifest.json"; then
 	echo "Web export is missing its mobile installation or screen-wake metadata." >&2

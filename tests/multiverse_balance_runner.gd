@@ -16,7 +16,7 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 303003
 	game.loot_drops_enabled = false
-	print("No Hitter — v0.12.0 multiverse pacing simulation")
+	print("No Hitter — multiverse pacing simulation")
 	_log_checkpoint("BEGIN")
 	while elapsed < MAX_SECONDS and not game.cosmos_conquered:
 		_purchase_meta_upgrades()
@@ -59,6 +59,9 @@ func _initialize() -> void:
 
 func _perform_story_or_strategy_reset() -> bool:
 	if game.is_alien_exhibition_blocked():
+		if game.is_alien_help_available():
+			game.accept_alien_help()
+			print("%s  HELP ACCEPTED — TIME MACHINE UNLOCKED" % _format_clock(elapsed))
 		if game.genetic_offer_unlocked and game.get_potential_dna() > 0:
 			var award := game.perform_genetic_rebirth()
 			reset_count += 1
@@ -165,6 +168,11 @@ func _purchase_available_content() -> void:
 	var bought := true
 	while bought:
 		bought = false
+		for definition in Content.BODY_GROWTH_STAGES:
+			if game.can_buy_body_growth(str(definition.id)):
+				game.buy_body_growth(str(definition.id))
+				purchase_count += 1
+				bought = true
 		for definition in Content.PITCHES:
 			if game.can_buy_pitch(str(definition.id)):
 				game.buy_pitch(str(definition.id))

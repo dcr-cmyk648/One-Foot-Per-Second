@@ -7,11 +7,12 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("No Hitter — v0.12.0 multiverse regression suite")
+	print("No Hitter — multiverse regression suite")
 	_test_content()
 	_test_achievements()
 	_test_no_hitter_challenge()
 	_test_initial_balance_and_velocity_layers()
+	_test_body_growth()
 	_test_pitch_phase_state_machine()
 	_test_live_field_contract()
 	_test_field_tapping()
@@ -91,6 +92,17 @@ func _test_content() -> void:
 	_expect(Content.SIGNATURE_BATTER_NAMES[44] == "Octathulhu, God of the Eightfold Swing", "Final named opponent changed unexpectedly")
 	_expect(Content.PITCHES.size() == 14, "Expected fourteen pitch types")
 	_expect(Content.TRAINING.size() == 9, "Expected nine repeatable training axes")
+	_expect(Content.BODY_GROWTH_STAGES.size() == 6, "Ordinary growth should run from toddler through regular adult")
+	_expect(str(Content.BODY_GROWTH_STAGES[0].id) == "toddler", "Every fresh life should begin as a toddler")
+	_expect(str(Content.BODY_GROWTH_STAGES.back().id) == "regular_guy", "The human growth track should end as a regular ol’ guy")
+	var previous_growth_level := -1
+	var previous_growth_cost := -1.0
+	for growth_stage_value in Content.BODY_GROWTH_STAGES:
+		var growth_stage: Dictionary = growth_stage_value
+		_expect(int(growth_stage.required_level) >= previous_growth_level, "Body stages must remain ordered by campaign unlock")
+		_expect(float(growth_stage.cost) >= previous_growth_cost, "Body-stage costs must remain ordered")
+		previous_growth_level = int(growth_stage.required_level)
+		previous_growth_cost = float(growth_stage.cost)
 	var training_ids: Array[String] = []
 	for definition in Content.TRAINING:
 		training_ids.append(str(definition.id))
@@ -354,6 +366,45 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	_expect_close(game.get_velocity_fps(), BaseballGameState.SPEED_OF_LIGHT_FPS, "Eldritch pitching must stop at exactly 1c")
 	_expect(BaseballGameState.format_speed(game.get_velocity_fps()).ends_with("c"), "Relativistic speed should use c notation")
 	game.free()
+
+func _test_body_growth() -> void:
+	var game: BaseballGameState = GameStateScript.new()
+	_expect(game.body_growth_level == 0, "A fresh life should begin at the toddler body stage")
+	_expect(game.get_body_growth_name() == "Regular Ol’ Toddler", "The fresh loadout should identify the toddler body")
+	var speed_before := game.get_body_velocity_fps()
+	var quality_before := game.get_pitch_quality()
+	var recovery_before := game.get_recovery_rate()
+	var size_before := game.get_pitcher_size_multiplier()
+	game.highest_unlocked = 1
+	game.xp = 10.0
+	_expect(game.buy_body_growth("little_kid"), "Level 2 should permit the first optional growth purchase")
+	_expect(game.body_growth_level == 1 and game.get_body_growth_noun() == "little kid", "Growth should advance exactly one biological stage")
+	_expect(game.get_body_velocity_fps() > speed_before, "Growing should increase the body's base throw speed")
+	_expect(game.get_pitch_quality() > quality_before, "Growing should increase command quality")
+	_expect(game.get_recovery_rate() > recovery_before, "Growing should improve recovery")
+	_expect(game.get_pitcher_size_multiplier() > size_before, "The rendered pitcher should visibly grow with the body")
+	_expect(not game.buy_body_growth("big_kid"), "Growth stages must still honor their campaign-level requirement")
+	game._reset_body_progress()
+	_expect(game.body_growth_level == 0, "Time travel should restart the player as a toddler")
+	game.free()
+
+	var toddler_champion: BaseballGameState = GameStateScript.new()
+	toddler_champion.highest_unlocked = Content.HUMAN_FINAL_INDEX
+	toddler_champion.current_opponent = Content.HUMAN_FINAL_INDEX
+	toddler_champion.opponent_mastery[Content.HUMAN_FINAL_INDEX] = toddler_champion.get_mastery_requirement(Content.HUMAN_FINAL_INDEX)
+	toddler_champion._check_opponent_unlock()
+	_expect(toddler_champion.human_league_completed_as_toddler, "Clearing human baseball without growth should record the toddler challenge")
+	_expect(toddler_champion.has_achievement("human_champion_toddler"), "The toddler human-league clear should unlock Past Your Bedtime")
+	toddler_champion.free()
+
+	var grown_champion: BaseballGameState = GameStateScript.new()
+	grown_champion.body_growth_level = 1
+	grown_champion.highest_unlocked = Content.HUMAN_FINAL_INDEX
+	grown_champion.current_opponent = Content.HUMAN_FINAL_INDEX
+	grown_champion.opponent_mastery[Content.HUMAN_FINAL_INDEX] = grown_champion.get_mastery_requirement(Content.HUMAN_FINAL_INDEX)
+	grown_champion._check_opponent_unlock()
+	_expect(not grown_champion.human_league_completed_as_toddler, "Growing even once should disqualify the toddler-only clear")
+	grown_champion.free()
 
 func _test_pitch_phase_state_machine() -> void:
 	var frame_sync_game: BaseballGameState = GameStateScript.new()
@@ -1345,6 +1396,12 @@ func _test_progression_and_purchases() -> void:
 	_expect(BaseballGameState.format_cost(18.0) == "20", "Costs should round upward readably")
 	_expect(BaseballGameState.format_cost(240.0) == "300", "Hundreds should round to one significant digit")
 	_expect(BaseballGameState.format_cost(1.0e15) == "1e15", "Scientific costs should normalize")
+	_expect(BaseballGameState.format_xp_total(0.18) == "0.18", "Sub-one XP balances should retain useful fractional precision")
+	_expect(BaseballGameState.format_xp_total(1.4) == "1", "Spendable XP balances should round to a whole number")
+	_expect(BaseballGameState.format_xp_total(12.6) == "13", "Whole-XP display should use ordinary rounding")
+	_expect(BaseballGameState.format_xp_total(1234.0) == "1K", "Large XP balances should not reintroduce suffix decimals")
+	_expect(BaseballGameState.format_xp_total(999500.0) == "1M", "Rounded XP suffixes should normalize at unit boundaries")
+	_expect(BaseballGameState.format_xp_total(9.95e15) == "1e16", "Rounded scientific XP should normalize its exponent")
 	_expect(game.buy_pitch("four_seam"), "The four-seam should purchase")
 	game.highest_unlocked = maxi(game.highest_unlocked, 11)
 	game.training_levels.offline_efficiency = 0
@@ -1407,10 +1464,20 @@ func _test_story_exhibitions_and_reset_boundaries() -> void:
 	game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
 	_expect(game.is_alien_exhibition_blocked(), "The first alien exhibition should be unwinnable")
 	_expect(game.get_outcome_probabilities() == [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "Xylophax should hit 100% Grand Slams before the offer")
-	game.simulate_offline(59.0)
-	_expect(not game.genetic_offer_unlocked, "The genetic offer should not arrive before one minute")
-	game.simulate_offline(1.0)
-	_expect(game.genetic_offer_unlocked, "The genetic offer should arrive at one minute")
+	game.simulate_offline(600.0)
+	_expect_close(game.alien_exhibition_seconds, 0.0, "The player must personally witness the alien exhibition; offline time cannot advance it")
+	game.opponent_mastery[Content.ALIEN_EXHIBITION_INDEX] = 1.0e20
+	game.frustration_points = 1.0e20
+	game.training_levels.command = 1000000
+	_expect(game.get_outcome_probabilities() == [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "Stats, mastery, and Frustration must not create a hidden lottery at the scripted alien wall")
+	game.simulate_active_time(59.0)
+	_expect(not game.is_alien_help_available() and not game.genetic_offer_unlocked, "HELP should not appear before the witnessed minute is complete")
+	game.simulate_active_time(1.0)
+	_expect(game.is_alien_help_available(), "A witnessed minute should reveal the unobtrusive HELP action")
+	_expect(not game.genetic_offer_unlocked, "The Time Machine must wait for the player to notice and click HELP")
+	_expect(game.accept_alien_help(), "Clicking HELP should accept the portal stranger's offer")
+	_expect(game.genetic_offer_unlocked and not game.is_alien_help_available(), "The accepted HELP scene should permanently unlock Time Travel and dismiss itself")
+	_expect(not game.accept_alien_help(), "The one-time HELP scene should not be accepted twice")
 	game.run_xp = BaseballGameState.DNA_XP_THRESHOLD * 1000.0
 	_expect(game.get_potential_dna() == 10, "DNA should be the cube root of normalized body XP")
 	var dna_award := game.perform_genetic_rebirth()
@@ -1505,6 +1572,8 @@ func _test_save_round_trip_and_migration() -> void:
 	original.lifetime_eldritch_ascensions = 3
 	original.divine_ascensions = 2
 	original.divine_halos = 1
+	original.body_growth_level = 4
+	original.human_league_completed_as_toddler = true
 	original.reality_dna_earned = 456.0
 	original.genetic_offer_unlocked = true
 	original.eldritch_offer_unlocked = true
@@ -1540,6 +1609,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(restored.plate_strikes == 3 and restored.plate_balls == 2 and restored.batter_cooldown_remaining > 0.0, "The complete live count should survive saves")
 	_expect_close(restored.get_clone_count(), 4.0, "Eldritch clones should survive saves")
 	_expect(restored.has_divine_blessing("let_there_be_fastballs") and restored.divine_halos == 1, "Divine rewards should survive saves")
+	_expect(restored.body_growth_level == 4 and restored.human_league_completed_as_toddler, "Body age and the toddler-clear proof should survive saves")
 	_expect("four_seam" in restored.unlocked_pitches and restored.has_milestone("regulation_ball"), "Ordinary purchases should survive saves")
 	_expect_close(restored.opponent_mastery[3], 77.0, "Mastery should survive saves")
 	_expect(int(restored.training_levels.turnover) == 7, "Batter-cooldown training should survive saves")
@@ -1564,6 +1634,14 @@ func _test_save_round_trip_and_migration() -> void:
 		"v16 Frustration migration should preserve the exact quality bonus"
 	)
 	_expect(not version_sixteen.to_save_data().has("seconds_since_strikeout"), "Current saves should retire the time-based Frustration field")
+	var version_seventeen: BaseballGameState = GameStateScript.new()
+	version_seventeen.apply_save_data({
+		"version": 17,
+		"highest_unlocked": 18,
+		"current_opponent": 18,
+	})
+	_expect(version_seventeen.body_growth_level == 4, "Pre-growth saves should infer an age appropriate to their campaign level")
+	_expect(not version_seventeen.human_league_completed_as_toddler, "Migration must never invent the secret toddler clear")
 
 	var legacy_data := {
 		"version": 5,
@@ -1629,6 +1707,7 @@ func _test_save_round_trip_and_migration() -> void:
 	version_eight.free()
 	early_v13.free()
 	version_sixteen.free()
+	version_seventeen.free()
 
 func _test_cosmic_completion_and_magnitude() -> void:
 	var game: BaseballGameState = GameStateScript.new()

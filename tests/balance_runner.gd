@@ -15,11 +15,14 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 424242
 	game.loot_drops_enabled = false
-	print("No Hitter — v0.12.0 first-human-lifetime pacing simulation")
+	print("No Hitter — first-human-lifetime pacing simulation")
 	print("00:00:00  Level 01  %s" % game.opponents[0].name)
 	while elapsed < MAX_SECONDS and not game.genetic_offer_unlocked:
 		_purchase_available_content()
 		_purchase_training()
+		if game.is_alien_help_available():
+			game.accept_alien_help()
+			continue
 		if game.current_opponent != game.highest_unlocked:
 			game.current_opponent = game.highest_unlocked
 			game._reset_batter_identity()
@@ -86,6 +89,11 @@ func _purchase_available_content() -> void:
 	var bought := true
 	while bought:
 		bought = false
+		for definition in Content.BODY_GROWTH_STAGES:
+			if game.can_buy_body_growth(str(definition.id)):
+				game.buy_body_growth(str(definition.id))
+				purchase_count += 1
+				bought = true
 		for definition in Content.PITCHES:
 			if game.can_buy_pitch(str(definition.id)):
 				game.buy_pitch(str(definition.id))
