@@ -111,6 +111,7 @@ func _run() -> void:
 	_expect(main.update_banner_label.text.contains("BACK UP"), "The update banner should warn phone players before reloading")
 	_expect(main.update_now_button.text == "REVIEW", "A phone update should open a warning instead of updating immediately")
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.dialog_text.contains("portable backup"), "The update confirmation should recommend exporting a portable backup")
+	_expect(main.browser_update_confirmation.dialog_autowrap and main.browser_update_confirmation.min_size.x <= 360, "The update warning should wrap inside a 390-pixel phone viewport")
 	main._snooze_browser_update()
 	_expect(not main.update_banner.visible, "Choosing Later should dismiss the browser update banner")
 	main.is_web_build = false

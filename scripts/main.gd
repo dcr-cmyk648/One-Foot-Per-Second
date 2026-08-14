@@ -3079,6 +3079,8 @@ func _build_confirmation_dialog() -> void:
 func _build_browser_update_confirmation() -> void:
 	browser_update_confirmation = ConfirmationDialog.new()
 	browser_update_confirmation.title = "BACK UP BEFORE UPDATING"
+	browser_update_confirmation.dialog_autowrap = true
+	browser_update_confirmation.min_size = Vector2i(360, 250)
 	browser_update_confirmation.dialog_text = (
 		"Browser updates should preserve local progress, and this build keeps a second browser save mirror. "
 		+ "Browser or Home Screen storage can still be cleared or isolated by the operating system.\n\n"

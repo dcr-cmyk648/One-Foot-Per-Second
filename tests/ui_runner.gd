@@ -160,6 +160,7 @@ func _run() -> void:
 	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
 	_expect(main.browser_save_slot_entries.size() == 3, "The shared interface should build three phone manual-save slots")
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE ANYWAY", "Browser updates should require an explicit backup-aware confirmation")
+	_expect(main.browser_update_confirmation.dialog_autowrap, "The browser-update warning must wrap instead of overflowing a resized window")
 	_expect(not main.import_save_confirmation.visible, "The load-save replacement confirmation should begin closed")
 	_expect(not main.offline_progress_dialog.visible, "The offline-XP return popup should begin closed")
 	main._show_offline_progress({
