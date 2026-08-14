@@ -25,6 +25,20 @@ func _run() -> void:
 	await process_frame
 
 	print("No Hitter — progressive-interface audit")
+	_expect(main.title_screen_active and main.title_screen.visible, "The game should open on its title screen instead of pitching behind an unexplained UI")
+	_expect(main.title_subtitle_label.text == "A baseball game about a regular ol’ toddler", "The fresh title should remain spoiler-free")
+	_expect(main.title_art._visible_era() == 0, "Fresh title art must not reveal alien or cosmic imagery")
+	_expect(main.title_menu_stack.get_child_count() == 3, "The title should expose Resume, New Game, and Import Save")
+	main._open_title_resume_picker()
+	_expect(main.title_resume_stack.visible and not main.title_menu_stack.visible, "Resume should open the save-slot picker")
+	_expect(main.title_manual_slot_entries.size() == 3, "The title picker should expose all three manual save slots")
+	main._close_title_resume_picker()
+	main._leave_title_screen(false)
+	_expect(not main.title_screen.visible and main.return_to_title_button.text == "TITLE", "Desktop play should retain a path back to the title screen")
+	main.return_to_title_button.pressed.emit()
+	await process_frame
+	_expect(main.title_screen_active and main.title_screen.visible, "The in-game TITLE button should save and return to the title screen")
+	main._leave_title_screen(false)
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -165,7 +179,7 @@ func _run() -> void:
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
 	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
 	_expect(main.browser_save_slot_entries.size() == 3, "The shared interface should build three phone manual-save slots")
-	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE ANYWAY", "Browser updates should require an explicit backup-aware confirmation")
+	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE", "Browser updates should require an explicit backup-aware confirmation")
 	_expect(main._browser_save_has_more_progress({"lifetime_pitches": 100.0}, {"lifetime_pitches": 1.0}), "Browser recovery should recognize a demonstrably more advanced mirror")
 	var normal_elapsed: Dictionary = main._split_browser_elapsed(0.20, 0.20)
 	_expect(is_equal_approx(float(normal_elapsed.live), 0.20) and is_zero_approx(float(normal_elapsed.offline)), "Normal browser frames should remain live simulation time")
@@ -197,6 +211,21 @@ func _run() -> void:
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "The destructive reset window should begin closed and locked")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ toddler", "Fresh human baseball needs the toddler subtitle")
 	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Toddler", "The default loadout should identify the player's current body")
+	_expect((main.equipment_labels.body.value as Label).tooltip_text.contains("Toddler penalties"), "The opening body inspection should explain why the toddler is so weak")
+	_expect(main.status_stat_labels.size() == 9 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Desktop Status should populate every effective progression stat")
+	_expect(main.equipment_summary_label.text == "No facilities owned yet", "Fresh Status should not imply an owned or unrevealed upgrade")
+	main.game.purchased_milestones.append("regulation_ball")
+	main._refresh_interface()
+	_expect(main.equipment_progression_list.get_child_count() == 2, "An owned facility should receive its own inspectable Status row")
+	_expect((main.equipment_progression_list.get_child(1) as Control).tooltip_text.contains("A Regulation Baseball"), "Owned Status rows should identify their upgrade")
+	main.game.purchased_milestones.erase("regulation_ball")
+	main._refresh_interface()
+	_expect((main.body_growth_buttons.little_kid.container as Control).visible, "The Regular Ol’ Little Kid option should be visible from level 1")
+	_expect((main.body_growth_buttons.little_kid.button as Button).disabled, "Growth should remain disabled until the first strikeout supplies its 3 XP cost")
+	main.game.xp = main.game.get_strikeout_base_points()
+	main._refresh_interface()
+	_expect(not (main.body_growth_buttons.little_kid.button as Button).disabled, "One opening strikeout should afford the first growth step")
+	main.game.xp = 0.0
 	main.game.body_growth_level = 1
 	main._refresh_interface()
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ little kid", "Growing should immediately update the milestone subtitle")
@@ -334,6 +363,9 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 	_expect(main.header_subtitle.text == "A baseball game about a toddler who found aliens", "Alien contact should update the subtitle using the current body")
+	main._show_title_screen(false)
+	_expect(main.title_art._visible_era() == 1 and main.title_progress_label.text.contains("LEVEL 31"), "Reached alien play should update the title art without revealing later eras")
+	main._leave_title_screen(false)
 	_expect(main.alien_help_button.visible and main.alien_help_button.text == "HELP", "A witnessed impossible inning should quietly reveal the red HELP action")
 	_expect(not main.genetic_section.visible and not main.rebirth_story_label.text.contains("genetic"), "The impossible exhibition must not spoil its solution before HELP is clicked")
 	main._accept_alien_help()
@@ -371,6 +403,9 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 	_expect(main.header_subtitle.text == "A baseball game about saving the universe, somehow", "Cosmic victory should complete the subtitle arc")
+	main._show_title_screen(false)
+	_expect(main.title_art._visible_era() == 3, "Cosmic victory should unlock the complete title treatment")
+	main._leave_title_screen(false)
 	_expect(main.divine_section.visible, "Cosmic victory did not reveal divine rewards")
 	_expect(main.stat_rows.completion.visible, "Cosmic victory did not reveal completion stats")
 	_expect(main.guide_label.text.contains("divine blessing"), "Cosmic victory did not expand the Guide")

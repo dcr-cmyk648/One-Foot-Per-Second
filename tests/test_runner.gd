@@ -94,6 +94,8 @@ func _test_content() -> void:
 	_expect(Content.TRAINING.size() == 9, "Expected nine repeatable training axes")
 	_expect(Content.BODY_GROWTH_STAGES.size() == 6, "Ordinary growth should run from toddler through regular adult")
 	_expect(str(Content.BODY_GROWTH_STAGES[0].id) == "toddler", "Every fresh life should begin as a toddler")
+	_expect(float(Content.BODY_GROWTH_STAGES[1].cost) == 3.0 and int(Content.BODY_GROWTH_STAGES[1].required_level) == 0, "A first strikeout should immediately afford the Little Kid growth option")
+	_expect(str(Content.BODY_GROWTH_STAGES[0].description).contains("penalties"), "The opening body should disclose its substantial toddler penalties")
 	_expect(str(Content.BODY_GROWTH_STAGES.back().id) == "regular_guy", "The human growth track should end as a regular ol’ guy")
 	var previous_growth_level := -1
 	var previous_growth_cost := -1.0
@@ -375,13 +377,13 @@ func _test_body_growth() -> void:
 	var quality_before := game.get_pitch_quality()
 	var recovery_before := game.get_recovery_rate()
 	var size_before := game.get_pitcher_size_multiplier()
-	game.highest_unlocked = 1
-	game.xp = 10.0
-	_expect(game.buy_body_growth("little_kid"), "Level 2 should permit the first optional growth purchase")
+	game.xp = 3.0
+	_expect(game.buy_body_growth("little_kid"), "The first optional growth purchase should be available before leaving level 1")
 	_expect(game.body_growth_level == 1 and game.get_body_growth_noun() == "little kid", "Growth should advance exactly one biological stage")
 	_expect(game.get_body_velocity_fps() > speed_before, "Growing should increase the body's base throw speed")
 	_expect(game.get_pitch_quality() > quality_before, "Growing should increase command quality")
 	_expect(game.get_recovery_rate() > recovery_before, "Growing should improve recovery")
+	_expect(game.get_body_velocity_fps() >= speed_before * 1.24, "Escaping the toddler body should feel materially stronger than incremental Training")
 	_expect(game.get_pitcher_size_multiplier() > size_before, "The rendered pitcher should visibly grow with the body")
 	_expect(not game.buy_body_growth("big_kid"), "Growth stages must still honor their campaign-level requirement")
 	game._reset_body_progress()

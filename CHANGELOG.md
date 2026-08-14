@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.1 — The title card has seen things
+
+- Added a responsive title screen with Resume Game, Start New Game, and Import Save. Resume opens the autosave and three device-local manual slots; starting over keeps those slots and exported backups behind the existing typed `RESET` safeguard.
+- Added an animated abstract title matchup that follows historical farthest progress without spoilers: backyard baseball first, alien imagery only after alien contact, the void only after reaching it, and the complete cosmic treatment only after victory.
+- Added a Return to Title action to the in-game Saves interface, including a touch-sized phone presentation that closes its overlay cleanly before showing the title.
+- Generalized the three manual save slots to native and browser storage. Existing phone localStorage slots remain readable and Web saves are mirrored and flushed for update resilience.
+- Rebalanced ordinary growth around a genuinely weak toddler body. The immediate 3-XP Regular Ol’ Little Kid purchase now provides a conspicuous first speed, quality, recovery, and size jump while the full adult track preserves the intended human finale pace.
+- Rebuilt Status around all nine effective live stats and an inspectable list of purchased Facilities, mutations, magic, and blessings. Only systems the player has actually revealed or bought appear.
+- Replaced the oversized browser update warning with a phone-bounded Export / Later / Update decision that keeps cancellation distinct from backup export.
+- Kept save schema 18 for direct compatibility, regenerated the shared browser/native packages, and expanded desktop/phone interface audits to cover title art disclosure, save selection, title return, Status, and update bounds.
+
 ## 0.12.0 — The title is also a threat
 
 - Renamed the game **No Hitter** across the live interface, install metadata, native packages, browser manifest, documentation, and Sites shell. Existing browser URLs, app identifiers, and the original local-data directory remain stable so installed saves continue working.

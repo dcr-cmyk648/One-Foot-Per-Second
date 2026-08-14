@@ -25,10 +25,19 @@ func _run() -> void:
 	main.offline_progress_dialog.hide()
 	main._refresh_interface()
 	main._set_mobile_layout(true, true)
+	main._configure_title_layout(Vector2(390.0, 844.0))
 	await process_frame
 	await process_frame
 
 	print("No Hitter — portrait browser-interface audit")
+	_expect(main.title_screen_active and main.title_screen.visible, "Phone launches should begin on the title screen")
+	_expect(main.title_panel.size.x <= 366.0 and main.title_panel.position.x >= 0.0 and main.title_panel.position.x + main.title_panel.size.x <= main.title_screen.size.x, "The phone title panel should fit horizontally: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
+	_expect(main.title_panel.size.y <= 820.0 and main.title_panel.position.y >= 0.0 and main.title_panel.position.y + main.title_panel.size.y <= main.title_screen.size.y, "The phone title panel should fit vertically: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
+	_expect(main.title_art._visible_era() == 0, "Fresh phone title art must remain spoiler-free")
+	main._open_title_resume_picker()
+	_expect(main.title_resume_stack.visible and not main.title_art_frame.visible, "The phone save picker should replace the art instead of overflowing beneath it")
+	main._close_title_resume_picker()
+	main._leave_title_screen(false)
 	_expect(main.mobile_layout, "Phone layout did not activate")
 	_expect(main.mobile_portrait_layout, "Portrait field orientation did not activate")
 	_expect(is_equal_approx(main._normalize_browser_content_scale(3.0), 3.0), "A 3× phone display must retain its logical content scale")
@@ -105,20 +114,30 @@ func _run() -> void:
 	_expect(main._format_browser_save_slot(0, {}).contains("SLOT 1\nEMPTY"), "An unused phone save slot should identify itself as empty")
 	var slot_summary: String = main._format_browser_save_slot(1, {"current_opponent": 4, "xp": 123.0, "saved_at": 1_700_000_000})
 	_expect(slot_summary.contains("SLOT 2") and slot_summary.contains("LEVEL 5") and slot_summary.contains("123 XP"), "Occupied phone save slots should show level and XP at a glance")
+	main._show_mobile_overlay(main.save_stack, "SAVES & TRANSFER")
+	await process_frame
+	_expect(main.return_to_title_button.text == "RETURN TO TITLE" and main.return_to_title_button.get_combined_minimum_size().y >= 44.0, "The phone Saves menu should provide a touch-sized return to title action")
+	main.return_to_title_button.pressed.emit()
+	await process_frame
+	_expect(main.title_screen_active and main.title_screen.visible and not main.mobile_overlay_panel.visible, "Return to Title should close the phone Saves overlay and reveal the title screen")
+	main._leave_title_screen(false)
 	main._on_browser_update_available()
 	await process_frame
 	_expect(main.update_banner.visible, "An available browser release should show the update banner")
 	_expect(main.update_banner.size.x <= 370.0, "The browser update banner should fit a 390-pixel phone")
 	_expect(main.update_banner_label.text.contains("BACK UP"), "The update banner should warn phone players before reloading")
 	_expect(main.update_now_button.text == "REVIEW", "A phone update should open a warning instead of updating immediately")
-	main._configure_browser_update_confirmation(true)
-	main.browser_update_confirmation.popup_centered_clamped(Vector2i(340, 300), 0.90)
+	main._show_browser_update_confirmation()
 	await process_frame
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.title == "BACK UP YOUR SAVE", "The phone update confirmation should recommend exporting a backup")
 	_expect(main.browser_update_confirmation.dialog_autowrap and main.browser_update_confirmation.min_size.x <= 360, "The update warning should wrap inside a 390-pixel phone viewport")
-	_expect(main.browser_update_confirmation.size.x <= 350 and main.browser_update_confirmation.size.y <= 760, "The complete phone update warning should fit inside a 390-by-844 display")
+	_expect(
+		main.browser_update_confirmation.size.x <= 350 and main.browser_update_confirmation.size.y <= 760,
+		"The complete phone update warning should fit inside a 390-by-844 display, not %s" % str(main.browser_update_confirmation.size)
+	)
+	_expect(main.browser_update_export_button != null and main.browser_update_export_button.text == "EXPORT", "The phone update warning should provide a direct portable-backup action")
 	var update_cancel: Button = main.browser_update_confirmation.get_cancel_button()
-	_expect(update_cancel.position.y + update_cancel.size.y <= main.browser_update_confirmation.size.y, "The phone update warning's safe cancel action should remain inside the dialog")
+	_expect(update_cancel.text == "LATER" and update_cancel.position.y + update_cancel.size.y <= main.browser_update_confirmation.size.y, "The phone update warning's safe Later action should remain inside the dialog")
 	main.browser_update_confirmation.hide()
 	main._snooze_browser_update()
 	_expect(not main.update_banner.visible, "Choosing Later should dismiss the browser update banner")
@@ -305,9 +324,11 @@ func _run() -> void:
 	await process_frame
 	_expect(not main.locker_dialog.visible, "The in-content equipment Close button should dismiss the browser")
 
-	main._show_mobile_overlay(main.equipment_sidebar, "LOADOUT")
+	main._show_mobile_overlay(main.equipment_sidebar, "STATUS")
 	await process_frame
-	_expect(main.equipment_sidebar.get_parent() == main.mobile_overlay_content, "Loadout should open in the same phone overlay")
+	_expect(main.equipment_sidebar.get_parent() == main.mobile_overlay_content, "Status should open in the same phone overlay")
+	_expect(main.status_stat_labels.size() == 9 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Phone Status should show all nine effective progression stats")
+	_expect(main.equipment_progression_heading.text == "OWNED FACILITIES", "Fresh Status should not imply unrevealed prestige systems")
 	main._close_mobile_overlay()
 	root.size = Vector2i(1179, 720)
 	main._set_mobile_layout(true, false, true)

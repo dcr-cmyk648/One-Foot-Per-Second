@@ -1,4 +1,4 @@
-# No Hitter — v0.13.0 Balance Audit
+# No Hitter — v0.13.1 Balance Audit
 
 ## Outcome
 
@@ -6,10 +6,10 @@ The complete campaign is long but finite, every prestige layer changes the strat
 
 | Milestone | Approximate active-production time |
 |---|---:|
-| Human baseball cleared | 1 d 9 h |
-| Portal HELP / first genetic rebirth | 1 d 9 h 30 m |
+| Human baseball cleared | 1 d 8 h |
+| Portal HELP / first genetic rebirth | 1 d 8 h 30 m |
 | First useful replay harvest | 2 d 11 h 30 m |
-| Mid-alien harvest | 4 d 5 h |
+| Mid-alien harvest | 4 d 4 h 30 m |
 | First four-digit DNA harvest | 8 d 12 h |
 | Final pre-eldritch climb completed | 27 d 15 h |
 | First eldritch ascension | 27 d 18 h |
@@ -87,24 +87,24 @@ The 101 achievements are deliberately modest individually and additive rather th
 achievement XP multiplier = 1 + completed achievements × 0.01
 ```
 
-Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; after optional aging, per-Strike adaptation, and the larger mastery targets, the current first human lifetime is roughly 33 hours and the first cosmic victory is 56 d 3 h. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; after optional aging, per-Strike adaptation, and the larger mastery targets, the current first human lifetime is roughly 32 hours and the first cosmic victory is 56 d 3 h. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
 
 ## Complete reset cadence
 
 The current greedy audit uses twelve lower-layer resets, approximately:
 
-1. `+23 DNA` after noticing HELP and accepting the portal stranger's offer.
+1. `+22 DNA` after noticing HELP and accepting the portal stranger's offer.
 2. `+35 DNA` after the first human replay.
-3. `+173 DNA` in the alien circuit.
-4. `+1,429 DNA` on a deeper alien run.
-5. `+2,899 DNA` on the next championship harvest.
-6. `+3,947 DNA` for the final pre-eldritch build-out.
+3. `+174 DNA` in the alien circuit.
+4. `+1,426 DNA` on a deeper alien run.
+5. `+2,900 DNA` on the next championship harvest.
+6. `+3,948 DNA` for the final pre-eldritch build-out.
 7. `+227 Arcana` after N'Kthra; most is immediately invested.
-8. `+276 DNA` during the first magic-assisted replay.
-9. `+68,096 DNA` after a deep new-reality harvest.
-10. `+796 Arcana` on the deeper eldritch ascension.
-11. `+921 DNA` in the next reality.
-12. `+301,863 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
+8. `+279 DNA` during the first magic-assisted replay.
+9. `+77,996 DNA` after a deep new-reality harvest.
+10. `+863 Arcana` on the deeper eldritch ascension.
+11. `+931 DNA` in the next reality.
+12. `+345,758 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
 
 The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
 
@@ -116,7 +116,7 @@ The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jump
 - Alien biology caps at Mach 12; the alien championship gate requires Mach 3.
 - Eldritch bodies can reach exactly 1c; Octathulhu rejects anything slower.
 - Fresh recovery is `0.25 pitches/s`: a four-second wind-up before flight.
-- The tested age-buying curve remains about `0.26/s` at level 3, `0.73/s` at level 10, `1.74/s` at level 20, and `3.65/s` at the first human finale. Human play still permits only one unresolved pitch, so travel time remains visible even when recovery improves.
+- The tested age-buying curve remains about `0.29/s` at level 3, `0.85/s` at level 10, `1.96/s` at level 20, and `3.85/s` at the first human finale. Human play still permits only one unresolved pitch, so travel time remains visible even when recovery improves.
 
 Speed purchases stop at the current body's cap. The ordinary button says only `Base speed +0.15 ft/s`; the cap and its spoiler-light hint appear only after the player actually reaches it and tries to buy more.
 
@@ -126,14 +126,14 @@ The optional body track is sequential and sits in GROW UP:
 
 | Body | Unlock level | Cost | Incremental effect | Visual-size floor |
 |---|---:|---:|---|---:|
-| Regular Ol’ Toddler | 1 | — | baseline | ×1.00 |
-| Little Kid | 2 | 10 XP | speed ×1.08; quality +0.02; recovery ×1.03 | ×1.10 |
-| Big Kid | 6 | 500 XP | speed ×1.12; quality +0.03; recovery ×1.04 | ×1.21 |
-| Gangly Teenager | 12 | 100K XP | speed ×1.18; quality +0.05; recovery ×1.06 | ×1.34 |
-| Young Adult | 19 | 25M XP | speed ×1.25; quality +0.08; recovery ×1.08 | ×1.47 |
-| Regular Ol’ Guy | 25 | 10B XP | speed ×1.35; quality +0.12; recovery ×1.10 | ×1.60 |
+| Regular Ol’ Toddler | 1 | — | vs. adult: speed ×0.44; quality −0.30; recovery ×0.70 | ×1.00 |
+| Regular Ol’ Little Kid | 1 | 3 XP | speed ×1.25; quality +0.08; recovery ×1.15 | ×1.12 |
+| Big Kid | 6 | 500 XP | speed ×1.18; quality +0.06; recovery ×1.08 | ×1.21 |
+| Gangly Teenager | 12 | 100K XP | speed ×1.18; quality +0.06; recovery ×1.06 | ×1.34 |
+| Young Adult | 19 | 25M XP | speed ×1.16; quality +0.05; recovery ×1.05 | ×1.47 |
+| Regular Ol’ Guy | 25 | 10B XP | speed ×1.12; quality +0.05; recovery ×1.03 | ×1.60 |
 
-These bonuses do not raise the human cap. Skipping them is a valid challenge route rather than a progression softlock.
+The opening 1 ft/s, 0.45-Quality, 0.25/s body is deliberately a heavily penalized toddler. The 3-XP Little Kid purchase is available immediately and converts most first strikeouts into a clear, satisfying growth jump. These bonuses do not raise the human cap. Skipping them is a valid challenge route rather than a progression softlock.
 
 Ordinary Training has one clear purchase per displayed base stat:
 

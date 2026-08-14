@@ -3,6 +3,7 @@ extends Control
 const Content = preload("res://scripts/content.gd")
 const GameStateScript = preload("res://scripts/game_state.gd")
 const PitchFieldScript = preload("res://scripts/pitch_field.gd")
+const TitleArtScript = preload("res://scripts/title_art.gd")
 
 const COLOR_BG := Color("050810")
 const COLOR_PANEL := Color("101827")
@@ -53,8 +54,11 @@ var favorite_open_icon: ImageTexture
 var favorite_kept_icon: ImageTexture
 var distance_label: Label
 var equipment_labels := {}
+var status_stat_labels := {}
 var equipment_summary_label: Label
 var equipment_progression_heading: Label
+var equipment_progression_list: VBoxContainer
+var last_owned_upgrade_list_signature := ""
 var visual_weight_label: Label
 var last_result_label: Label
 var outcome_panels: Array[PanelContainer] = []
@@ -154,10 +158,15 @@ var mobile_install_dialog: AcceptDialog
 var mobile_inspection_dialog: AcceptDialog
 var offline_progress_dialog: AcceptDialog
 var browser_update_confirmation: ConfirmationDialog
+var browser_update_export_button: Button
 var alien_help_dialog: AcceptDialog
 var alien_help_button: Button
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
+var pending_import_returns_from_title := false
+var pending_title_offline_summary: Dictionary = {}
+var pending_title_offline_prefix := "Welcome back"
+var pending_new_game_from_title := false
 var web_file_input: Variant = null
 var web_file_reader: Variant = null
 var web_file_selected_callback: Variant = null
@@ -232,6 +241,19 @@ var field_stat_panel: PanelContainer
 var locker_slot_grid: GridContainer
 var header_metric_stacks: Array[VBoxContainer] = []
 var header_metric_headings: Array[Label] = []
+var return_to_title_button: Button
+var title_screen: ColorRect
+var title_panel: PanelContainer
+var title_art
+var title_art_frame: PanelContainer
+var title_subtitle_label: Label
+var title_progress_label: Label
+var title_menu_stack: VBoxContainer
+var title_resume_stack: VBoxContainer
+var title_autosave_label: Label
+var title_autosave_button: Button
+var title_manual_slot_entries: Array[Dictionary] = []
+var title_screen_active := false
 
 func _ready() -> void:
 	is_web_build = OS.has_feature("web") or OS.has_feature("browser_build")
@@ -268,6 +290,7 @@ func _ready() -> void:
 	if is_web_build and not web_storage_persistent:
 		_log_event("Browser storage is temporary here. Use EXPORT after playing if you want to keep this run.")
 	_refresh_interface()
+	_show_title_screen(false)
 	if game.save_writes_locked:
 		_log_event("An existing save could not be read and has not been overwritten. Use LOAD to recover it or RESET to deliberately start over.")
 		call_deferred("_show_save_recovery_required")
@@ -420,30 +443,32 @@ func _clear_browser_recovery_mirrors() -> void:
 func _browser_save_slot_key(slot_index: int) -> String:
 	return "no_hitter_manual_save_slot_%d" % (clampi(slot_index, 0, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1) + 1)
 
+func _manual_save_slot_path(slot_index: int) -> String:
+	return "user://no_hitter_manual_save_slot_%d.json" % (
+		clampi(slot_index, 0, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1) + 1
+	)
+
 func _read_browser_save_slot(slot_index: int) -> Dictionary:
-	if not is_web_build:
-		return {}
-	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
-	if storage == null:
-		return {}
-	var slot_text := str(storage.getItem(_browser_save_slot_key(slot_index)))
+	var slot_text := ""
+	var slot_path := _manual_save_slot_path(slot_index)
+	if FileAccess.file_exists(slot_path):
+		var file := FileAccess.open(slot_path, FileAccess.READ)
+		if file != null and file.get_length() <= BaseballGameState.MAX_IMPORTED_SAVE_CHARACTERS:
+			slot_text = file.get_as_text()
+		if file != null:
+			file.close()
+	# Existing phone installations stored these slots synchronously in
+	# localStorage. Keep reading that generation as a migration and redundancy
+	# path so the new cross-platform picker never strands it after an update.
+	if slot_text.is_empty() and is_web_build:
+		var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+		if storage != null:
+			slot_text = str(storage.getItem(_browser_save_slot_key(slot_index)))
 	var decoded := game.decode_save_text(slot_text)
 	return decoded.data if bool(decoded.get("ok", false)) else {}
 
 func _format_browser_save_slot(slot_index: int, data: Dictionary) -> String:
-	var heading := "SLOT %d" % (slot_index + 1)
-	if data.is_empty():
-		return "%s\nEMPTY" % heading
-	var timestamp := Time.get_datetime_dict_from_unix_time(int(data.get("saved_at", 0)))
-	return "%s\nLEVEL %d • %s XP • %02d/%02d %02d:%02d" % [
-		heading,
-		clampi(int(data.get("current_opponent", 0)) + 1, 1, Content.OPPONENT_NAMES.size()),
-		BaseballGameState.format_xp_total(maxf(float(data.get("xp", 0.0)), 0.0)),
-		int(timestamp.get("month", 0)),
-		int(timestamp.get("day", 0)),
-		int(timestamp.get("hour", 0)),
-		int(timestamp.get("minute", 0)),
-	]
+	return _format_named_save("SLOT %d" % (slot_index + 1), data)
 
 func _refresh_browser_save_slots() -> void:
 	if browser_save_slots_panel == null:
@@ -455,21 +480,30 @@ func _refresh_browser_save_slots() -> void:
 		(entry.load_button as Button).disabled = data.is_empty()
 
 func _save_browser_slot(slot_index: int) -> void:
-	if not is_web_build or game == null or development_session:
+	if game == null or development_session:
 		return
 	if game.save_writes_locked:
 		_show_save_recovery_required()
 		return
 	if not game.save_game():
 		return
-	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
-	if storage == null:
-		_show_save_transfer_error("This browser is not allowing a manual save slot.")
+	var save_text := game.get_save_json()
+	var file := FileAccess.open(_manual_save_slot_path(slot_index), FileAccess.WRITE)
+	if file == null:
+		_show_save_transfer_error("This device is not allowing a manual save slot.")
 		return
-	storage.setItem(_browser_save_slot_key(slot_index), game.get_save_json())
+	file.store_string(save_text)
+	file.close()
+	if is_web_build:
+		var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+		if storage != null:
+			storage.setItem(_browser_save_slot_key(slot_index), save_text)
+		JavaScriptBridge.force_fs_sync()
 	_refresh_browser_save_slots()
+	if title_screen_active and title_resume_stack.visible:
+		_refresh_title_save_picker()
 	_on_save_status_changed("Saved to slot %d" % (slot_index + 1))
-	_log_event("Manual phone save written to Slot %d." % (slot_index + 1))
+	_log_event("Manual save written to Slot %d." % (slot_index + 1))
 
 func _load_browser_slot(slot_index: int) -> void:
 	var data := _read_browser_save_slot(slot_index)
@@ -704,33 +738,44 @@ func _snooze_browser_update() -> void:
 func _request_browser_update() -> void:
 	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
 		return
-	_configure_browser_update_confirmation(mobile_layout)
-	if mobile_layout:
-		browser_update_confirmation.popup_centered_clamped(Vector2i(340, 300), 0.90)
-	else:
-		browser_update_confirmation.popup_centered_clamped(Vector2i(570, 285), 0.94)
+	_show_browser_update_confirmation()
+
+func _show_browser_update_confirmation() -> void:
+	# Restore any reparented mobile menu before opening a Window. In particular,
+	# this keeps an update requested from SAVES from fighting that full-screen
+	# overlay for focus and ensures the save controls have a valid home at reload.
+	if mobile_overlay_control != null:
+		_close_mobile_overlay()
+	var viewport_size := _get_responsive_viewport_size()
+	var compact := (
+		mobile_layout
+		or _is_portrait_viewport(viewport_size)
+		or viewport_size.x < 600.0
+	)
+	_configure_browser_update_confirmation(compact)
+	var requested_size := Vector2i(320, 210) if compact else Vector2i(440, 210)
+	var clamp_ratio := 0.88 if compact else 0.94
+	browser_update_confirmation.popup_centered_clamped(requested_size, clamp_ratio)
 
 func _configure_browser_update_confirmation(for_mobile: bool) -> void:
-	if for_mobile:
-		browser_update_confirmation.title = "BACK UP YOUR SAVE"
-		browser_update_confirmation.dialog_text = (
-			"Updates should keep this save, but phone storage can still be cleared.\n\n"
-			+ "Recommended: cancel, open SAVE, and EXPORT a backup first."
-		)
-		browser_update_confirmation.ok_button_text = "UPDATE"
-		browser_update_confirmation.cancel_button_text = "EXPORT FIRST"
-		browser_update_confirmation.min_size = Vector2i(280, 220)
-	else:
-		browser_update_confirmation.title = "BACK UP BEFORE UPDATING"
-		browser_update_confirmation.dialog_text = (
-			"Browser updates should preserve local progress, and this build keeps a second browser save mirror. "
-			+ "Browser or Home Screen storage can still be cleared or isolated by the operating system.\n\n"
-			+ "Recommended: choose CANCEL, open SAVE, and use EXPORT to download a portable backup. "
-			+ "Continue only if you already have a backup or accept that risk."
-		)
-		browser_update_confirmation.ok_button_text = "UPDATE ANYWAY"
-		browser_update_confirmation.cancel_button_text = "CANCEL — EXPORT FIRST"
-		browser_update_confirmation.min_size = Vector2i(360, 250)
+	browser_update_confirmation.title = "BACK UP YOUR SAVE"
+	browser_update_confirmation.dialog_text = (
+		"Choose EXPORT for a portable backup, or install the update now.\n\n"
+		+ "Progress should be preserved, but browser storage can still be cleared."
+	)
+	browser_update_confirmation.ok_button_text = "UPDATE"
+	browser_update_confirmation.cancel_button_text = "LATER"
+	browser_update_confirmation.min_size = (
+		Vector2i(260, 170) if for_mobile else Vector2i(360, 180)
+	)
+
+func _handle_browser_update_custom_action(action: StringName) -> void:
+	if action != &"export_backup":
+		return
+	# Defer the shared export flow until the confirmation has released its modal
+	# focus. Closing the window or choosing LATER remains a true cancel action.
+	browser_update_confirmation.hide()
+	call_deferred("_request_export_save")
 
 func _install_browser_update() -> void:
 	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
@@ -880,6 +925,10 @@ func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
 func _show_offline_progress(summary: Dictionary, prefix: String) -> void:
 	var earned_xp := float(summary.get("earned_xp", 0.0))
 	if earned_xp <= 0.0 or offline_progress_dialog == null:
+		return
+	if title_screen_active:
+		pending_title_offline_summary = summary.duplicate(true)
+		pending_title_offline_prefix = prefix
 		return
 	var detail_lines: Array[String] = [
 		"Away for %s" % BaseballGameState.format_duration(float(summary.get("offline_seconds", 0.0))),
@@ -1194,12 +1243,291 @@ func _build_interface() -> void:
 	_build_confirmation_dialog()
 	_build_update_banner()
 	_build_achievement_toast()
+	_build_title_screen()
+
+func _build_title_screen() -> void:
+	title_screen = ColorRect.new()
+	title_screen.name = "TitleScreen"
+	title_screen.color = COLOR_BG
+	title_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_screen.mouse_filter = Control.MOUSE_FILTER_STOP
+	title_screen.z_index = 350
+	title_screen_active = true
+	add_child(title_screen)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_screen.add_child(center)
+	title_panel = PanelContainer.new()
+	title_panel.name = "TitlePanel"
+	title_panel.add_theme_stylebox_override("panel", _compact_panel_style(18.0, 14.0, 12))
+	center.add_child(title_panel)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 9)
+	title_panel.add_child(stack)
+	var heading := Label.new()
+	heading.text = "NO HITTER"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 38)
+	heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	stack.add_child(heading)
+	title_subtitle_label = Label.new()
+	title_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_subtitle_label.add_theme_font_size_override("font_size", 14)
+	title_subtitle_label.add_theme_color_override("font_color", COLOR_MUTED)
+	stack.add_child(title_subtitle_label)
+
+	title_art_frame = PanelContainer.new()
+	title_art_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	title_art_frame.add_theme_stylebox_override("panel", _compact_panel_style(3.0, 3.0, 9))
+	stack.add_child(title_art_frame)
+	title_art = TitleArtScript.new()
+	title_art.name = "ProgressiveTitleArt"
+	title_art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_art.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	title_art.custom_minimum_size.y = 300.0
+	title_art_frame.add_child(title_art)
+
+	title_progress_label = Label.new()
+	title_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_progress_label.add_theme_font_size_override("font_size", 11)
+	title_progress_label.add_theme_color_override("font_color", COLOR_GOLD)
+	stack.add_child(title_progress_label)
+
+	title_menu_stack = VBoxContainer.new()
+	title_menu_stack.add_theme_constant_override("separation", 7)
+	stack.add_child(title_menu_stack)
+	var resume_button := _title_menu_button("RESUME GAME")
+	resume_button.pressed.connect(_open_title_resume_picker)
+	title_menu_stack.add_child(resume_button)
+	var new_game_button := _title_menu_button("START NEW GAME")
+	new_game_button.tooltip_text = "Begin from the backyard. Existing progress requires a typed RESET; manual slots and exported backups remain."
+	new_game_button.pressed.connect(_request_new_game_from_title)
+	title_menu_stack.add_child(new_game_button)
+	var import_button := _title_menu_button("IMPORT SAVE")
+	import_button.tooltip_text = "Choose a portable No Hitter JSON backup."
+	import_button.pressed.connect(_request_load_save)
+	title_menu_stack.add_child(import_button)
+
+	title_resume_stack = VBoxContainer.new()
+	title_resume_stack.visible = false
+	title_resume_stack.add_theme_constant_override("separation", 6)
+	stack.add_child(title_resume_stack)
+	var resume_heading := Label.new()
+	resume_heading.text = "CHOOSE A SAVE"
+	resume_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	resume_heading.add_theme_font_size_override("font_size", 15)
+	resume_heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	title_resume_stack.add_child(resume_heading)
+	var autosave_row := _title_save_row("AUTOSAVE")
+	title_resume_stack.add_child(autosave_row.container)
+	title_autosave_label = autosave_row.label
+	title_autosave_button = autosave_row.button
+	title_autosave_button.pressed.connect(_resume_loaded_autosave)
+	for slot_index in BROWSER_MANUAL_SAVE_SLOT_COUNT:
+		var slot_row := _title_save_row("SLOT %d" % (slot_index + 1))
+		title_resume_stack.add_child(slot_row.container)
+		(slot_row.button as Button).pressed.connect(_load_browser_slot.bind(slot_index))
+		title_manual_slot_entries.append(slot_row)
+	var back_button := _title_menu_button("BACK")
+	back_button.pressed.connect(_close_title_resume_picker)
+	title_resume_stack.add_child(back_button)
+
+func _title_menu_button(text_value: String) -> Button:
+	var button := Button.new()
+	button.text = text_value
+	button.custom_minimum_size.y = 48.0
+	button.focus_mode = Control.FOCUS_ALL
+	button.add_theme_font_size_override("font_size", 16)
+	return button
+
+func _title_save_row(default_text: String) -> Dictionary:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _compact_panel_style(8.0, 5.0, 7))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+	var label := Label.new()
+	label.text = "%s\nEMPTY" % default_text
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_color_override("font_color", COLOR_TEXT)
+	row.add_child(label)
+	var button := Button.new()
+	button.text = "LOAD"
+	button.custom_minimum_size = Vector2(72.0, 44.0)
+	button.focus_mode = Control.FOCUS_ALL
+	row.add_child(button)
+	return {"container": panel, "label": label, "button": button}
+
+func _show_title_screen(save_current := true) -> void:
+	if title_screen == null:
+		return
+	if mobile_overlay_control != null:
+		_close_mobile_overlay()
+	if save_current and not development_session and not game.save_writes_locked:
+		game.save_game()
+		autosave_elapsed = 0.0
+	title_screen_active = true
+	title_menu_stack.visible = true
+	title_resume_stack.visible = false
+	title_art_frame.visible = true
+	title_progress_label.visible = true
+	_refresh_title_screen()
+	_refresh_title_layout()
+	title_screen.visible = true
+	title_screen.move_to_front()
+
+func _return_to_title_screen() -> void:
+	_show_title_screen(true)
+
+func _leave_title_screen(show_pending_offline := true) -> void:
+	if title_screen == null:
+		return
+	title_screen_active = false
+	title_screen.visible = false
+	title_menu_stack.visible = true
+	title_resume_stack.visible = false
+	title_art_frame.visible = true
+	title_progress_label.visible = true
+	if show_pending_offline and not pending_title_offline_summary.is_empty():
+		var summary := pending_title_offline_summary.duplicate(true)
+		var prefix := pending_title_offline_prefix
+		pending_title_offline_summary.clear()
+		_show_offline_progress(summary, prefix)
+	_refresh_interface()
+
+func _refresh_title_screen() -> void:
+	if title_screen == null or game == null:
+		return
+	title_subtitle_label.text = _get_game_subtitle()
+	var highest := game.get_historical_highest_opponent()
+	var has_progress := _browser_save_has_progress(game.to_save_data())
+	if has_progress:
+		var era_index := clampi(int(highest / 5), 0, Content.ERA_NAMES.size() - 1)
+		title_progress_label.text = "FARTHEST REACHED • LEVEL %02d • %s" % [
+			highest + 1,
+			str(Content.ERA_NAMES[era_index]),
+		]
+	else:
+		title_progress_label.text = "THE BACKYARD IS WAITING"
+	title_art.configure(
+		highest,
+		_has_genetic_reveal(),
+		_has_eldritch_reveal(),
+		_has_divine_reveal()
+	)
+
+func _refresh_title_layout() -> void:
+	if title_panel == null:
+		return
+	_configure_title_layout(_get_responsive_viewport_size())
+
+func _configure_title_layout(viewport_size: Vector2) -> void:
+	if title_panel == null:
+		return
+	var portrait := _is_portrait_viewport(viewport_size)
+	var panel_width := clampf(viewport_size.x - 24.0, 300.0, 620.0)
+	var maximum_height := 600.0 if title_resume_stack != null and title_resume_stack.visible else 780.0
+	var panel_height := clampf(viewport_size.y - 24.0, 460.0, maximum_height)
+	title_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+	title_art.custom_minimum_size.y = clampf(
+		panel_height - (320.0 if portrait else 330.0),
+		170.0,
+		300.0
+	)
+
+func _open_title_resume_picker() -> void:
+	_refresh_title_save_picker()
+	title_menu_stack.visible = false
+	title_resume_stack.visible = true
+	title_art_frame.visible = false
+	title_progress_label.visible = false
+	_refresh_title_layout()
+
+func _close_title_resume_picker() -> void:
+	title_resume_stack.visible = false
+	title_menu_stack.visible = true
+	title_art_frame.visible = true
+	title_progress_label.visible = true
+	_refresh_title_layout()
+
+func _refresh_title_save_picker() -> void:
+	var autosave_data := game.to_save_data()
+	var autosave_available := (
+		game.last_load_succeeded
+		or _browser_save_has_progress(autosave_data)
+		or FileAccess.file_exists(BaseballGameState.SAVE_PATH)
+		or FileAccess.file_exists(BaseballGameState.SAVE_BACKUP_PATH)
+	)
+	title_autosave_label.text = (
+		_format_named_save("AUTOSAVE", autosave_data)
+		if autosave_available
+		else "AUTOSAVE\nEMPTY"
+	)
+	title_autosave_button.disabled = not autosave_available
+	for slot_index in title_manual_slot_entries.size():
+		var entry: Dictionary = title_manual_slot_entries[slot_index]
+		var data := _read_browser_save_slot(slot_index)
+		(entry.label as Label).text = _format_browser_save_slot(slot_index, data)
+		(entry.button as Button).disabled = data.is_empty()
+
+func _format_named_save(name: String, data: Dictionary) -> String:
+	if data.is_empty():
+		return "%s\nEMPTY" % name
+	var timestamp := Time.get_datetime_dict_from_unix_time(int(data.get("saved_at", 0)))
+	return "%s\nLEVEL %d • %s XP • %02d/%02d %02d:%02d" % [
+		name,
+		clampi(int(data.get("current_opponent", 0)) + 1, 1, Content.OPPONENT_NAMES.size()),
+		BaseballGameState.format_xp_total(maxf(float(data.get("xp", 0.0)), 0.0)),
+		int(timestamp.get("month", 0)),
+		int(timestamp.get("day", 0)),
+		int(timestamp.get("hour", 0)),
+		int(timestamp.get("minute", 0)),
+	]
+
+func _resume_loaded_autosave() -> void:
+	_leave_title_screen()
+
+func _request_new_game_from_title() -> void:
+	var has_current_progress := (
+		game.save_writes_locked
+		or game.last_load_succeeded
+		or _browser_save_has_progress(game.to_save_data())
+		or FileAccess.file_exists(BaseballGameState.SAVE_PATH)
+		or FileAccess.file_exists(BaseballGameState.SAVE_BACKUP_PATH)
+	)
+	if not has_current_progress:
+		_start_fresh_title_game()
+		return
+	pending_new_game_from_title = true
+	_request_hard_reset()
+
+func _start_fresh_title_game() -> void:
+	pending_title_offline_summary.clear()
+	game.reset_fresh()
+	game.save_writes_locked = false
+	browser_save_regression_allowed = true
+	pitch_field.reset_visual_state()
+	last_reveal_mask = -1
+	last_loot_revision = -1
+	last_loot_ui_signature = ""
+	last_owned_upgrade_list_signature = ""
+	opponent_loadout_signature = ""
+	event_log.clear()
+	if not development_session:
+		game.save_game()
+	_leave_title_screen(false)
+	_log_event("A new backyard career begins at one foot per second.")
 
 func _build_update_banner() -> void:
 	update_banner = PanelContainer.new()
 	update_banner.name = "BrowserUpdateBanner"
 	update_banner.visible = false
-	update_banner.z_index = 300
+	update_banner.z_index = 400
 	update_banner.mouse_filter = Control.MOUSE_FILTER_STOP
 	update_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	update_banner.offset_left = -280.0
@@ -1331,12 +1659,23 @@ func _build_header(parent: Control) -> void:
 	hard_reset_button.tooltip_text = "Permanently erase this save. Requires typing RESET in a confirmation window."
 	hard_reset_button.pressed.connect(_request_hard_reset)
 	save_action_row.add_child(hard_reset_button)
+	var save_status_row := HBoxContainer.new()
+	save_status_row.add_theme_constant_override("separation", 4)
+	save_stack.add_child(save_status_row)
 	save_label = Label.new()
 	save_label.text = "autosave on"
+	save_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	save_label.add_theme_font_size_override("font_size", 10)
 	save_label.add_theme_color_override("font_color", COLOR_MUTED)
-	save_stack.add_child(save_label)
+	save_status_row.add_child(save_label)
+	return_to_title_button = Button.new()
+	return_to_title_button.text = "TITLE"
+	return_to_title_button.custom_minimum_size = Vector2(48.0, 24.0)
+	return_to_title_button.add_theme_font_size_override("font_size", 9)
+	return_to_title_button.tooltip_text = "Save the current run and return to the title screen."
+	return_to_title_button.pressed.connect(_return_to_title_screen)
+	save_status_row.add_child(return_to_title_button)
 	_build_browser_save_slots(save_stack)
 
 func _build_browser_save_slots(parent: Control) -> void:
@@ -1346,12 +1685,12 @@ func _build_browser_save_slots(parent: Control) -> void:
 	browser_save_slots_panel.add_theme_constant_override("separation", 5)
 	parent.add_child(browser_save_slots_panel)
 	var heading := Label.new()
-	heading.text = "MANUAL PHONE SAVES"
+	heading.text = "MANUAL SAVE SLOTS"
 	heading.add_theme_font_size_override("font_size", 12)
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	browser_save_slots_panel.add_child(heading)
 	var note := Label.new()
-	note.text = "Stored in this browser. EXPORT is the portable cross-device backup."
+	note.text = "Stored on this device. EXPORT is the portable cross-device backup."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.add_theme_font_size_override("font_size", 10)
 	note.add_theme_color_override("font_color", COLOR_MUTED)
@@ -1412,9 +1751,9 @@ func _build_mobile_navigation(parent: Control) -> void:
 	parent.add_child(mobile_nav)
 	var entries := [
 		["UPGRADES", "Upgrades", func() -> void: _show_mobile_overlay(upgrade_panel, "UPGRADES")],
-		["LOADOUT", "Current ball, pitches, body, and facilities", func() -> void: _show_mobile_overlay(equipment_sidebar, "LOADOUT")],
+		["STATUS", "Stats, ball, pitches, body, and owned upgrades", func() -> void: _show_mobile_overlay(equipment_sidebar, "STATUS")],
 		["LOG", "Recent game events", func() -> void: _show_mobile_overlay(event_log_panel, "EVENT LOG")],
-		["SAVE", "Save, export, load, or reset this run", func() -> void: _show_mobile_overlay(save_stack, "SAVE & TRANSFER")],
+		["SAVES", "Save, export, load, or reset this run", func() -> void: _show_mobile_overlay(save_stack, "SAVES & TRANSFER")],
 	]
 	for entry in entries:
 		var button := Button.new()
@@ -1596,6 +1935,7 @@ func _apply_responsive_layout() -> void:
 	var should_use_dense := is_web_build and viewport_size.y < WEB_DENSE_MAX_HEIGHT
 	responsive_layout_initialized = true
 	_set_mobile_layout(should_use_mobile, portrait, should_use_dense)
+	_refresh_title_layout()
 
 func _is_portrait_viewport(viewport_size: Vector2) -> bool:
 	return viewport_size.y > viewport_size.x * 1.08
@@ -1678,7 +2018,12 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 		header_metric_headings[2].text = "DNA • ARCANA"
 	prestige_header_stack.visible = _has_genetic_reveal() and not mobile_layout
 	save_stack.visible = not mobile_layout
-	browser_save_slots_panel.visible = mobile_layout and is_web_build
+	browser_save_slots_panel.visible = mobile_layout
+	return_to_title_button.text = "RETURN TO TITLE" if mobile_layout else "TITLE"
+	return_to_title_button.custom_minimum_size = (
+		Vector2(132.0, 44.0) if mobile_layout else Vector2(48.0, 24.0)
+	)
+	return_to_title_button.add_theme_font_size_override("font_size", 11 if mobile_layout else 9)
 	mobile_nav.visible = mobile_layout
 	upgrade_panel.visible = not mobile_layout
 	equipment_sidebar.visible = not mobile_layout
@@ -1968,10 +2313,16 @@ func _build_equipment_sidebar(parent: Control) -> void:
 	sidebar.add_theme_constant_override("separation", 6)
 	equipment_sidebar.add_child(sidebar)
 	var heading := Label.new()
-	heading.text = "CURRENT UPGRADABLE LOADOUT"
+	heading.text = "STATUS"
 	heading.add_theme_font_size_override("font_size", 12)
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	sidebar.add_child(heading)
+	var stats_heading := Label.new()
+	stats_heading.text = "CURRENT STATS"
+	stats_heading.add_theme_font_size_override("font_size", 11)
+	stats_heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	sidebar.add_child(stats_heading)
+	_build_status_stat_list(sidebar)
 	_equipment_card(sidebar, "ball", "CURRENT BALL")
 	_equipment_card(sidebar, "pitch", "PITCH ARSENAL")
 	_equipment_card(sidebar, "body", "BODY")
@@ -1980,12 +2331,51 @@ func _build_equipment_sidebar(parent: Control) -> void:
 	equipment_progression_heading.add_theme_font_size_override("font_size", 11)
 	equipment_progression_heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	sidebar.add_child(equipment_progression_heading)
+	equipment_progression_list = VBoxContainer.new()
+	equipment_progression_list.name = "OwnedUpgradeList"
+	equipment_progression_list.add_theme_constant_override("separation", 4)
+	sidebar.add_child(equipment_progression_list)
 	equipment_summary_label = Label.new()
+	equipment_summary_label.text = "No facilities owned yet"
 	equipment_summary_label.add_theme_font_size_override("font_size", 12)
 	equipment_summary_label.add_theme_color_override("font_color", COLOR_MUTED)
 	equipment_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_enable_mobile_inspection(equipment_summary_label, "Owned facilities")
-	sidebar.add_child(equipment_summary_label)
+	equipment_progression_list.add_child(equipment_summary_label)
+
+func _build_status_stat_list(parent: Control) -> void:
+	var rows := [
+		["speed", "SPEED"],
+		["quality", "QUALITY"],
+		["recovery", "RECOVERY"],
+		["lineup", "LINEUP"],
+		["hit_delay", "HIT DELAY"],
+		["calling", "CALLING"],
+		["distance", "DISTANCE"],
+		["tap", "FIELD TAP"],
+		["offline", "OFFLINE"],
+	]
+	for row_definition in rows:
+		var stat_id := str(row_definition[0])
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		row.tooltip_text = str(Content.STAT_HELP.get(stat_id, ""))
+		row.mouse_default_cursor_shape = Control.CURSOR_HELP
+		_enable_mobile_inspection(row, str(row_definition[1]))
+		parent.add_child(row)
+		var name_label := Label.new()
+		name_label.text = str(row_definition[1])
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.add_theme_font_size_override("font_size", 10)
+		name_label.add_theme_color_override("font_color", COLOR_MUTED)
+		name_label.tooltip_text = row.tooltip_text
+		row.add_child(name_label)
+		var value_label := Label.new()
+		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value_label.add_theme_font_size_override("font_size", 11)
+		value_label.add_theme_color_override("font_color", COLOR_TEXT)
+		value_label.tooltip_text = row.tooltip_text
+		row.add_child(value_label)
+		status_stat_labels[stat_id] = value_label
 
 func _build_alien_help_button(parent: Control) -> void:
 	alien_help_button = Button.new()
@@ -3332,6 +3722,13 @@ func _build_browser_update_confirmation() -> void:
 	browser_update_confirmation.dialog_autowrap = true
 	_configure_browser_update_confirmation(false)
 	browser_update_confirmation.confirmed.connect(_install_browser_update)
+	browser_update_confirmation.custom_action.connect(_handle_browser_update_custom_action)
+	browser_update_export_button = browser_update_confirmation.add_button(
+		"EXPORT",
+		true,
+		"export_backup"
+	)
+	browser_update_export_button.custom_minimum_size = Vector2(60.0, 36.0)
 	add_child(browser_update_confirmation)
 
 func _build_alien_help_dialog() -> void:
@@ -3435,7 +3832,7 @@ func _build_hard_reset_dialog() -> void:
 	var warning := Label.new()
 	warning.text = (
 		"This permanently erases the local save: XP, equipment, mastery, every prestige layer, "
-		+ "and all lifetime statistics. This cannot be undone."
+		+ "and all lifetime statistics. Manual save slots and exported backups remain. This cannot be undone."
 	)
 	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	warning.add_theme_color_override("font_color", COLOR_BAD)
@@ -3979,33 +4376,37 @@ func _refresh_interface() -> void:
 	_refresh_rebirth_buttons()
 	_refresh_achievement_tab()
 	_refresh_stats(at_bat_metrics, estimated_xp_per_second)
+	if title_screen_active:
+		_refresh_title_screen()
 
 func _refresh_field_stats() -> void:
-	if field_stat_labels.is_empty():
-		return
-	field_stat_labels.speed.text = BaseballGameState.format_speed(pitch_field.last_pitch_speed_fps)
-	field_stat_labels.quality.text = "%.3f" % game.get_pitch_quality()
-	field_stat_labels.recovery.text = "%.3f/s" % game.get_recovery_rate()
-	field_stat_labels.lineup.text = "%s" % _format_compact_seconds(game.get_base_batter_turnover_seconds())
-	field_stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
-	field_stat_labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
-	field_stat_labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
-	field_stat_labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
-	field_stat_labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
+	_refresh_effective_stat_labels(field_stat_labels, pitch_field.last_pitch_speed_fps)
 	_refresh_mobile_upgrade_stats()
 
 func _refresh_mobile_upgrade_stats() -> void:
-	if mobile_upgrade_stat_labels.is_empty():
+	_refresh_effective_stat_labels(
+		mobile_upgrade_stat_labels,
+		game.get_representative_pitch_speed()
+	)
+
+func _refresh_status_stats() -> void:
+	_refresh_effective_stat_labels(
+		status_stat_labels,
+		game.get_representative_pitch_speed()
+	)
+
+func _refresh_effective_stat_labels(labels: Dictionary, speed_fps: float) -> void:
+	if labels.is_empty():
 		return
-	mobile_upgrade_stat_labels.speed.text = BaseballGameState.format_speed(game.get_representative_pitch_speed())
-	mobile_upgrade_stat_labels.quality.text = "%.3f" % game.get_pitch_quality()
-	mobile_upgrade_stat_labels.recovery.text = "%.3f/s" % game.get_recovery_rate()
-	mobile_upgrade_stat_labels.lineup.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
-	mobile_upgrade_stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
-	mobile_upgrade_stat_labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
-	mobile_upgrade_stat_labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
-	mobile_upgrade_stat_labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
-	mobile_upgrade_stat_labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
+	labels.speed.text = BaseballGameState.format_speed(speed_fps)
+	labels.quality.text = "%.3f" % game.get_pitch_quality()
+	labels.recovery.text = "%.3f/s" % game.get_recovery_rate()
+	labels.lineup.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
+	labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
+	labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
+	labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
+	labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
+	labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 
 func _format_compact_seconds(seconds: float) -> String:
 	if absf(seconds - round(seconds)) < 0.05:
@@ -4013,6 +4414,7 @@ func _format_compact_seconds(seconds: float) -> String:
 	return "%.1fs" % seconds
 
 func _refresh_equipment() -> void:
+	_refresh_status_stats()
 	var ball_entry: Dictionary = equipment_labels.ball
 	var ball_value: Label = ball_entry.value
 	var ball_effect: Label = ball_entry.effect
@@ -4058,8 +4460,9 @@ func _refresh_equipment() -> void:
 		]
 	else:
 		body_value.text = game.get_body_growth_name()
-	body_value.tooltip_text = "%s\nGrowth speed ×%.3f • quality +%.3f • recovery ×%.3f" % [
+	body_value.tooltip_text = "%s\n%s\nCurrent growth: speed ×%.3f • quality +%.3f • recovery ×%.3f" % [
 		body_value.text,
+		str(game.get_body_growth_stage().get("description", "")),
 		game.get_body_growth_effect_multiplier("speed"),
 		game.get_body_growth_quality_bonus(),
 		game.get_body_growth_effect_multiplier("recovery"),
@@ -4078,8 +4481,109 @@ func _refresh_equipment() -> void:
 			game.get_pitcher_size_multiplier(),
 		]
 
-	equipment_summary_label.text = game.get_owned_equipment_summary()
-	equipment_summary_label.tooltip_text = equipment_summary_label.text
+	_refresh_owned_upgrade_list()
+
+func _get_owned_upgrade_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for definition_value in Content.MILESTONES:
+		var definition: Dictionary = definition_value
+		if str(definition.id) in game.purchased_milestones:
+			entries.append({
+				"kind": "FACILITY",
+				"name": str(definition.name),
+				"detail": str(definition.description),
+			})
+	if _has_genetic_reveal():
+		for definition_value in Content.GENETIC_UPGRADES:
+			var definition: Dictionary = definition_value
+			var rank := int(game.genetic_levels.get(str(definition.id), 0))
+			if rank > 0:
+				entries.append({
+					"kind": "MUTATION R%d" % rank,
+					"name": str(definition.name),
+					"detail": str(definition.description),
+				})
+	if _has_eldritch_reveal():
+		for definition_value in Content.ELDRITCH_UPGRADES:
+			var definition: Dictionary = definition_value
+			var rank := int(game.eldritch_levels.get(str(definition.id), 0))
+			if rank > 0:
+				entries.append({
+					"kind": "MAGIC R%d" % rank,
+					"name": str(definition.name),
+					"detail": str(definition.description),
+				})
+	if _has_divine_reveal():
+		for id_value in game.divine_blessings:
+			var definition := Content.divine_by_id(str(id_value))
+			if not definition.is_empty():
+				entries.append({
+					"kind": "BLESSING",
+					"name": str(definition.name),
+					"detail": str(definition.description),
+				})
+		if game.divine_halos > 0:
+			entries.append({
+				"kind": "DIVINE R%d" % game.divine_halos,
+				"name": "Halo",
+				"detail": "XP and opponent mastery ×1.50 per Halo.",
+			})
+	return entries
+
+func _refresh_owned_upgrade_list() -> void:
+	if equipment_progression_list == null:
+		return
+	var entries := _get_owned_upgrade_entries()
+	var signature_parts: Array[String] = []
+	for entry in entries:
+		signature_parts.append("%s:%s:%s" % [entry.kind, entry.name, entry.detail])
+	var signature := "|".join(signature_parts) if not signature_parts.is_empty() else "none"
+	if signature == last_owned_upgrade_list_signature:
+		return
+	last_owned_upgrade_list_signature = signature
+	for child in equipment_progression_list.get_children():
+		if child == equipment_summary_label:
+			continue
+		equipment_progression_list.remove_child(child)
+		child.queue_free()
+	var has_prestige_entry := false
+	for entry in entries:
+		if str(entry.kind) != "FACILITY":
+			has_prestige_entry = true
+			break
+	equipment_progression_heading.text = (
+		"OWNED UPGRADES" if has_prestige_entry else "OWNED FACILITIES"
+	)
+	equipment_summary_label.text = (
+		"No facilities owned yet"
+		if entries.is_empty()
+		else "%d owned" % entries.size()
+	)
+	equipment_summary_label.tooltip_text = game.get_owned_equipment_summary()
+	for entry in entries:
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", _compact_panel_style(5.0, 3.0, 5))
+		panel.tooltip_text = "%s • %s\n%s" % [entry.kind, entry.name, entry.detail]
+		panel.mouse_default_cursor_shape = Control.CURSOR_HELP
+		_enable_mobile_inspection(panel, str(entry.name))
+		equipment_progression_list.add_child(panel)
+		var stack := VBoxContainer.new()
+		stack.add_theme_constant_override("separation", 0)
+		panel.add_child(stack)
+		var title := Label.new()
+		title.text = "%s • %s" % [entry.kind, entry.name]
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		title.add_theme_font_size_override("font_size", 11)
+		title.add_theme_color_override("font_color", COLOR_TEXT)
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stack.add_child(title)
+		var detail := Label.new()
+		detail.text = str(entry.detail)
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail.add_theme_font_size_override("font_size", 10)
+		detail.add_theme_color_override("font_color", COLOR_MUTED)
+		detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stack.add_child(detail)
 
 func _refresh_locker() -> void:
 	if inventory_dock == null:
@@ -4343,6 +4847,8 @@ func _refresh_rebirth_buttons() -> void:
 		game.get_body_growth_quality_bonus(),
 		cumulative_recovery,
 	]
+	if game.body_growth_level == 0:
+		body_growth_status_label.text += "\n%s" % str(game.get_body_growth_stage().description)
 	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
 		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
 		var id := str(definition.id)
@@ -4975,6 +5481,7 @@ func _stage_import_save(text: String, source_name: String) -> void:
 		return
 	pending_import_save = (decoded.data as Dictionary).duplicate(true)
 	pending_import_name = source_name
+	pending_import_returns_from_title = title_screen_active
 	var saved_level := clampi(
 		int(pending_import_save.get("current_opponent", 0)) + 1,
 		1,
@@ -4999,6 +5506,7 @@ func _confirm_import_save() -> void:
 		return
 	var imported := pending_import_save.duplicate(true)
 	var imported_name := pending_import_name
+	var should_resume_from_title := pending_import_returns_from_title
 	_discard_pending_import()
 	# The replacement confirmation is the explicit authority to retire every
 	# automatic generation. Without it, unreadable/newer saves stay protected.
@@ -5011,6 +5519,7 @@ func _confirm_import_save() -> void:
 	last_reveal_mask = -1
 	last_loot_revision = -1
 	last_loot_ui_signature = ""
+	last_owned_upgrade_list_signature = ""
 	opponent_loadout_signature = ""
 	event_log.clear()
 	_refresh_interface()
@@ -5019,12 +5528,16 @@ func _confirm_import_save() -> void:
 	game.save_game()
 	autosave_elapsed = 0.0
 	_log_event("Loaded portable backup %s." % imported_name)
+	if should_resume_from_title:
+		pending_title_offline_summary.clear()
+		_leave_title_screen(false)
 	if not offline_summary.is_empty():
 		_log_offline_summary(offline_summary, "Imported-save catch-up")
 
 func _discard_pending_import() -> void:
 	pending_import_save.clear()
 	pending_import_name = ""
+	pending_import_returns_from_title = false
 
 func _show_save_transfer_error(message: String) -> void:
 	save_transfer_message_dialog.dialog_text = message
@@ -5047,6 +5560,7 @@ func _show_save_recovery_required() -> void:
 
 func _request_hard_reset() -> void:
 	if development_session:
+		pending_new_game_from_title = false
 		return
 	hard_reset_input.clear()
 	hard_reset_confirm_button.disabled = true
@@ -5054,6 +5568,7 @@ func _request_hard_reset() -> void:
 	hard_reset_input.call_deferred("grab_focus")
 
 func _close_hard_reset_dialog() -> void:
+	pending_new_game_from_title = false
 	hard_reset_input.clear()
 	hard_reset_confirm_button.disabled = true
 	hard_reset_dialog.hide()
@@ -5064,6 +5579,8 @@ func _update_hard_reset_confirmation(typed_text: String) -> void:
 func _confirm_hard_reset() -> void:
 	if development_session or hard_reset_input.text != "RESET":
 		return
+	var should_start_from_title := pending_new_game_from_title
+	pending_new_game_from_title = false
 	hard_reset_dialog.hide()
 	_clear_browser_recovery_mirrors()
 	game.delete_save()
@@ -5076,8 +5593,12 @@ func _confirm_hard_reset() -> void:
 	last_reveal_mask = -1
 	last_loot_revision = -1
 	last_loot_ui_signature = ""
+	last_owned_upgrade_list_signature = ""
 	opponent_loadout_signature = ""
 	event_log.clear()
 	game.save_game()
 	_refresh_interface()
 	_log_event("Progress reset. Little Timmy has agreed to pretend none of that happened.")
+	if should_start_from_title:
+		pending_title_offline_summary.clear()
+		_leave_title_screen(false)

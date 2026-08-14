@@ -24,9 +24,16 @@ pitches, rewards, loot, mastery, or progression.
 PHONE LAYOUT
 
 Portrait browsers rotate the field so the pitcher is at the bottom and the
-batter is at the top. Upgrades, Loadout, Event Log, and Save controls open over
+batter is at the top. Upgrades, Status, Event Log, and Saves controls open over
 the field from the bottom navigation row. This is a browser presentation layer;
 the underlying game and exported save format remain identical to desktop.
+
+TITLE SCREEN
+
+Startup offers Resume Game, Start New Game, and Import Save. Resume opens the
+autosave and three device-local manual slots. The animated matchup changes only
+after the save has reached a new story era, so it never previews alien, eldritch,
+or divine baseball early. The in-game Saves menu can return to this screen.
 
 IPHONE HOME SCREEN INSTALL
 
@@ -40,8 +47,8 @@ UPDATES AND OFFLINE PLAY
 
 The generated service worker identifies each release by its content-derived
 cache version. An open game asks the host for an update every five minutes. When
-one is ready, the game shows SAVE & UPDATE; it does not reload until the player
-chooses. The review recommends EXPORT first. The current run is validated,
+one is ready, the game offers REVIEW. The review has separate Export, Later, and
+Update actions and does not reload until the player chooses. The current run is validated,
 mirrored with a rollback generation, and browser storage is flushed before the
 new release activates. After one successful online load, the current build can also
 start offline when the browser retains its cache.
@@ -69,8 +76,10 @@ checksums and the shared Godot gameplay source before publishing.
 SAVES
 
 Browser autosaves use that browser's local IndexedDB storage for this site and
-rotate primary/rollback localStorage recovery mirrors. Writes retain the prior
-validated generation; unreadable data is not silently overwritten. The EXPORT
+rotate primary/rollback localStorage recovery mirrors. The title Resume picker
+and in-game Saves menu expose the autosave plus three device-local manual slots.
+Writes retain the prior validated generation; unreadable data is not silently
+overwritten. The EXPORT
 button downloads a portable JSON backup. LOAD selects such a backup, validates
 it, and asks for confirmation before replacing local progress. Use a backup
 before clearing site data or changing browsers/devices. Private browsing or
