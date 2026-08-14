@@ -173,7 +173,7 @@ const STAT_HELP := {
 	"tap": "Tapping the open field advances the active pitch, flight, or lineup timer. Taps may supply at most half of one timer; the rest must pass normally.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
-	"frustration": "Time since the last strikeout. Its uncapped logarithmic quality bonus helps break dry spells and resets when a strikeout is completed.",
+	"frustration": "Bad results build Frustration by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Its uncapped logarithmic quality bonus resets on a completed strikeout.",
 }
 
 const LOOT_PREFIXES := [

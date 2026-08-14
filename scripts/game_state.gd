@@ -8,7 +8,10 @@ signal achievement_unlocked(definition: Dictionary, total_unlocked: int)
 
 const Content = preload("res://scripts/content.gd")
 const SAVE_PATH := "user://one_foot_per_second_save.json"
-const SAVE_VERSION := 16
+const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
+const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
+const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
+const SAVE_VERSION := 17
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -69,10 +72,16 @@ const MASTERY_REQUIREMENT_FACTOR_PER_RANK := 0.85
 # The logarithm deliberately has no hard ceiling: doubling an already enormous
 # mastery total always helps, but by the same modest +quality step.
 const MASTERY_MATCHUP_QUALITY_PER_DOUBLING := 0.12
-# A dry spell supplies a second, temporary adaptation bonus. The first fifteen
-# seconds are noticeable; each additional +0.08 quality takes twice as long.
-const FRUSTRATION_INTERVAL_SECONDS := 15.0
+# Bad results supply a second, temporary adaptation bonus. Frustration is scored
+# once per resolved volley rather than once per physical projectile, so an
+# eldritch 2,048-ball salvo remains one baseball result. Four frustration points
+# grant the first +0.08 quality step; every later step takes twice as many.
+const FRUSTRATION_REFERENCE_POINTS := 4.0
 const FRUSTRATION_QUALITY_PER_DOUBLING := 0.08
+const FRUSTRATION_OUTCOME_POINTS := [12.0, 8.0, 5.0, 3.0, 1.0, 0.10, 0.20, 0.0]
+# Save v16 stored seconds on the old time-based curve. Keeping its reference
+# interval here lets migration preserve the exact earned quality bonus.
+const LEGACY_FRUSTRATION_INTERVAL_SECONDS := 15.0
 const EQUIPMENT_EFFECT_FACTOR_PER_RANK := 1.20
 const EQUIPMENT_CAPS := {
 	"speed_bonus": 0.15,
@@ -179,7 +188,7 @@ var opponent_mastery: Array[float] = []
 var result_totals: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var lifetime_strikeouts := 0.0
 var current_body_strikeouts := 0.0
-var seconds_since_strikeout := 0.0
+var frustration_points := 0.0
 var plate_strikes := 0
 var plate_balls := 0
 var batter_cooldown_remaining := 0.0
@@ -241,6 +250,13 @@ var auto_advance_enabled := false
 var auto_train_enabled := false
 var auto_farm_enabled := false
 var automation_accumulator := 0.0
+var last_load_succeeded := false
+var last_load_had_error := false
+var last_load_recovered := false
+var last_loaded_save_timestamp := 0.0
+var last_load_message := ""
+var last_load_failure_reason := ""
+var save_writes_locked := false
 
 func _init() -> void:
 	opponents = Content.opponents()
@@ -534,7 +550,7 @@ func reset_fresh() -> void:
 	result_totals = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	lifetime_strikeouts = 0.0
 	current_body_strikeouts = 0.0
-	seconds_since_strikeout = 0.0
+	frustration_points = 0.0
 	plate_strikes = 0
 	plate_balls = 0
 	batter_cooldown_remaining = 0.0
@@ -795,6 +811,10 @@ func _empty_resolution_summary() -> Dictionary:
 		"counts": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 		"strikeouts": 0.0,
 		"saved_hits": 0.0,
+		"frustration_events": [],
+		"aggregate_frustration_points": 0.0,
+		"aggregate_frustration_strikeouts": 0.0,
+		"frustration_gained": 0.0,
 		"raw_earned_xp": 0.0,
 		"earned_xp": 0.0,
 		"base_score": 0.0,
@@ -1072,6 +1092,12 @@ func _apply_pitch_outcome(
 	summary.ball_requirement = get_balls_required()
 	summary["resolved_opponent_index"] = resolved_opponent
 	summary["resolved_distance_index"] = resolved_distance
+	if summary.has("frustration_events"):
+		var frustration_events: Array = summary.frustration_events
+		frustration_events.append({
+			"outcome": outcome,
+			"strikeout": struck_out,
+		})
 	# Outcomes are emitted only now, at impact. The release event intentionally
 	# contains no result, so neither the UI nor the pitcher cadence can reveal a
 	# hit before the ball reaches the batter.
@@ -1115,9 +1141,24 @@ func _resolve_aggregate_time(seconds: float, summary: Dictionary, stochastic: bo
 		counts[index] = minf(float(counts[index]) + active_pitches * float(probabilities[index]), MAX_NUMBER)
 	var strikeouts := minf(cycles * float(metrics.strikeout_probability), MAX_NUMBER)
 	var saved_hits := minf(active_pitches * float(metrics.saved_hit_probability), MAX_NUMBER)
+	var aggregate_frustration := 0.0
+	for index in probabilities.size():
+		aggregate_frustration = minf(
+			MAX_NUMBER,
+			aggregate_frustration
+			+ active_volleys * float(probabilities[index]) * get_outcome_frustration_points(index)
+		)
 	summary.pitches = minf(float(summary.pitches) + active_pitches, MAX_NUMBER)
 	summary.strikeouts = minf(float(summary.strikeouts) + strikeouts, MAX_NUMBER)
 	summary.saved_hits = minf(float(summary.saved_hits) + saved_hits, MAX_NUMBER)
+	summary.aggregate_frustration_points = minf(
+		MAX_NUMBER,
+		float(summary.get("aggregate_frustration_points", 0.0)) + aggregate_frustration
+	)
+	summary.aggregate_frustration_strikeouts = minf(
+		MAX_NUMBER,
+		float(summary.get("aggregate_frustration_strikeouts", 0.0)) + strikeouts
+	)
 	# Aggregate simulation ends between volleys. Live play never enters this path.
 	var requirement := get_strikes_required()
 	plate_strikes = (
@@ -1210,13 +1251,7 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 		MAX_NUMBER,
 		opponent_mastery[reward_opponent] + mastery_gained
 	)
-	if strikeouts > 0.0:
-		seconds_since_strikeout = 0.0
-	else:
-		seconds_since_strikeout = minf(
-			MAX_NUMBER,
-			seconds_since_strikeout + maxf(float(summary.get("elapsed_seconds", 0.0)), 0.0)
-		)
+	_apply_frustration_summary(summary)
 	summary.unlocked_message = _check_opponent_unlock()
 	check_achievements()
 	last_batch = summary
@@ -1998,15 +2033,50 @@ func get_opponent_mastery_quality_bonus(opponent_index: int = current_opponent) 
 	var ratio := maxf(opponent_mastery[bounded] / requirement, 0.0)
 	return MASTERY_MATCHUP_QUALITY_PER_DOUBLING * log(1.0 + ratio) / log(2.0)
 
+func get_outcome_frustration_points(outcome: int) -> float:
+	if outcome < 0 or outcome >= FRUSTRATION_OUTCOME_POINTS.size():
+		return 0.0
+	return float(FRUSTRATION_OUTCOME_POINTS[outcome])
+
+func _apply_frustration_summary(summary: Dictionary) -> void:
+	var gained := 0.0
+	var events: Array = summary.get("frustration_events", [])
+	for event_value in events:
+		if typeof(event_value) != TYPE_DICTIONARY:
+			continue
+		var event: Dictionary = event_value
+		if bool(event.get("strikeout", false)):
+			frustration_points = 0.0
+			continue
+		var event_points := get_outcome_frustration_points(int(event.get("outcome", Content.STRIKE_INDEX)))
+		gained = minf(MAX_NUMBER, gained + event_points)
+		frustration_points = minf(MAX_NUMBER, frustration_points + event_points)
+
+	# Closed-form offline play has exact expected totals but no authoritative
+	# ordering. When one or more strikeouts occur, the mean final segment after
+	# the last reset is one of (strikeouts + 1) equivalent segments.
+	var aggregate_points := maxf(float(summary.get("aggregate_frustration_points", 0.0)), 0.0)
+	var aggregate_strikeouts := maxf(float(summary.get("aggregate_frustration_strikeouts", 0.0)), 0.0)
+	if aggregate_points > 0.0 or aggregate_strikeouts > 0.0:
+		gained = minf(MAX_NUMBER, gained + aggregate_points)
+		if aggregate_strikeouts > 0.0:
+			frustration_points = minf(
+				MAX_NUMBER,
+				aggregate_points / (aggregate_strikeouts + 1.0)
+			)
+		else:
+			frustration_points = minf(MAX_NUMBER, frustration_points + aggregate_points)
+	summary.frustration_gained = gained
+
 func get_frustration_quality_bonus() -> float:
-	var intervals := maxf(seconds_since_strikeout, 0.0) / FRUSTRATION_INTERVAL_SECONDS
+	var intervals := maxf(frustration_points, 0.0) / FRUSTRATION_REFERENCE_POINTS
 	return FRUSTRATION_QUALITY_PER_DOUBLING * log(1.0 + intervals) / log(2.0)
 
 func get_frustration_meter_ratio() -> float:
 	# A monotonic visual meter for an uncapped logarithmic bonus: it fills half
-	# way during the first interval, then approaches full without falsely
+	# way at the first reference score, then approaches full without falsely
 	# implying that the underlying bonus has reached a cap.
-	var intervals := maxf(seconds_since_strikeout, 0.0) / FRUSTRATION_INTERVAL_SECONDS
+	var intervals := maxf(frustration_points, 0.0) / FRUSTRATION_REFERENCE_POINTS
 	return intervals / (1.0 + intervals)
 
 func get_hit_save_chance(outcome: int, _opponent_index: int = current_opponent) -> float:
@@ -3220,7 +3290,7 @@ func _reset_body_progress() -> void:
 	batter_cooldown_remaining = 0.0
 	_reset_batter_identity()
 	current_body_strikeouts = 0.0
-	seconds_since_strikeout = 0.0
+	frustration_points = 0.0
 	current_body_loot_found = 0.0
 	loot_dry_streak = 0
 	loot_roll_cooldown_remaining = 0.0
@@ -3325,14 +3395,76 @@ func perform_divine_ascension(id: String) -> bool:
 	return true
 
 func save_game() -> bool:
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if file == null:
+	if save_writes_locked:
+		save_status_changed.emit("Save recovery required")
+		return false
+	var save_text := get_save_json()
+	if not _write_save_text(SAVE_TEMP_PATH, save_text):
 		save_status_changed.emit("Save failed")
 		return false
-	file.store_string(get_save_json())
-	file.close()
+	var pending_decoded := decode_save_text(_read_save_text(SAVE_TEMP_PATH))
+	if not bool(pending_decoded.get("ok", false)):
+		save_status_changed.emit("Save failed")
+		return false
+
+	var current_text := _read_save_text(SAVE_PATH)
+	if not current_text.is_empty():
+		var current_decoded := decode_save_text(current_text)
+		if str(current_decoded.get("reason", "")) == "future_version":
+			# An older cached executable must never overwrite a save created by a
+			# newer schema. Keep both the primary and pending files for recovery.
+			save_writes_locked = true
+			last_load_failure_reason = "future_version"
+			last_load_message = str(current_decoded.get("message", "A newer save is protected."))
+			save_status_changed.emit("Newer save protected")
+			return false
+		if bool(current_decoded.get("ok", false)):
+			if not _write_save_text(SAVE_BACKUP_PATH, current_text):
+				save_status_changed.emit("Save failed")
+				return false
+		else:
+			_archive_unreadable_save(current_text)
+
+	var primary_absolute := ProjectSettings.globalize_path(SAVE_PATH)
+	var pending_absolute := ProjectSettings.globalize_path(SAVE_TEMP_PATH)
+	if FileAccess.file_exists(SAVE_PATH):
+		var remove_error := DirAccess.remove_absolute(primary_absolute)
+		if remove_error != OK:
+			save_status_changed.emit("Save failed")
+			return false
+	var rename_error := DirAccess.rename_absolute(pending_absolute, primary_absolute)
+	if rename_error != OK:
+		# The previous valid generation remains recoverable from the backup.
+		if FileAccess.file_exists(SAVE_BACKUP_PATH):
+			_write_save_text(SAVE_PATH, _read_save_text(SAVE_BACKUP_PATH))
+		save_status_changed.emit("Save failed")
+		return false
 	save_status_changed.emit("Saved")
 	return true
+
+func _read_save_text(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return ""
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var text := file.get_as_text()
+	file.close()
+	return text
+
+func _write_save_text(path: String, text: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(text)
+	file.flush()
+	var write_error := file.get_error()
+	file.close()
+	return write_error == OK
+
+func _archive_unreadable_save(text: String) -> void:
+	if not text.is_empty():
+		_write_save_text(SAVE_CORRUPT_PATH, text)
 
 func get_save_json(pretty := false) -> String:
 	return JSON.stringify(to_save_data(), "  " if pretty else "")
@@ -3357,6 +3489,7 @@ func decode_save_text(text: String) -> Dictionary:
 	if saved_version > SAVE_VERSION:
 		return {
 			"ok": false,
+			"reason": "future_version",
 			"message": "This save was created by a newer version of the game (save v%d; supported through v%d)." % [saved_version, SAVE_VERSION],
 		}
 	var dictionary_fields := [
@@ -3376,24 +3509,75 @@ func decode_save_text(text: String) -> Dictionary:
 	return {"ok": true, "message": "", "data": data}
 
 func load_game() -> Dictionary:
-	if not FileAccess.file_exists(SAVE_PATH):
-		save_status_changed.emit("New game")
+	last_load_succeeded = false
+	last_load_had_error = false
+	last_load_recovered = false
+	last_loaded_save_timestamp = 0.0
+	last_load_message = ""
+	last_load_failure_reason = ""
+	save_writes_locked = false
+	var any_save_file := (
+		FileAccess.file_exists(SAVE_PATH)
+		or FileAccess.file_exists(SAVE_BACKUP_PATH)
+		or FileAccess.file_exists(SAVE_TEMP_PATH)
+	)
+	var primary_text := _read_save_text(SAVE_PATH)
+	var primary_decoded := decode_save_text(primary_text) if FileAccess.file_exists(SAVE_PATH) else {}
+	if str(primary_decoded.get("reason", "")) == "future_version":
+		last_load_had_error = true
+		last_load_failure_reason = "future_version"
+		last_load_message = str(primary_decoded.get("message", "A newer save is protected."))
+		save_writes_locked = true
+		save_status_changed.emit("Newer save protected")
 		return {}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
-		save_status_changed.emit("Could not open save")
+
+	var selected_data: Dictionary = {}
+	var selected_path := ""
+	var selected_timestamp := -1.0
+	# Primary wins an equal-timestamp tie; a newer valid pending or backup
+	# generation repairs an interrupted write without losing progress.
+	for path in [SAVE_BACKUP_PATH, SAVE_TEMP_PATH, SAVE_PATH]:
+		var candidate_text := _read_save_text(path)
+		if candidate_text.is_empty():
+			continue
+		any_save_file = true
+		var decoded := decode_save_text(candidate_text)
+		if not bool(decoded.get("ok", false)):
+			continue
+		var candidate_data: Dictionary = decoded.data
+		var candidate_timestamp := float(candidate_data.get("saved_at", 0.0))
+		if candidate_timestamp >= selected_timestamp:
+			selected_timestamp = candidate_timestamp
+			selected_data = candidate_data
+			selected_path = path
+
+	if selected_data.is_empty():
+		if any_save_file:
+			last_load_had_error = true
+			last_load_failure_reason = "unreadable"
+			last_load_message = "The existing save generations could not be read. They were left untouched."
+			save_writes_locked = true
+			save_status_changed.emit("Save recovery required")
+		else:
+			save_status_changed.emit("New game")
 		return {}
-	var decoded := decode_save_text(file.get_as_text())
-	file.close()
-	if not bool(decoded.get("ok", false)):
-		save_status_changed.emit("Save was invalid; starting fresh")
-		return {}
-	var parsed: Dictionary = decoded.data
-	apply_save_data(parsed)
-	var previous_timestamp := float(parsed.get("saved_at", Time.get_unix_time_from_system()))
+
+	if not primary_text.is_empty() and not bool(primary_decoded.get("ok", false)):
+		last_load_had_error = true
+		_archive_unreadable_save(primary_text)
+	last_load_recovered = selected_path != SAVE_PATH
+	last_load_succeeded = true
+	last_loaded_save_timestamp = selected_timestamp
+	apply_save_data(selected_data)
+	var previous_timestamp := float(selected_data.get("saved_at", Time.get_unix_time_from_system()))
 	var elapsed := maxf(Time.get_unix_time_from_system() - previous_timestamp, 0.0)
 	var offline_summary := simulate_offline(elapsed)
-	save_status_changed.emit("Loaded")
+	if last_load_recovered:
+		last_load_message = "Recovered the newest valid automatic save generation."
+		save_game()
+		save_status_changed.emit("Recovered save")
+	else:
+		save_status_changed.emit("Loaded")
 	return offline_summary
 
 func to_save_data() -> Dictionary:
@@ -3412,7 +3596,7 @@ func to_save_data() -> Dictionary:
 		"lifetime_max_loot_rarity": lifetime_max_loot_rarity,
 		"lifetime_strikeouts": lifetime_strikeouts,
 		"current_body_strikeouts": current_body_strikeouts,
-		"seconds_since_strikeout": seconds_since_strikeout,
+		"frustration_points": frustration_points,
 		"lifetime_loot_found": lifetime_loot_found,
 		"current_body_loot_found": current_body_loot_found,
 		"loot_overflow_discarded": loot_overflow_discarded,
@@ -3488,7 +3672,14 @@ func apply_save_data(data: Dictionary) -> void:
 	lifetime_max_loot_rarity = clampi(int(data.get("lifetime_max_loot_rarity", -1)), -1, Content.LOOT_RARITIES.size() - 1)
 	lifetime_strikeouts = clampf(float(data.get("lifetime_strikeouts", 0.0)), 0.0, MAX_NUMBER)
 	current_body_strikeouts = clampf(float(data.get("current_body_strikeouts", 0.0)), 0.0, MAX_NUMBER)
-	seconds_since_strikeout = clampf(float(data.get("seconds_since_strikeout", 0.0)), 0.0, MAX_NUMBER)
+	if saved_version >= 17:
+		frustration_points = clampf(float(data.get("frustration_points", 0.0)), 0.0, MAX_NUMBER)
+	else:
+		var legacy_seconds := clampf(float(data.get("seconds_since_strikeout", 0.0)), 0.0, MAX_NUMBER)
+		frustration_points = minf(
+			MAX_NUMBER,
+			legacy_seconds / LEGACY_FRUSTRATION_INTERVAL_SECONDS * FRUSTRATION_REFERENCE_POINTS
+		)
 	lifetime_loot_found = clampf(float(data.get("lifetime_loot_found", 0.0)), 0.0, MAX_NUMBER)
 	current_body_loot_found = clampf(float(data.get("current_body_loot_found", 0.0)), 0.0, MAX_NUMBER)
 	loot_overflow_discarded = clampf(float(data.get("loot_overflow_discarded", 0.0)), 0.0, MAX_NUMBER)
@@ -3789,9 +3980,15 @@ func _sanitize_loot_item(value: Variant) -> Dictionary:
 	}
 
 func delete_save() -> bool:
-	if not FileAccess.file_exists(SAVE_PATH):
-		return true
-	return DirAccess.remove_absolute(SAVE_PATH) == OK
+	var success := true
+	for path in [SAVE_PATH, SAVE_BACKUP_PATH, SAVE_TEMP_PATH, SAVE_CORRUPT_PATH]:
+		if not FileAccess.file_exists(path):
+			continue
+		if DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) != OK:
+			success = false
+	if success:
+		save_writes_locked = false
+	return success
 
 func get_best_pitch() -> Dictionary:
 	var best := Content.pitch_by_id("dead_fish")

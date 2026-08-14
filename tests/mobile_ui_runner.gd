@@ -76,7 +76,7 @@ func _run() -> void:
 	_expect(main.frustration_status.get_parent() == main.outcome_footer, "The phone frustration meter should occupy the strip directly beneath the outcome cards")
 	_expect(main.outcome_footer.get_index() == main.outcomes_grid.get_index() + 1, "The frustration strip should immediately follow the outcome grid")
 	_expect(main.frustration_bar.get_combined_minimum_size().x >= 55.0, "The phone frustration meter should remain legible")
-	_expect(main.frustration_label.tooltip_text.contains("no cap"), "Phone inspection should explain the uncapped logarithmic frustration bonus")
+	_expect(main.frustration_label.tooltip_text.contains("no cap") and main.frustration_label.tooltip_text.contains("Grand Slam +12"), "Phone inspection should explain the uncapped outcome-weighted Frustration bonus")
 	_expect(main.previous_button.text.is_empty() and main.next_button.text.is_empty(), "Phone opponent controls should not depend on font arrow glyphs")
 	_expect(main.previous_button.icon != null and main.next_button.icon != null, "Phone opponent controls should provide rasterized back/forward icons")
 	_expect(main.previous_button.get_combined_minimum_size().y >= 44.0 and main.next_button.get_combined_minimum_size().y >= 44.0, "Phone opponent controls should remain touch-sized")

@@ -16,6 +16,7 @@ const COLOR_BAD := Color("ff667d")
 const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
 const BROWSER_SAVE_MIRROR_KEY := "no_hitter_portable_save_mirror_v1"
+const BROWSER_SAVE_ROLLBACK_KEY := "no_hitter_portable_save_rollback_v1"
 const BROWSER_MANUAL_SAVE_SLOT_COUNT := 3
 const WEB_WIDE_MIN_WIDTH := 1280.0
 const WEB_WIDE_MIN_HEIGHT := 696.0
@@ -168,6 +169,7 @@ var web_update_status_elapsed := 0.0
 var web_update_ready := false
 var web_update_snoozed_until := 0.0
 var browser_save_recovered := false
+var browser_save_regression_allowed := false
 var update_banner: PanelContainer
 var update_banner_label: Label
 var update_now_button: Button
@@ -243,11 +245,10 @@ func _ready() -> void:
 	game.achievement_unlocked.connect(_on_achievement_unlocked)
 	_build_interface()
 	_configure_platform_ui()
-	var browser_had_primary_save := FileAccess.file_exists(BaseballGameState.SAVE_PATH)
 	var offline_summary := game.load_game()
-	if is_web_build and not browser_had_primary_save:
+	if is_web_build:
 		var mirror_summary := _recover_browser_save_mirror()
-		if not mirror_summary.is_empty():
+		if browser_save_recovered:
 			offline_summary = mirror_summary
 	_apply_development_arguments()
 	if not offline_summary.is_empty():
@@ -257,6 +258,9 @@ func _ready() -> void:
 	if is_web_build and not web_storage_persistent:
 		_log_event("Browser storage is temporary here. Use EXPORT after playing if you want to keep this run.")
 	_refresh_interface()
+	if game.save_writes_locked:
+		_log_event("An existing save could not be read and has not been overwritten. Use LOAD to recover it or RESET to deliberately start over.")
+		call_deferred("_show_save_recovery_required")
 	resized.connect(_on_root_resized)
 	web_last_wall_clock = Time.get_unix_time_from_system()
 	call_deferred("_apply_responsive_layout")
@@ -290,45 +294,112 @@ func _process(delta: float) -> void:
 	if ui_elapsed >= 0.20:
 		ui_elapsed = 0.0
 		_refresh_interface()
-	if autosave_elapsed >= 10.0 and not development_session:
+	if autosave_elapsed >= 10.0 and not development_session and not game.save_writes_locked:
 		autosave_elapsed = 0.0
 		game.save_game()
 
 func _write_browser_save_mirror() -> void:
-	if not is_web_build or game == null or development_session:
+	if not is_web_build or game == null or development_session or game.save_writes_locked:
 		return
 	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
-	if storage != null:
-		storage.setItem(BROWSER_SAVE_MIRROR_KEY, game.get_save_json())
+	if storage == null:
+		browser_save_regression_allowed = false
+		return
+	var current_text := game.get_save_json()
+	var current_decoded := game.decode_save_text(current_text)
+	if not bool(current_decoded.get("ok", false)):
+		browser_save_regression_allowed = false
+		return
+	var previous_text := str(storage.getItem(BROWSER_SAVE_MIRROR_KEY))
+	var previous_decoded := game.decode_save_text(previous_text)
+	if bool(previous_decoded.get("ok", false)):
+		var previous_data: Dictionary = previous_decoded.data
+		var current_data: Dictionary = current_decoded.data
+		if (
+			not browser_save_regression_allowed
+			and _browser_save_has_more_progress(previous_data, current_data)
+		):
+			# An unexpected fresh or rolled-back runtime may write repeatedly after
+			# an update. Preserve the demonstrably more advanced mirror until load
+			# recovery or an explicit import/reset resolves the discrepancy.
+			browser_save_regression_allowed = false
+			return
+		if previous_text != current_text:
+			storage.setItem(BROWSER_SAVE_ROLLBACK_KEY, previous_text)
+	storage.setItem(BROWSER_SAVE_MIRROR_KEY, current_text)
+	browser_save_regression_allowed = false
 
 func _recover_browser_save_mirror() -> Dictionary:
+	if game.last_load_failure_reason == "future_version":
+		# A mirror from an older schema is not permission to downgrade a newer
+		# primary save. The cached executable must update first.
+		return {}
 	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
 	if storage == null:
 		return {}
-	var mirrored_text := str(storage.getItem(BROWSER_SAVE_MIRROR_KEY))
-	if mirrored_text.is_empty() or mirrored_text == "null":
+	var mirrored_data := _read_browser_recovery_data(storage, BROWSER_SAVE_MIRROR_KEY)
+	if mirrored_data.is_empty() or not _browser_save_has_progress(mirrored_data):
+		mirrored_data = _read_browser_recovery_data(storage, BROWSER_SAVE_ROLLBACK_KEY)
+	if mirrored_data.is_empty() or not _browser_save_has_progress(mirrored_data):
 		return {}
-	var decoded := game.decode_save_text(mirrored_text)
-	if not bool(decoded.get("ok", false)):
-		return {}
-	var mirrored_data: Dictionary = decoded.data
-	var has_progress := (
-		float(mirrored_data.get("lifetime_pitches", 0.0)) > 0.0
-		or float(mirrored_data.get("lifetime_xp", 0.0)) > 0.0
-		or int(mirrored_data.get("highest_unlocked", 0)) > 0
-		or int(mirrored_data.get("genetic_rebirths", 0)) > 0
-		or int(mirrored_data.get("eldritch_ascensions", 0)) > 0
-		or int(mirrored_data.get("divine_ascensions", 0)) > 0
+	var current_data := game.to_save_data()
+	var mirror_is_newer := (
+		float(mirrored_data.get("saved_at", 0.0))
+		> game.last_loaded_save_timestamp + 0.5
 	)
-	if not has_progress:
+	var mirror_is_ahead := _browser_save_has_more_progress(mirrored_data, current_data)
+	if game.last_load_succeeded and not mirror_is_newer and not mirror_is_ahead:
 		return {}
 	game.apply_save_data(mirrored_data)
+	game.save_writes_locked = false
+	game.last_load_succeeded = true
+	game.last_load_recovered = true
 	browser_save_recovered = true
 	var saved_at := float(mirrored_data.get("saved_at", Time.get_unix_time_from_system()))
 	var recovered_summary := game.simulate_offline(maxf(Time.get_unix_time_from_system() - saved_at, 0.0))
 	game.save_game()
 	_log_event("Recovered progress from the browser's secondary save mirror.")
 	return recovered_summary
+
+func _read_browser_recovery_data(storage: Variant, key: String) -> Dictionary:
+	var text := str(storage.getItem(key))
+	if text.is_empty() or text == "null":
+		return {}
+	var decoded := game.decode_save_text(text)
+	return decoded.data if bool(decoded.get("ok", false)) else {}
+
+func _browser_save_has_progress(data: Dictionary) -> bool:
+	return (
+		float(data.get("lifetime_pitches", 0.0)) > 0.0
+		or float(data.get("lifetime_xp", 0.0)) > 0.0
+		or float(data.get("lifetime_strikeouts", 0.0)) > 0.0
+		or int(data.get("highest_unlocked", 0)) > 0
+		or int(data.get("lifetime_genetic_rebirths", data.get("genetic_rebirths", 0))) > 0
+		or int(data.get("lifetime_eldritch_ascensions", data.get("eldritch_ascensions", 0))) > 0
+		or int(data.get("divine_ascensions", 0)) > 0
+		or (data.get("unlocked_achievements", []) as Array).size() > 0
+	)
+
+func _browser_save_has_more_progress(candidate: Dictionary, baseline: Dictionary) -> bool:
+	var numeric_fields := [
+		"lifetime_pitches", "lifetime_xp", "lifetime_strikeouts", "lifetime_loot_found",
+		"lifetime_field_taps", "lifetime_genetic_rebirths", "lifetime_eldritch_ascensions",
+		"divine_ascensions", "divine_halos",
+	]
+	for field in numeric_fields:
+		var candidate_value := float(candidate.get(field, 0.0))
+		var baseline_value := float(baseline.get(field, 0.0))
+		if candidate_value > baseline_value + maxf(absf(baseline_value) * 0.000000001, 0.000001):
+			return true
+	return (candidate.get("unlocked_achievements", []) as Array).size() > (baseline.get("unlocked_achievements", []) as Array).size()
+
+func _clear_browser_recovery_mirrors() -> void:
+	if not is_web_build:
+		return
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage != null:
+		storage.removeItem(BROWSER_SAVE_MIRROR_KEY)
+		storage.removeItem(BROWSER_SAVE_ROLLBACK_KEY)
 
 func _browser_save_slot_key(slot_index: int) -> String:
 	return "no_hitter_manual_save_slot_%d" % (clampi(slot_index, 0, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1) + 1)
@@ -370,7 +441,11 @@ func _refresh_browser_save_slots() -> void:
 func _save_browser_slot(slot_index: int) -> void:
 	if not is_web_build or game == null or development_session:
 		return
-	game.save_game()
+	if game.save_writes_locked:
+		_show_save_recovery_required()
+		return
+	if not game.save_game():
+		return
 	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
 	if storage == null:
 		_show_save_transfer_error("This browser is not allowing a manual save slot.")
@@ -405,12 +480,12 @@ func _input(event: InputEvent) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and game != null:
-		if not development_session:
+		if not development_session and not game.save_writes_locked:
 			game.save_game()
 		get_tree().quit()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_web_build and game != null:
 		web_backgrounded_at = Time.get_unix_time_from_system()
-		if not development_session:
+		if not development_session and not game.save_writes_locked:
 			game.save_game()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN and is_web_build and game != null:
 		var now := Time.get_unix_time_from_system()
@@ -623,6 +698,9 @@ func _request_browser_update() -> void:
 func _install_browser_update() -> void:
 	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
 		return
+	if game != null and game.save_writes_locked:
+		_show_save_recovery_required()
+		return
 	update_now_button.disabled = true
 	update_banner_label.text = "SAVING YOUR RUN…"
 	if game != null and not development_session:
@@ -665,7 +743,7 @@ func _apply_browser_offline_catchup(seconds: float) -> void:
 	if not summary.is_empty():
 		_log_offline_summary(summary, "Browser catch-up")
 	_refresh_interface()
-	if not development_session:
+	if not development_session and not game.save_writes_locked:
 		game.save_game()
 
 func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
@@ -3380,8 +3458,9 @@ func _refresh_guide_text(
 		),
 		(
 			"Earn opponent mastery to unlock the next batter. Every point also improves the odds against "
-			+ "that batter on an uncapped logarithmic curve. A second logarithmic Frustration bonus grows "
-			+ "during a strikeout drought and resets when one finally lands; its nearly full bar means diminishing "
+			+ "that batter on an uncapped logarithmic curve. Frustration rises only when something goes wrong: "
+			+ "Grand Slams add the most, lesser hits add progressively less, and Balls or Fouls barely nudge it. "
+			+ "Its logarithmic quality bonus resets when a strikeout finally lands; a nearly full bar means diminishing "
 			+ "returns, not a hard cap. Move backward whenever an easier opponent produces more XP per second. "
 			+ "The circle beside the pitcher fills toward the next release. While "
 			+ "the plate is empty, pitching stops and the circle beside home plate fills until the next batter "
@@ -3668,10 +3747,17 @@ func _refresh_interface() -> void:
 			detail = "Adds one Ball. %d Balls produce a walk, treated like a Single and adding %s." % [game.get_balls_required(), _format_compact_seconds(bonus_seconds)]
 		else:
 			detail = "Adds one strike. Strike %d completes the only XP-paying outcome." % game.get_strikes_required()
-		outcome_panels[index].tooltip_text = "%s • %.2f%%\n%s\nEvery completed plate appearance includes a %s base lineup change." % [
+		var frustration_cost := game.get_outcome_frustration_points(index)
+		var frustration_note := (
+			"Frustration +%s per resolved volley." % BaseballGameState.format_number(frustration_cost, 2)
+			if frustration_cost > 0.0
+			else "Frustration +0; a completed strikeout resets the entire score."
+		)
+		outcome_panels[index].tooltip_text = "%s • %.2f%%\n%s\n%s\nEvery completed plate appearance includes a %s base lineup change." % [
 			str(Content.OUTCOME_NAMES[index]),
 			float(probabilities[index]) * 100.0,
 			detail,
+			frustration_note,
 			_format_compact_seconds(game.get_base_batter_turnover_seconds()),
 		]
 	strikeout_payout_label.text = "COMPLETED STRIKEOUT: %s XP" % BaseballGameState.format_number(
@@ -3681,9 +3767,10 @@ func _refresh_interface() -> void:
 	frustration_label.text = "FRUSTRATION +%.3f" % frustration_bonus
 	frustration_bar.value = game.get_frustration_meter_ratio() * 100.0
 	frustration_label.tooltip_text = (
-		"%s since the last strikeout • +%.3f quality against the active batter. "
-		+ "The bonus has no cap but grows logarithmically, and resets only when a strikeout is completed."
-	) % [_format_compact_seconds(game.seconds_since_strikeout), frustration_bonus]
+		"%s Frustration • +%.3f quality against the active batter. "
+		+ "Grand Slam +12, Home Run +8, Triple +5, Double +3, Single +1, Ball +0.20, Foul +0.10, Strike +0. "
+		+ "The bonus has no cap but grows logarithmically, and a completed strikeout resets it."
+	) % [BaseballGameState.format_number(game.frustration_points, 2), frustration_bonus]
 
 	pitch_field.configure_from_game(game, at_bat_metrics)
 	_refresh_field_stats()
@@ -4491,6 +4578,9 @@ func _confirm_divine_ascension() -> void:
 func _save_now() -> void:
 	if development_session:
 		return
+	if game.save_writes_locked:
+		_show_save_recovery_required()
+		return
 	game.save_game()
 	autosave_elapsed = 0.0
 
@@ -4508,6 +4598,9 @@ func _backup_filename() -> String:
 
 func _request_export_save() -> void:
 	if development_session:
+		return
+	if game.save_writes_locked:
+		_show_save_recovery_required()
 		return
 	game.save_game()
 	autosave_elapsed = 0.0
@@ -4654,6 +4747,9 @@ func _confirm_import_save() -> void:
 	var imported := pending_import_save.duplicate(true)
 	var imported_name := pending_import_name
 	_discard_pending_import()
+	# The replacement confirmation is the explicit authority to retire every
+	# automatic generation. Without it, unreadable/newer saves stay protected.
+	game.delete_save()
 	game.apply_save_data(imported)
 	var saved_at := float(imported.get("saved_at", Time.get_unix_time_from_system()))
 	var offline_seconds := maxf(Time.get_unix_time_from_system() - saved_at, 0.0)
@@ -4665,6 +4761,8 @@ func _confirm_import_save() -> void:
 	opponent_loadout_signature = ""
 	event_log.clear()
 	_refresh_interface()
+	game.save_writes_locked = false
+	browser_save_regression_allowed = true
 	game.save_game()
 	autosave_elapsed = 0.0
 	_log_event("Loaded portable backup %s." % imported_name)
@@ -4679,6 +4777,20 @@ func _show_save_transfer_error(message: String) -> void:
 	save_transfer_message_dialog.dialog_text = message
 	save_transfer_message_dialog.popup_centered(Vector2i(560, 180))
 	_on_save_status_changed("Transfer failed")
+
+func _show_save_recovery_required() -> void:
+	if save_transfer_message_dialog == null:
+		return
+	var detail := game.last_load_message.strip_edges() if game != null else ""
+	if detail.is_empty():
+		detail = "The existing automatic save could not be read."
+	save_transfer_message_dialog.dialog_text = (
+		detail
+		+ "\n\nIt has not been overwritten. Use LOAD to restore an exported backup or a phone save slot. "
+		+ "Use RESET only if you deliberately want to discard the protected save and begin again."
+	)
+	save_transfer_message_dialog.popup_centered_clamped(Vector2i(600, 250), 0.94)
+	_on_save_status_changed("Save recovery required")
 
 func _request_hard_reset() -> void:
 	if development_session:
@@ -4700,8 +4812,11 @@ func _confirm_hard_reset() -> void:
 	if development_session or hard_reset_input.text != "RESET":
 		return
 	hard_reset_dialog.hide()
+	_clear_browser_recovery_mirrors()
 	game.delete_save()
 	game.reset_fresh()
+	game.save_writes_locked = false
+	browser_save_regression_allowed = true
 	pitch_field.reset_visual_state()
 	autosave_elapsed = 0.0
 	ui_elapsed = 0.0

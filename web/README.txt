@@ -41,8 +41,9 @@ UPDATES AND OFFLINE PLAY
 The generated service worker identifies each release by its content-derived
 cache version. An open game asks the host for an update every five minutes. When
 one is ready, the game shows SAVE & UPDATE; it does not reload until the player
-chooses. The current run is saved and browser storage is flushed before the new
-release activates. After one successful online load, the current build can also
+chooses. The review recommends EXPORT first. The current run is validated,
+mirrored with a rollback generation, and browser storage is flushed before the
+new release activates. After one successful online load, the current build can also
 start offline when the browser retains its cache.
 
 Closing the game or suspending its tab simulates up to seven days. Strikeout XP
@@ -67,9 +68,11 @@ checksums and the shared Godot gameplay source before publishing.
 
 SAVES
 
-Browser autosaves use that browser's local IndexedDB storage for this site. The
-EXPORT button downloads a portable JSON backup. LOAD selects such a backup,
-validates it, and asks for confirmation before replacing local progress. Use a
-backup before clearing site data or changing browsers/devices. Private browsing
-or restrictive storage settings may make autosaves temporary; the game warns
-when the browser reports that condition.
+Browser autosaves use that browser's local IndexedDB storage for this site and
+rotate primary/rollback localStorage recovery mirrors. Writes retain the prior
+validated generation; unreadable data is not silently overwritten. The EXPORT
+button downloads a portable JSON backup. LOAD selects such a backup, validates
+it, and asks for confirmation before replacing local progress. Use a backup
+before clearing site data or changing browsers/devices. Private browsing or
+restrictive storage settings may make autosaves temporary; the game warns when
+the browser reports that condition.

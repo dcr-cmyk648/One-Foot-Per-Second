@@ -20,6 +20,7 @@ func _initialize() -> void:
 	_test_opponent_counters()
 	_test_opponent_variants()
 	_test_strikeout_only_economy()
+	_test_outcome_weighted_frustration()
 	_test_strikeout_loot_and_equipment()
 	_test_projectile_snapshots()
 	_test_batter_rotation()
@@ -65,7 +66,9 @@ func _test_save_backup_codec() -> void:
 	_expect(not bool(original.decode_save_text("{}").get("ok", false)), "Save import must reject unrelated JSON objects")
 	var future := original.to_save_data()
 	future.version = BaseballGameState.SAVE_VERSION + 1
-	_expect(not bool(original.decode_save_text(JSON.stringify(future)).get("ok", false)), "Save import must reject unknown future schemas")
+	var future_decoded := original.decode_save_text(JSON.stringify(future))
+	_expect(not bool(future_decoded.get("ok", false)), "Save import must reject unknown future schemas")
+	_expect(str(future_decoded.get("reason", "")) == "future_version", "A future save should be identified so an older cached build can protect it from overwrite")
 	var malformed := original.to_save_data()
 	malformed.training_levels = []
 	_expect(not bool(original.decode_save_text(JSON.stringify(malformed)).get("ok", false)), "Save import must reject malformed structured sections")
@@ -621,15 +624,13 @@ func _test_strikeout_only_economy() -> void:
 		/ float(adaptation_game.get_strikes_required())
 	)
 	var first_strike_summary := adaptation_game._empty_resolution_summary()
-	first_strike_summary.elapsed_seconds = BaseballGameState.FRUSTRATION_INTERVAL_SECONDS
 	adaptation_game._apply_pitch_outcome(first_strike_summary, Content.STRIKE_INDEX)
 	adaptation_game._apply_resolution(first_strike_summary, false)
 	_expect_close(adaptation_game.xp, 0.0, "A called Strike that does not complete the count must still pay no XP")
 	_expect_close(float(first_strike_summary.mastery_gained), opening_mastery_per_strike, "Every called Strike should immediately award one count-share of mastery")
 	_expect_close(adaptation_game.opponent_mastery[0], opening_mastery_per_strike, "Partial-count mastery should be banked against the active batter")
-	_expect_close(adaptation_game.get_frustration_quality_bonus(), BaseballGameState.FRUSTRATION_QUALITY_PER_DOUBLING, "The first frustration interval should grant one logarithmic quality step")
-	_expect_close(adaptation_game.get_frustration_meter_ratio(), 0.5, "The uncapped frustration meter should reach half fill after its first interval")
-	_expect(float(adaptation_game.get_outcome_probabilities()[Content.STRIKE_INDEX]) > opening_strike_rate, "Mastery and frustration should immediately improve the called-Strike rate")
+	_expect_close(adaptation_game.frustration_points, 0.0, "A called Strike should not build Frustration")
+	_expect(float(adaptation_game.get_outcome_probabilities()[Content.STRIKE_INDEX]) > opening_strike_rate, "Guaranteed partial mastery should immediately improve the called-Strike rate")
 	var second_strike_summary := adaptation_game._empty_resolution_summary()
 	adaptation_game._apply_pitch_outcome(second_strike_summary, Content.STRIKE_INDEX)
 	adaptation_game._apply_resolution(second_strike_summary, false)
@@ -637,7 +638,7 @@ func _test_strikeout_only_economy() -> void:
 	adaptation_game._apply_pitch_outcome(terminal_strike_summary, Content.STRIKE_INDEX)
 	adaptation_game._apply_resolution(terminal_strike_summary, false)
 	_expect_close(adaptation_game.opponent_mastery[0], adaptation_game.get_strikeout_base_points(), "Three ordinary called Strikes should retain the former one-strikeout mastery value")
-	_expect_close(adaptation_game.seconds_since_strikeout, 0.0, "Completing a strikeout should reset frustration")
+	_expect_close(adaptation_game.frustration_points, 0.0, "Completing a strikeout should reset Frustration")
 
 	var game: BaseballGameState = GameStateScript.new()
 	var strike_summary := game._empty_resolution_summary()
@@ -738,6 +739,54 @@ func _test_strikeout_only_economy() -> void:
 	protected_game.free()
 	clone_game.free()
 	stalled_live_game.free()
+
+func _test_outcome_weighted_frustration() -> void:
+	var expected_points := [12.0, 8.0, 5.0, 3.0, 1.0, 0.10, 0.20, 0.0]
+	for outcome in Content.OUTCOME_NAMES.size():
+		var outcome_game: BaseballGameState = GameStateScript.new()
+		var summary := outcome_game._empty_resolution_summary()
+		# One late-game volley remains one result no matter how many literal balls
+		# it contains; otherwise clones would overwhelm the adaptation curve.
+		outcome_game._apply_pitch_outcome(summary, outcome, -1.0, 2048, false)
+		outcome_game._apply_resolution(summary, false)
+		_expect_close(
+			outcome_game.frustration_points,
+			float(expected_points[outcome]),
+			"%s should add its authored Frustration severity once per volley" % Content.OUTCOME_NAMES[outcome]
+		)
+		outcome_game.free()
+
+	_expect(
+		float(expected_points[Content.GRAND_SLAM_INDEX])
+		> float(expected_points[1])
+		and float(expected_points[1]) > float(expected_points[2])
+		and float(expected_points[2]) > float(expected_points[3])
+		and float(expected_points[3]) > float(expected_points[4]),
+		"Fair-hit Frustration should descend from Grand Slam through Single"
+	)
+	_expect(
+		float(expected_points[Content.BALL_INDEX]) < 0.25
+		and float(expected_points[Content.FOUL_INDEX]) < 0.25,
+		"Balls and Fouls should add only tiny Frustration nudges"
+	)
+
+	var curve_game: BaseballGameState = GameStateScript.new()
+	curve_game.frustration_points = BaseballGameState.FRUSTRATION_REFERENCE_POINTS
+	_expect_close(curve_game.get_frustration_quality_bonus(), BaseballGameState.FRUSTRATION_QUALITY_PER_DOUBLING, "Four Frustration should grant the first logarithmic quality step")
+	_expect_close(curve_game.get_frustration_meter_ratio(), 0.5, "The uncapped meter should reach half fill at the first reference score")
+	curve_game.plate_strikes = 2
+	var strikeout_summary := curve_game._empty_resolution_summary()
+	curve_game._apply_pitch_outcome(strikeout_summary, Content.STRIKE_INDEX)
+	curve_game._apply_resolution(strikeout_summary, false)
+	_expect_close(curve_game.frustration_points, 0.0, "A completed strikeout should clear every accumulated Frustration point")
+
+	curve_game.frustration_points = 9.0
+	var aggregate_summary := curve_game._empty_resolution_summary()
+	aggregate_summary.aggregate_frustration_points = 12.0
+	aggregate_summary.aggregate_frustration_strikeouts = 2.0
+	curve_game._apply_resolution(aggregate_summary, false)
+	_expect_close(curve_game.frustration_points, 4.0, "Offline aggregate play should retain the mean bad-result tail after its last strikeout reset")
+	curve_game.free()
 
 func _test_loot_item(
 	item_id: String,
@@ -1469,7 +1518,7 @@ func _test_save_round_trip_and_migration() -> void:
 	original.eldritch_levels.portal_outfield = 3
 	original.lifetime_strikeouts = 2468.0
 	original.current_body_strikeouts = 135.0
-	original.seconds_since_strikeout = 47.5
+	original.frustration_points = 47.5
 	original.plate_strikes = 3
 	original.plate_balls = 2
 	original.batter_cooldown_remaining = 0.8
@@ -1487,7 +1536,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(restored.get_strikes_per_batter() == 4, "Genetic count compression should survive saves")
 	_expect(int(restored.genetic_levels.prehensile_outfield) == 2 and int(restored.eldritch_levels.portal_outfield) == 3, "Hit-protection upgrades should survive saves")
 	_expect_close(restored.lifetime_strikeouts, 2468.0, "Strikeout totals should survive saves")
-	_expect_close(restored.seconds_since_strikeout, 47.5, "The active frustration dry spell should survive saves")
+	_expect_close(restored.frustration_points, 47.5, "The active outcome-weighted Frustration score should survive saves")
 	_expect(restored.plate_strikes == 3 and restored.plate_balls == 2 and restored.batter_cooldown_remaining > 0.0, "The complete live count should survive saves")
 	_expect_close(restored.get_clone_count(), 4.0, "Eldritch clones should survive saves")
 	_expect(restored.has_divine_blessing("let_there_be_fastballs") and restored.divine_halos == 1, "Divine rewards should survive saves")
@@ -1503,6 +1552,18 @@ func _test_save_round_trip_and_migration() -> void:
 		"training_levels": {"velocity": 5},
 	})
 	_expect_close(early_v13.get_offline_xp_efficiency(), 0.01, "Older v13 saves should start the new training axis at rank zero")
+	var version_sixteen: BaseballGameState = GameStateScript.new()
+	version_sixteen.apply_save_data({
+		"version": 16,
+		"seconds_since_strikeout": 30.0,
+	})
+	_expect_close(version_sixteen.frustration_points, 8.0, "v16 drought seconds should migrate to the same position on the new Frustration curve")
+	_expect_close(
+		version_sixteen.get_frustration_quality_bonus(),
+		BaseballGameState.FRUSTRATION_QUALITY_PER_DOUBLING * log(3.0) / log(2.0),
+		"v16 Frustration migration should preserve the exact quality bonus"
+	)
+	_expect(not version_sixteen.to_save_data().has("seconds_since_strikeout"), "Current saves should retire the time-based Frustration field")
 
 	var legacy_data := {
 		"version": 5,
@@ -1567,6 +1628,7 @@ func _test_save_round_trip_and_migration() -> void:
 	version_six.free()
 	version_eight.free()
 	early_v13.free()
+	version_sixteen.free()
 
 func _test_cosmic_completion_and_magnitude() -> void:
 	var game: BaseballGameState = GameStateScript.new()

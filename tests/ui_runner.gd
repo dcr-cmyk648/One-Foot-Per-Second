@@ -150,16 +150,27 @@ func _run() -> void:
 			_expect(str((outcome_heading.get_child(1) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus beside its name")
 			_expect(not outcome_panel.tooltip_text.is_empty(), "Detailed outcome rules should live in hover text")
 	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("cannot be saved"), "The Grand Slam tooltip should explicitly distinguish its absolute terminal rule from a Home Run")
+	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Frustration +12"), "The Grand Slam tooltip should expose its maximum Frustration severity")
+	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Frustration +0.20"), "The Ball tooltip should expose its tiny Frustration nudge")
 	_expect(main.outcome_panels[1].tooltip_text.contains("unless saved"), "The Home Run tooltip should retain ordinary hit-save behavior")
 	_expect(not main.strikeout_payout_label.text.begins_with("0 XP"), "The separate strikeout payout should not repeat zero-XP clutter")
 	_expect(main.strikeout_payout_label.text.begins_with("COMPLETED STRIKEOUT:"), "Strikeout XP should appear in one small separate readout")
 	_expect(main.frustration_status.get_parent() == main.outcome_footer, "Frustration and strikeout payout should share the compact outcome footer")
-	_expect(main.frustration_label.text.begins_with("FRUSTRATION +"), "The field should expose the current dry-spell quality bonus")
+	_expect(main.frustration_label.text.begins_with("FRUSTRATION +"), "The field should expose the current outcome-weighted quality bonus")
+	_expect(main.frustration_label.tooltip_text.contains("Grand Slam +12") and not main.frustration_label.tooltip_text.contains("since the last"), "Frustration inspection should explain severity rather than elapsed time")
 	_expect(main.hard_reset_button != null and main.hard_reset_button.text == "RESET PROGRESS", "A visible progress-reset control should exist")
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
 	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
 	_expect(main.browser_save_slot_entries.size() == 3, "The shared interface should build three phone manual-save slots")
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE ANYWAY", "Browser updates should require an explicit backup-aware confirmation")
+	_expect(main._browser_save_has_more_progress({"lifetime_pitches": 100.0}, {"lifetime_pitches": 1.0}), "Browser recovery should recognize a demonstrably more advanced mirror")
+	main.game.last_load_message = "Synthetic unreadable save."
+	main.game.save_writes_locked = true
+	main._show_save_recovery_required()
+	await process_frame
+	_expect(main.save_transfer_message_dialog.visible and main.save_transfer_message_dialog.dialog_text.contains("has not been overwritten"), "Unreadable saves should block writes and expose LOAD/RESET recovery instead of silently starting over")
+	main.save_transfer_message_dialog.hide()
+	main.game.save_writes_locked = false
 	_expect(main.browser_update_confirmation.dialog_autowrap, "The browser-update warning must wrap instead of overflowing a resized window")
 	_expect(not main.import_save_confirmation.visible, "The load-save replacement confirmation should begin closed")
 	_expect(not main.offline_progress_dialog.visible, "The offline-XP return popup should begin closed")

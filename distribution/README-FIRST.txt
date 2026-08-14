@@ -59,6 +59,9 @@ Linux:
 The renamed game deliberately keeps this original data directory. The save is
 named one_foot_per_second_save.json. The in-game EXPORT and LOAD
 buttons are the preferred way to move or back up progress on every platform.
+Automatic writes validate a pending generation and retain the previous valid
+save as one_foot_per_second_save.backup.json. An unreadable or newer-schema save
+is protected from automatic overwrite until LOAD or an explicit typed RESET.
 Browser autosaves are local to that browser and site; use EXPORT before clearing
 site data, changing browsers, or changing devices.
 
