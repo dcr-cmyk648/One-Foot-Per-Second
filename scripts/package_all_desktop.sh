@@ -229,6 +229,12 @@ OFPS_ALL_STAGE="${OFPS_TEMP_DIR}/${OFPS_TITLE} v${OFPS_VERSION} All Desktop Plat
     > "${OFPS_ROOT}/SHA256SUMS.txt"
 )
 
+# Generated installers are reproducible from Git. Retain only the current
+# version locally so routine updates do not accumulate many gigabytes of stale
+# DMGs, executables, source archives, and combined bundles.
+"${OFPS_ROOT}/scripts/prune_old_releases.sh" \
+  "${OFPS_RELEASE_ROOT}" "${OFPS_TITLE}" "${OFPS_VERSION}"
+
 echo
 echo "Release complete:"
 echo "${OFPS_RELEASE_ROOT}/${OFPS_ALL_NAME}"
