@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0 — The trophy case has classified files
+
+- Added exactly 100 permanent achievements across the complete human, genetic, alien, eldritch, and divine campaign. Each completion adds one additive percentage point to all XP income and survives every prestige layer.
+- Added a dedicated achievement browser with live progress, completed styling, tier totals, a permanent-bonus summary, and queued gold unlock toasts.
+- The browser always shows all 100 achievement slots, but undiscovered subjects are represented only as `HIDDEN ACHIEVEMENT`. Their real name, description, requirement, progress, future tier heading, and tooltip remain anonymous until encountered or completed.
+- Added persistent lifetime counters and peak records for active field taps, saved hits, pitch speed, mound distance, and loot rarity. Save version 15 migrates older runs and silently backfills only achievements their saved history can prove.
+- Added a saved per-tab `HIDE PURCHASED` toggle to Pitch, Ball, and Facility. Each filter hides only completed one-time entries in its own catalog while preserving locked and available options.
+- Extended the full regression and interface matrix to validate catalog size and uniqueness, exact additive XP math, prestige permanence, secret reveal rules, save migration, anonymous desktop/phone cards, touch-sized filters, and unlock toasts.
+- Re-audited no-loot pacing with achievements active: the first human lifetime reaches Xylophax in roughly 37 hours 30 minutes, and the complete deterministic multiverse reaches cosmic victory in roughly 63 days 18 hours.
+
 ## 0.10.9 — The pants have a nametag
 
 - Mobile Locker rows now reserve a high-contrast two-line summary with the complete item name followed by Power, rarity, and item level; Compare is no longer required to identify a drop.

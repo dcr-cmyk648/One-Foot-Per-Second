@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.9 Design
+# One Foot Per Second — v0.11.0 Design
 
 ## Product shape
 
@@ -48,6 +48,7 @@ base strikeout XP
 × strongest ball payload
 × distance reward
 × optional mastery and equipment bonuses
+× (1 + completed achievements × 0.01)
 ```
 
 When the game is closed or a browser tab is suspended, the same state machine runs for up to seven days but its strikeout XP is multiplied by the body's offline efficiency. That value begins at `0.01`; Scorebook Study adds `0.01` per rank and ordinarily caps at `0.25`. Mastery, counts, batter replacement, story clocks, and loot still advance through the authoritative simulation. Returning with any deposited XP opens a summary that names the time away, XP gained, efficiency used, strikeouts, and loot.
@@ -96,6 +97,10 @@ Every terminal result has a distinct exit treatment. The old batter moves toward
 The fresh game exposes ordinary XP, the human opponent ladder, Training, Pitch, Ball, Facility, Gear, Stats, Help, six equipment squares, and the permanent-progress reset. The seven-slot Relic remains anonymous until post-human play. DNA, mutations, automation, extra bodies, and alien catalogs appear only after Xylophax's offer. Arcana, magic, clones, reality statistics, and eldritch catalogs appear only after N'Kthra's offer. Divine controls and completion statistics appear only after the first cosmic victory.
 
 Within a revealed story tier, its full catalog is visible and every tab is ordered by unlock level, then cost. A locked entry shows only its unmet requirements; it does not reveal the effect. Most gates are campaign levels, while selected Facility gates ask for a measured speed, a farther mound, or a Strikeout achievement. Descriptions state concrete arithmetic such as `Base speed +0.15 ft/s`, `Quality ×1.08`, or `Lineup time ×0.90`. Maximum-rank and body-cap language appears only when reached. Attempting to train beyond a body limit opens a contextual hint rather than spoiling genetics.
+
+Pitch, Ball, and Facility each expose an independent saved Hide Purchased toggle. It removes only completed one-time entries from that tab; available and locked options remain visible. Training and prestige ranks are repeatable or strategically stateful, so they do not use this filter.
+
+The Achievements tab always exposes a 100-slot total. Each completion permanently adds one additive percentage point to XP income, so the catalog ranges from `×1.00` to `×2.00`; achievements survive genetic, eldritch, and divine resets. Human, post-human, eldritch, and divine milestones share the catalog, but future information obeys a stricter disclosure rule than ordinary upgrade locks. Before its subject has been encountered, a card says only `HIDDEN ACHIEVEMENT`: it does not show its name, condition, progress, description, tooltip detail, or unrevealed tier heading. Completing a secret reveals it immediately. Multiple simultaneous completions enter a queued toast rather than overwriting one another.
 
 Ordinary Training offers one additive purchase per base stat, unlocked gradually in this order: Speed, Quality, active Field Tap, Recovery, Offline XP, Distance Control, base Lineup time, fair-hit Delay, and Pitch Calling. The field's compact profile shows all nine values with hover explanations. The phone Upgrades overlay pins the same current effective values above its independently scrolling tabs, and only its explicit touch-sized previous/next buttons navigate tabs; native overflow arrows are disabled. One-time Facilities provide the separate multiplicative layer, so a new building or questionable intervention is a larger event than pumping another Training rank. There are no same-operation quality buttons with cosmetic names.
 
@@ -208,7 +213,7 @@ Human simultaneous capacity is exactly one. Post-human throwing sources are `arm
 
 ## Save and completion contract
 
-Save version 14 persists the explicit pitch phase, hidden pending outcome, selected pitch ID, exact sampled speed, release distance, original and remaining duration, generated batter identity/loadout, live Strike and Ball counts, nine additive Training axes, forty-two Facilities, cooldown, eight result totals, strikeouts, currencies, upgrades, mastery, automation, loot, favorites, equipment, Scrap, pity, and lifetime statistics. Version-13 saves default Scrap, Field Hustle, and both new genetic ranks to zero while retaining every earlier migration.
+Save version 15 persists the explicit pitch phase, hidden pending outcome, selected pitch ID, exact sampled speed, release distance, original and remaining duration, generated batter identity/loadout, live Strike and Ball counts, nine additive Training axes, forty-two Facilities, cooldown, eight result totals, strikeouts, currencies, upgrades, mastery, automation, loot, favorites, equipment, Scrap, pity, achievement IDs and trigger history, peak speed/range/rarity records, catalog filter preferences, and lifetime statistics. Older saves silently backfill only achievements that their persisted history proves, without emitting an unlock-toast backlog. Version-13 saves still default Scrap, Field Hustle, and both newer genetic ranks to zero while retaining every earlier migration.
 
 Version-12 multiplicative Training ranks migrate to equivalent additive ranks; its single lineup modifier becomes the new base-lineup investment while fair-hit recovery starts cleanly. Legacy Command, Spin, and Deception ranks migrate into one additive Command investment. Older saves retain the Belt-to-Jock-Strap migration, ten-item pruning, added outcome slots, count-compression mapping, portal mapping, and conversion of retired prestige systems.
 

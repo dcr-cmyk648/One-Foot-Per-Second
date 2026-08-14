@@ -4,10 +4,11 @@ extends Node
 signal batch_resolved(summary: Dictionary)
 signal progression_changed(message: String)
 signal save_status_changed(message: String)
+signal achievement_unlocked(definition: Dictionary, total_unlocked: int)
 
 const Content = preload("res://scripts/content.gd")
 const SAVE_PATH := "user://one_foot_per_second_save.json"
-const SAVE_VERSION := 14
+const SAVE_VERSION := 15
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -79,6 +80,12 @@ var xp := 0.0
 var run_xp := 0.0
 var lifetime_xp := 0.0
 var lifetime_pitches := 0.0
+var lifetime_field_taps := 0.0
+var lifetime_field_tap_seconds := 0.0
+var lifetime_saved_hits := 0.0
+var lifetime_max_pitch_speed_fps := 1.0
+var lifetime_max_distance_index := 0
+var lifetime_max_loot_rarity := -1
 var current_opponent := 0
 var highest_unlocked := 0
 var selected_distance_index := 0
@@ -145,6 +152,13 @@ var divine_blessings: Array[String] = []
 var unlocked_pitches: Array[String] = ["dead_fish"]
 var purchased_ball_upgrades: Array[String] = []
 var purchased_milestones: Array[String] = []
+var unlocked_achievements: Array[String] = []
+var achievement_revision := 0
+var catalog_hide_purchased := {
+	"pitch": false,
+	"ball": false,
+	"facility": false,
+}
 var milestone_effect_cache_count := -1
 var milestone_effect_cache := {}
 var opponent_mastery: Array[float] = []
@@ -418,6 +432,7 @@ func _advance_story_encounters(seconds: float) -> void:
 			progression_changed.emit(
 				"XYLOPHAX'S OFFER: Add arms in the womb, borrow a Time Machine, and be born better."
 			)
+			check_achievements()
 	if is_eldritch_exhibition_blocked() and not eldritch_offer_unlocked:
 		eldritch_exhibition_seconds = minf(eldritch_exhibition_seconds + maxf(seconds, 0.0), EXHIBITION_SECONDS)
 		if eldritch_exhibition_seconds >= EXHIBITION_SECONDS:
@@ -425,6 +440,7 @@ func _advance_story_encounters(seconds: float) -> void:
 			progression_changed.emit(
 				"THE LAST AEON'S OFFER: Destroy this reality and pitch with what remains outside it."
 			)
+			check_achievements()
 
 func get_story_status_text() -> String:
 	if is_alien_exhibition_blocked():
@@ -442,6 +458,12 @@ func reset_fresh() -> void:
 	run_xp = 0.0
 	lifetime_xp = 0.0
 	lifetime_pitches = 0.0
+	lifetime_field_taps = 0.0
+	lifetime_field_tap_seconds = 0.0
+	lifetime_saved_hits = 0.0
+	lifetime_max_pitch_speed_fps = 1.0
+	lifetime_max_distance_index = 0
+	lifetime_max_loot_rarity = -1
 	current_opponent = 0
 	highest_unlocked = 0
 	selected_distance_index = 0
@@ -479,6 +501,13 @@ func reset_fresh() -> void:
 	unlocked_pitches = ["dead_fish"]
 	purchased_ball_upgrades.clear()
 	purchased_milestones.clear()
+	unlocked_achievements.clear()
+	achievement_revision += 1
+	catalog_hide_purchased = {
+		"pitch": false,
+		"ball": false,
+		"facility": false,
+	}
 	_invalidate_milestone_effect_cache()
 	result_totals = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	lifetime_strikeouts = 0.0
@@ -606,6 +635,12 @@ func apply_field_tap() -> Dictionary:
 				pitch_credit + advance_seconds * maxf(get_recovery_rate(), 0.000001),
 				1.0
 			)
+	lifetime_field_taps = minf(MAX_NUMBER, lifetime_field_taps + 1.0)
+	lifetime_field_tap_seconds = minf(
+		MAX_NUMBER,
+		lifetime_field_tap_seconds + advance_seconds
+	)
+	check_achievements()
 	return {
 		"applied": true,
 		"phase": phase,
@@ -871,6 +906,8 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	pending_volley_pitch_id = _sample_pitch_id()
 	pending_volley_speed_fps = _sample_pitch_speed(pending_volley_pitch_id)
 	pending_volley_distance_index = selected_distance_index
+	lifetime_max_pitch_speed_fps = maxf(lifetime_max_pitch_speed_fps, pending_volley_speed_fps)
+	lifetime_max_distance_index = maxi(lifetime_max_distance_index, pending_volley_distance_index)
 	pending_volley_opponent_index = current_opponent
 	pending_volley_outcome = _sample_outcome(get_outcome_probabilities_for_pitch(
 		pending_volley_pitch_id,
@@ -1027,6 +1064,11 @@ func _apply_pitch_outcome(
 
 func _resolve_aggregate_time(seconds: float, summary: Dictionary, stochastic: bool) -> void:
 	var metrics := get_at_bat_metrics()
+	lifetime_max_pitch_speed_fps = maxf(
+		lifetime_max_pitch_speed_fps,
+		get_representative_pitch_speed()
+	)
+	lifetime_max_distance_index = maxi(lifetime_max_distance_index, selected_distance_index)
 	var cycle_seconds := maxf(float(metrics.cycle_seconds), 0.000001)
 	var cycles := minf(seconds / cycle_seconds, MAX_NUMBER)
 	var active_volleys := minf(cycles * float(metrics.active_volleys), MAX_NUMBER)
@@ -1102,12 +1144,17 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 	lifetime_pitches = minf(MAX_NUMBER, lifetime_pitches + pitch_count)
 	lifetime_strikeouts = minf(MAX_NUMBER, lifetime_strikeouts + strikeouts)
 	current_body_strikeouts = minf(MAX_NUMBER, current_body_strikeouts + strikeouts)
+	lifetime_saved_hits = minf(
+		MAX_NUMBER,
+		lifetime_saved_hits + float(summary.get("saved_hits", 0.0))
+	)
 	_resolve_strikeout_loot(strikeouts, float(summary.elapsed_seconds), summary)
 	opponent_mastery[reward_opponent] = minf(
 		MAX_NUMBER,
 		opponent_mastery[reward_opponent] + base_score * get_mastery_multiplier()
 	)
 	summary.unlocked_message = _check_opponent_unlock()
+	check_achievements()
 	last_batch = summary
 	if should_emit and (pitch_count > 0.0 or released_count > 0.0):
 		batch_resolved.emit(summary)
@@ -1218,6 +1265,8 @@ func _generate_bulk_loot(successes: int, opponent_index: int, summary: Dictionar
 		generated_counts.fill(0)
 		for rarity_index in range(Content.LOOT_RARITIES.size() - 1, -1, -1):
 			var count_to_generate := mini(rarity_counts[rarity_index], slot_generation_budget)
+			if rarity_counts[rarity_index] > 0:
+				lifetime_max_loot_rarity = maxi(lifetime_max_loot_rarity, rarity_index)
 			for _candidate in count_to_generate:
 				_store_generated_loot(
 					_generate_loot_item(opponent_index, slot_index, rarity_index),
@@ -1376,6 +1425,10 @@ func _store_generated_loot(item: Dictionary, summary: Dictionary) -> void:
 func _add_loot_item(item: Dictionary) -> Dictionary:
 	var stored: Dictionary = item.duplicate(true)
 	stored["favorite"] = bool(stored.get("favorite", false))
+	lifetime_max_loot_rarity = maxi(
+		lifetime_max_loot_rarity,
+		clampi(int(stored.get("rarity", 0)), 0, Content.LOOT_RARITIES.size() - 1)
+	)
 	loot_items.append(stored)
 	var slot := str(stored.slot)
 	var capacity_result := _enforce_loot_slot_capacity(slot)
@@ -1513,10 +1566,12 @@ func equip_loot(item_id: String) -> bool:
 		equipped_loot[slot] = ""
 		loot_revision += 1
 		progression_changed.emit("UNEQUIPPED: %s." % str(item.name))
+		check_achievements()
 		return true
 	equipped_loot[slot] = item_id
 	loot_revision += 1
 	progression_changed.emit("EQUIPPED: %s." % str(item.name))
+	check_achievements()
 	return true
 
 func toggle_loot_favorite(item_id: String) -> bool:
@@ -2275,7 +2330,198 @@ func get_xp_multiplier(opponent_index: int = current_opponent, distance_index: i
 		* get_distance_xp_multiplier_for_index(distance_index)
 		* get_opponent_farm_xp_multiplier(bounded_index)
 		* (1.0 + float(equipment.xp_bonus))
+		* get_achievement_xp_multiplier()
 	)
+
+func get_achievement_xp_bonus() -> float:
+	return float(unlocked_achievements.size()) * Content.DEFAULT_ACHIEVEMENT_XP_BONUS
+
+func get_achievement_xp_multiplier() -> float:
+	return 1.0 + get_achievement_xp_bonus()
+
+func has_achievement(id: String) -> bool:
+	return id in unlocked_achievements
+
+func get_historical_highest_opponent() -> int:
+	var result := highest_unlocked
+	if lifetime_genetic_rebirths > 0:
+		result = maxi(result, Content.ALIEN_EXHIBITION_INDEX)
+	if lifetime_eldritch_ascensions > 0:
+		result = maxi(result, Content.ELDRITCH_EXHIBITION_INDEX)
+	if divine_ascensions > 0:
+		result = maxi(result, Content.FINAL_BOSS_INDEX)
+	return clampi(result, 0, Content.FINAL_BOSS_INDEX)
+
+func is_achievement_tier_revealed(tier: String) -> bool:
+	match tier:
+		"human":
+			return true
+		"genetic":
+			return (
+				genetic_offer_unlocked
+				or lifetime_genetic_rebirths > 0
+				or get_historical_highest_opponent() >= Content.ALIEN_EXHIBITION_INDEX
+			)
+		"eldritch":
+			return (
+				eldritch_offer_unlocked
+				or lifetime_eldritch_ascensions > 0
+				or get_historical_highest_opponent() >= Content.ELDRITCH_EXHIBITION_INDEX
+			)
+		"divine":
+			return cosmos_conquered or divine_ascensions > 0
+		_:
+			return false
+
+func is_achievement_information_revealed(definition: Dictionary) -> bool:
+	var id := str(definition.get("id", ""))
+	if has_achievement(id):
+		return true
+	if not is_achievement_tier_revealed(str(definition.get("tier", "human"))):
+		return false
+	if bool(definition.get("secret", false)):
+		return false
+	var reveal_level := int(definition.get("reveal_level", -1))
+	if reveal_level >= 0 and get_historical_highest_opponent() < reveal_level:
+		return false
+	return true
+
+func _achievement_metric_value(definition: Dictionary) -> float:
+	var metric := str(definition.get("metric", ""))
+	var key = definition.get("key", "")
+	match metric:
+		"lifetime_pitches":
+			return lifetime_pitches
+		"field_taps":
+			return lifetime_field_taps
+		"lifetime_strikeouts":
+			return lifetime_strikeouts
+		"outcome":
+			var outcome_index := clampi(int(key), 0, result_totals.size() - 1)
+			return float(result_totals[outcome_index])
+		"level":
+			return float(get_historical_highest_opponent())
+		"distance":
+			return float(lifetime_max_distance_index)
+		"speed":
+			return lifetime_max_pitch_speed_fps
+		"training":
+			return float(training_levels.get(str(key), 0))
+		"pitches_owned":
+			return float(unlocked_pitches.size())
+		"ball_upgrades_owned":
+			return float(purchased_ball_upgrades.size())
+		"facilities_owned":
+			return float(purchased_milestones.size())
+		"loot_found":
+			return lifetime_loot_found
+		"loot_rarity":
+			return float(lifetime_max_loot_rarity)
+		"equipped_slots":
+			var equipped_count := 0
+			for slot in ["hat", "jersey", "jockstrap", "glove", "pants", "cleats"]:
+				if not str(equipped_loot.get(slot, "")).is_empty():
+					equipped_count += 1
+			return float(equipped_count)
+		"genetic_offer":
+			return 1.0 if genetic_offer_unlocked or lifetime_genetic_rebirths > 0 else 0.0
+		"genetic_rebirths":
+			return float(lifetime_genetic_rebirths)
+		"lifetime_dna":
+			return lifetime_dna_earned
+		"genetic_upgrades_owned":
+			var genetic_count := 0
+			for rank in genetic_levels.values():
+				if int(rank) > 0:
+					genetic_count += 1
+			return float(genetic_count)
+		"genetic_upgrade":
+			return float(genetic_levels.get(str(key), 0))
+		"arms":
+			return get_arm_count()
+		"volley":
+			return float(get_volley_size())
+		"saved_hits":
+			return lifetime_saved_hits
+		"relic_owned":
+			for item in loot_items:
+				if str((item as Dictionary).get("slot", "")) == "relic":
+					return 1.0
+			return 0.0
+		"eldritch_offer":
+			return 1.0 if eldritch_offer_unlocked or lifetime_eldritch_ascensions > 0 else 0.0
+		"eldritch_ascensions":
+			return float(lifetime_eldritch_ascensions)
+		"lifetime_arcana":
+			return lifetime_arcana_earned
+		"clones":
+			return get_clone_count()
+		"time_layers":
+			return get_time_multiplier()
+		"eldritch_upgrade":
+			return float(eldritch_levels.get(str(key), 0))
+		"cosmos":
+			return 1.0 if cosmos_conquered or divine_ascensions > 0 else 0.0
+		"divine_ascensions":
+			return float(divine_ascensions)
+		"divine_blessings":
+			return float(divine_blessings.size())
+		"divine_halos":
+			return float(divine_halos)
+		_:
+			return 0.0
+
+func get_achievement_progress(definition: Dictionary) -> Dictionary:
+	var current := maxf(_achievement_metric_value(definition), 0.0)
+	var threshold := maxf(float(definition.get("threshold", 1.0)), 0.000001)
+	var ratio := clampf(current / threshold, 0.0, 1.0)
+	var metric := str(definition.get("metric", ""))
+	var progress_text := "%s / %s" % [format_number(current, 0), format_number(threshold, 0)]
+	match metric:
+		"speed":
+			progress_text = "%s / %s" % [format_speed(current), format_speed(threshold)]
+		"distance":
+			var current_index := clampi(int(current), 0, Content.DISTANCE_TIERS.size() - 1)
+			var target_index := clampi(int(threshold), 0, Content.DISTANCE_TIERS.size() - 1)
+			progress_text = "%s / %s" % [
+				str(Content.DISTANCE_TIERS[current_index].label),
+				str(Content.DISTANCE_TIERS[target_index].label),
+			]
+		"level":
+			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
+		"training", "genetic_upgrade", "eldritch_upgrade":
+			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
+		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos":
+			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
+	return {
+		"current": current,
+		"threshold": threshold,
+		"ratio": ratio,
+		"text": progress_text,
+	}
+
+func check_achievements(emit_notifications := true) -> Array[Dictionary]:
+	var newly_unlocked: Array[Dictionary] = []
+	for definition_value in Content.ACHIEVEMENTS:
+		var definition: Dictionary = definition_value
+		var id := str(definition.id)
+		if id in unlocked_achievements:
+			continue
+		var progress := get_achievement_progress(definition)
+		if float(progress.ratio) < 1.0:
+			continue
+		unlocked_achievements.append(id)
+		achievement_revision += 1
+		newly_unlocked.append(definition)
+		if emit_notifications:
+			achievement_unlocked.emit(definition, unlocked_achievements.size())
+	return newly_unlocked
+
+func set_catalog_hide_purchased(catalog_id: String, hidden: bool) -> bool:
+	if not catalog_hide_purchased.has(catalog_id):
+		return false
+	catalog_hide_purchased[catalog_id] = hidden
+	return true
 
 func _get_quality_without_pitch(pitch_speed_fps: float) -> float:
 	var velocity_score := log(maxf(pitch_speed_fps, 0.0) + 1.0) / log(2.0) * 0.70
@@ -2333,6 +2579,7 @@ func set_distance_index(index: int) -> bool:
 	if bounded == selected_distance_index:
 		return false
 	selected_distance_index = bounded
+	lifetime_max_distance_index = maxi(lifetime_max_distance_index, bounded)
 	consecutive_home_runs = 0
 	var distance := get_current_distance()
 	progression_changed.emit(
@@ -2343,6 +2590,7 @@ func set_distance_index(index: int) -> bool:
 			get_distance_difficulty(),
 		]
 	)
+	check_achievements()
 	return true
 
 func get_distance_xp_multiplier_for_index(distance_index: int = -1) -> float:
@@ -2440,6 +2688,7 @@ func _check_opponent_unlock() -> String:
 		cosmos_conquered = true
 		var victory_message := "COSMOS CONQUERED: Octathulhu has run out of causality."
 		progression_changed.emit(victory_message)
+		check_achievements()
 		return victory_message
 	highest_unlocked += 1
 	var message := "UNLOCKED: %s" % opponents[highest_unlocked].name
@@ -2452,6 +2701,7 @@ func _check_opponent_unlock() -> String:
 		consecutive_home_runs = 0
 		message += " • auto-advanced"
 	progression_changed.emit(message)
+	check_achievements()
 	return message
 
 func get_mastery_ratio(index: int = current_opponent) -> float:
@@ -2549,6 +2799,7 @@ func buy_training(id: String) -> bool:
 	xp -= cost
 	training_levels[id] = int(training_levels[id]) + 1
 	progression_changed.emit("%s is now rank %d." % [Content.training_by_id(id).name, training_levels[id]])
+	check_achievements()
 	return true
 
 func is_velocity_body_capped() -> bool:
@@ -2576,6 +2827,7 @@ func buy_pitch(id: String) -> bool:
 	xp -= get_pitch_cost(id)
 	unlocked_pitches.append(id)
 	progression_changed.emit("PITCH LEARNED: %s" % definition.name)
+	check_achievements()
 	return true
 
 func has_ball_upgrade(id: String) -> bool:
@@ -2603,6 +2855,7 @@ func buy_ball_upgrade(id: String) -> bool:
 	xp -= get_ball_upgrade_cost(id)
 	purchased_ball_upgrades.append(id)
 	progression_changed.emit("BALL EVOLVED: %s" % definition.name)
+	check_achievements()
 	return true
 
 func has_milestone(id: String) -> bool:
@@ -2672,6 +2925,7 @@ func buy_milestone(id: String) -> bool:
 	purchased_milestones.append(id)
 	_invalidate_milestone_effect_cache()
 	progression_changed.emit("UPGRADE ACQUIRED: %s" % definition.name)
+	check_achievements()
 	return true
 
 func get_scale_cost(id: String) -> float:
@@ -2701,6 +2955,7 @@ func buy_scale(id: String) -> bool:
 	xp -= cost
 	scale_levels[id] = int(scale_levels[id]) + 1
 	progression_changed.emit("%s is now rank %d." % [Content.scale_by_id(id).name, scale_levels[id]])
+	check_achievements()
 	return true
 
 func has_genetic_upgrade(id: String) -> bool:
@@ -2739,6 +2994,7 @@ func buy_genetic(id: String) -> bool:
 	progression_changed.emit("GENETIC ENHANCEMENT: %s rank %d." % [Content.genetic_by_id(id).name, genetic_levels[id]])
 	if id == "autonomic_wardrobe":
 		auto_equip_highest_power()
+	check_achievements()
 	return true
 
 func get_eldritch_cost(id: String) -> int:
@@ -2766,6 +3022,7 @@ func buy_eldritch(id: String) -> bool:
 	arcana -= cost
 	eldritch_levels[id] = int(eldritch_levels.get(id, 0)) + 1
 	progression_changed.emit("ELDRITCH MAGIC: %s rank %d." % [Content.eldritch_by_id(id).name, eldritch_levels[id]])
+	check_achievements()
 	return true
 
 func get_dna_gain_multiplier() -> float:
@@ -2907,6 +3164,7 @@ func perform_genetic_rebirth() -> int:
 		("GENETIC REBIRTH: +%d DNA. You were modified as a baby because chronology is optional." % award)
 		+ wardrobe_message
 	)
+	check_achievements()
 	return award
 
 func perform_eldritch_ascension() -> int:
@@ -2933,6 +3191,7 @@ func perform_eldritch_ascension() -> int:
 	progression_changed.emit(
 		"REALITY DESTROYED: +%d Arcana. Your consciousness found a less doomed bullpen." % award
 	)
+	check_achievements()
 	return award
 
 func all_divine_blessings_owned() -> bool:
@@ -2970,6 +3229,7 @@ func perform_divine_ascension(id: String) -> bool:
 	progression_changed.emit(
 		"DIVINE GRAND SLAM: God restored the universe and granted %s." % reward_name
 	)
+	check_achievements()
 	return true
 
 func save_game() -> bool:
@@ -3007,13 +3267,16 @@ func decode_save_text(text: String) -> Dictionary:
 			"ok": false,
 			"message": "This save was created by a newer version of the game (save v%d; supported through v%d)." % [saved_version, SAVE_VERSION],
 		}
-	var dictionary_fields := ["training_levels", "genetic_levels", "eldritch_levels", "equipped_loot"]
+	var dictionary_fields := [
+		"training_levels", "genetic_levels", "eldritch_levels", "equipped_loot",
+		"catalog_hide_purchased",
+	]
 	for field in dictionary_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_DICTIONARY:
 			return {"ok": false, "message": "The save contains an invalid %s section." % str(field)}
 	var array_fields := [
 		"loot_items", "divine_blessings", "unlocked_pitches", "purchased_ball_upgrades",
-		"purchased_milestones", "opponent_mastery", "result_totals",
+		"purchased_milestones", "opponent_mastery", "result_totals", "unlocked_achievements",
 	]
 	for field in array_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_ARRAY:
@@ -3049,6 +3312,12 @@ func to_save_data() -> Dictionary:
 		"run_xp": run_xp,
 		"lifetime_xp": lifetime_xp,
 		"lifetime_pitches": lifetime_pitches,
+		"lifetime_field_taps": lifetime_field_taps,
+		"lifetime_field_tap_seconds": lifetime_field_tap_seconds,
+		"lifetime_saved_hits": lifetime_saved_hits,
+		"lifetime_max_pitch_speed_fps": lifetime_max_pitch_speed_fps,
+		"lifetime_max_distance_index": lifetime_max_distance_index,
+		"lifetime_max_loot_rarity": lifetime_max_loot_rarity,
 		"lifetime_strikeouts": lifetime_strikeouts,
 		"current_body_strikeouts": current_body_strikeouts,
 		"lifetime_loot_found": lifetime_loot_found,
@@ -3105,6 +3374,8 @@ func to_save_data() -> Dictionary:
 		"unlocked_pitches": unlocked_pitches,
 		"purchased_ball_upgrades": purchased_ball_upgrades,
 		"purchased_milestones": purchased_milestones,
+		"unlocked_achievements": unlocked_achievements,
+		"catalog_hide_purchased": catalog_hide_purchased,
 		"opponent_mastery": opponent_mastery,
 		"result_totals": result_totals,
 	}
@@ -3115,6 +3386,12 @@ func apply_save_data(data: Dictionary) -> void:
 	run_xp = clampf(float(data.get("run_xp", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_xp = clampf(float(data.get("lifetime_xp", xp)), 0.0, MAX_NUMBER)
 	lifetime_pitches = clampf(float(data.get("lifetime_pitches", 0.0)), 0.0, MAX_NUMBER)
+	lifetime_field_taps = clampf(float(data.get("lifetime_field_taps", 0.0)), 0.0, MAX_NUMBER)
+	lifetime_field_tap_seconds = clampf(float(data.get("lifetime_field_tap_seconds", 0.0)), 0.0, MAX_NUMBER)
+	lifetime_saved_hits = clampf(float(data.get("lifetime_saved_hits", 0.0)), 0.0, MAX_NUMBER)
+	lifetime_max_pitch_speed_fps = clampf(float(data.get("lifetime_max_pitch_speed_fps", 1.0)), 1.0, MAX_NUMBER)
+	lifetime_max_distance_index = clampi(int(data.get("lifetime_max_distance_index", 0)), 0, Content.DISTANCE_TIERS.size() - 1)
+	lifetime_max_loot_rarity = clampi(int(data.get("lifetime_max_loot_rarity", -1)), -1, Content.LOOT_RARITIES.size() - 1)
 	lifetime_strikeouts = clampf(float(data.get("lifetime_strikeouts", 0.0)), 0.0, MAX_NUMBER)
 	current_body_strikeouts = clampf(float(data.get("current_body_strikeouts", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_loot_found = clampf(float(data.get("lifetime_loot_found", 0.0)), 0.0, MAX_NUMBER)
@@ -3159,6 +3436,9 @@ func apply_save_data(data: Dictionary) -> void:
 	var saved_auto_advance := bool(data.get("auto_advance_enabled", false))
 	var saved_auto_train := bool(data.get("auto_train_enabled", false))
 	var saved_auto_farm := bool(data.get("auto_farm_enabled", false))
+	var saved_catalog_filters: Dictionary = data.get("catalog_hide_purchased", {})
+	for catalog_id in catalog_hide_purchased.keys():
+		catalog_hide_purchased[catalog_id] = bool(saved_catalog_filters.get(catalog_id, false))
 
 	var saved_training: Dictionary = data.get("training_levels", {})
 	if saved_version < 12:
@@ -3322,6 +3602,8 @@ func apply_save_data(data: Dictionary) -> void:
 		var capacity_result := _enforce_loot_slot_capacity(slot)
 		var removed: Array = capacity_result.get("removed", [])
 		loot_overflow_discarded = minf(MAX_NUMBER, loot_overflow_discarded + float(removed.size()))
+	for item in loot_items:
+		lifetime_max_loot_rarity = maxi(lifetime_max_loot_rarity, int(item.get("rarity", -1)))
 	if has_genetic_upgrade("autonomic_wardrobe"):
 		auto_equip_highest_power(false)
 	lifetime_loot_found = maxf(lifetime_loot_found, float(loot_items.size()))
@@ -3347,11 +3629,25 @@ func apply_save_data(data: Dictionary) -> void:
 	else:
 		for index in mini(saved_results.size(), result_totals.size()):
 			result_totals[index] = clampf(float(saved_results[index]), 0.0, MAX_NUMBER)
+	unlocked_achievements.clear()
+	for id in data.get("unlocked_achievements", []):
+		var achievement_id := str(id)
+		if (
+			not Content.achievement_by_id(achievement_id).is_empty()
+			and achievement_id not in unlocked_achievements
+		):
+			unlocked_achievements.append(achievement_id)
+	lifetime_max_pitch_speed_fps = maxf(lifetime_max_pitch_speed_fps, get_velocity_fps())
+	lifetime_max_distance_index = maxi(lifetime_max_distance_index, selected_distance_index)
 	if not opponent_mastery.is_empty():
 		cosmos_conquered = cosmos_conquered or (
 			highest_unlocked == opponents.size() - 1
 			and opponent_mastery.back() >= get_mastery_requirement(opponents.size() - 1)
 		)
+	# Older saves receive everything their persisted history proves, but loading
+	# never floods the player with a backlog of toast notifications.
+	check_achievements(false)
+	achievement_revision += 1
 
 func _sanitize_loot_item(value: Variant) -> Dictionary:
 	if typeof(value) != TYPE_DICTIONARY:

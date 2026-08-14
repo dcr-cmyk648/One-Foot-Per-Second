@@ -24,7 +24,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.10.9 progressive-interface audit")
+	print("One Foot Per Second — v0.11.0 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -71,6 +71,18 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("PITCH", false, false) != null, "Pitch types should have their own tab")
 	_expect(main.upgrade_tabs.find_child("BALL", false, false) != null, "Ball upgrades should have their own tab")
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
+	_expect(main.upgrade_tabs.find_child("ACHIEVE", false, false) != null, "Achievements should have their own tab")
+	_expect(main.achievement_cards.size() == 100, "The achievement tab should render all 100 slots")
+	_expect(main.achievement_count_label.text == "0 / 100 UNLOCKED", "The fresh achievement summary should disclose the complete catalog count")
+	var hidden_genetic_card: Dictionary = main.achievement_cards.genetic_offer
+	_expect((hidden_genetic_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Future achievements should use anonymous placeholder titles")
+	_expect(not (hidden_genetic_card.description as Label).text.contains("Commissioner"), "A hidden achievement must not leak its true condition")
+	_expect(not (main.achievement_section_headings.genetic as Label).visible, "A hidden achievement group must not leak its tier heading")
+	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Every one-time purchase catalog should have its own Hide Purchased toggle")
+	main._toggle_catalog_hide_purchased(true, "pitch")
+	_expect(not (main.pitch_buttons.dead_fish as Button).visible, "Hide Purchased should remove learned pitches from only their catalog")
+	_expect((main.pitch_buttons.knuckleball as Button).visible, "Hide Purchased should retain locked and available pitch entries")
+	main._toggle_catalog_hide_purchased(false, "pitch")
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
 	_expect(main.field_stat_labels.size() == 9, "The default field should expose every base trained stat in a compact overlay")
@@ -86,6 +98,9 @@ func _run() -> void:
 	main.pitch_field._on_field_gui_input(field_click)
 	_expect(is_equal_approx(main.game.pitch_credit, 0.05), "Clicking unobstructed field space should advance the opening timer")
 	_expect(main.pitch_field.field_tap_effects.size() == 1, "A field click should create its local feedback ring")
+	_expect(main.game.has_achievement("first_field_tap"), "The first active field tap should unlock its achievement")
+	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast")
+	_expect(main.achievement_count_label.text == "1 / 100 UNLOCKED", "The achievement summary should update immediately after an unlock")
 	main.game._clear_pitch_cycle()
 	main.pitch_field.field_tap_effects.clear()
 	main._refresh_interface()

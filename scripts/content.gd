@@ -619,6 +619,130 @@ const SIGNATURE_BATTER_NAMES := {
 	44: "Octathulhu, God of the Eightfold Swing",
 }
 
+# Achievements are permanent, additive side bonuses rather than another
+# purchase economy.  Future reward types can be added per definition; for now
+# every entry uses the shared +1% XP default.  Tiers are revealed only after
+# their corresponding story layer has been discovered, so this catalog does
+# not advertise aliens, destroyed realities, or God to a new pitcher.
+const DEFAULT_ACHIEVEMENT_XP_BONUS := 0.01
+const ACHIEVEMENT_TIER_ORDER := ["human", "genetic", "eldritch", "divine"]
+const ACHIEVEMENT_TIER_NAMES := {
+	"human": "THE REGULAR OL’ CAREER",
+	"genetic": "POST-HUMAN BASEBALL",
+	"eldritch": "THE OUTER WORLD SERIES",
+	"divine": "EXTRA INNINGS WITH GOD",
+}
+
+const ACHIEVEMENTS := [
+	# Human baseball — 50 achievements.
+	{"id": "first_pitch", "tier": "human", "name": "A Threat Has Been Issued", "metric": "lifetime_pitches", "threshold": 1.0, "description": "Resolve your first pitch."},
+	{"id": "first_field_tap", "tier": "human", "name": "This Is Supposed to Be Idle", "metric": "field_taps", "threshold": 1.0, "description": "Hurry an active timer with a field tap."},
+	{"id": "field_taps_100", "tier": "human", "name": "Wear Pattern on the Screen", "metric": "field_taps", "threshold": 100.0, "description": "Land 100 successful field taps."},
+	{"id": "first_strike", "tier": "human", "name": "Technically a Strike", "metric": "outcome", "key": STRIKE_INDEX, "threshold": 1.0, "description": "Record your first Strike."},
+	{"id": "first_strikeout", "tier": "human", "name": "Sit Down, Tiny Kevin", "metric": "lifetime_strikeouts", "threshold": 1.0, "description": "Complete your first strikeout."},
+	{"id": "strikeouts_10", "tier": "human", "name": "Toddler Whisperer", "metric": "lifetime_strikeouts", "threshold": 10.0, "description": "Complete 10 career strikeouts."},
+	{"id": "strikeouts_100", "tier": "human", "name": "Backyard Menace", "metric": "lifetime_strikeouts", "threshold": 100.0, "description": "Complete 100 career strikeouts."},
+	{"id": "strikeouts_1000", "tier": "human", "name": "The Thousand-Yard Windup", "metric": "lifetime_strikeouts", "threshold": 1000.0, "description": "Complete 1,000 career strikeouts."},
+	{"id": "strikeouts_10000", "tier": "human", "name": "Ten Thousand Tiny Ks", "metric": "lifetime_strikeouts", "threshold": 10000.0, "description": "Complete 10,000 career strikeouts."},
+	{"id": "pitches_100", "tier": "human", "name": "Century of Apologies", "metric": "lifetime_pitches", "threshold": 100.0, "description": "Resolve 100 career pitches."},
+	{"id": "pitches_1000", "tier": "human", "name": "Rubber Arm, Foam Ball", "metric": "lifetime_pitches", "threshold": 1000.0, "description": "Resolve 1,000 career pitches."},
+	{"id": "pitches_10000", "tier": "human", "name": "Pitch-Clock Enthusiast", "metric": "lifetime_pitches", "threshold": 10000.0, "description": "Resolve 10,000 career pitches."},
+	{"id": "pitches_100000", "tier": "human", "name": "This Is Probably Employment", "metric": "lifetime_pitches", "threshold": 100000.0, "description": "Resolve 100,000 career pitches."},
+	{"id": "first_grand_slam", "tier": "human", "name": "There Goes the Neighborhood", "metric": "outcome", "key": GRAND_SLAM_INDEX, "threshold": 1.0, "description": "Allow your first Grand Slam."},
+	{"id": "home_runs_25", "tier": "human", "name": "Souvenir Distributor", "metric": "outcome", "key": 1, "threshold": 25.0, "description": "Allow 25 Home Runs."},
+	{"id": "fouls_100", "tier": "human", "name": "Living on the Edge", "metric": "outcome", "key": FOUL_INDEX, "threshold": 100.0, "description": "Produce 100 Fouls."},
+	{"id": "balls_100", "tier": "human", "name": "The Zone Is More of a Suggestion", "metric": "outcome", "key": BALL_INDEX, "threshold": 100.0, "description": "Throw 100 Balls."},
+	{"id": "strikes_1000", "tier": "human", "name": "Blue Likes It", "metric": "outcome", "key": STRIKE_INDEX, "threshold": 1000.0, "description": "Record 1,000 Strikes."},
+	{"id": "reach_level_5", "tier": "human", "name": "Preschool Suspension", "metric": "level", "threshold": 4.0, "description": "Reach Level 5."},
+	{"id": "reach_level_10", "tier": "human", "name": "Parent-Teacher Conference", "metric": "level", "threshold": 9.0, "description": "Reach Level 10."},
+	{"id": "reach_level_15", "tier": "human", "name": "Varsity Adjacent", "metric": "level", "threshold": 14.0, "description": "Reach Level 15."},
+	{"id": "reach_level_20", "tier": "human", "name": "College Material", "metric": "level", "threshold": 19.0, "description": "Reach Level 20."},
+	{"id": "reach_level_25", "tier": "human", "name": "The Long Bus Ride", "metric": "level", "threshold": 24.0, "description": "Reach Level 25."},
+	{"id": "reach_level_30", "tier": "human", "name": "A Regular Ol’ Big Leaguer", "metric": "level", "threshold": 29.0, "description": "Reach Level 30."},
+	{"id": "complete_human_baseball", "tier": "human", "name": "The Human Limit", "metric": "level", "threshold": 30.0, "reveal_level": 29, "description": "Master the final human batter."},
+	{"id": "distance_6ft", "tier": "human", "name": "Personal Space", "metric": "distance", "threshold": 1.0, "description": "Pitch from 6 feet."},
+	{"id": "distance_30ft", "tier": "human", "name": "There Is Now a Mound", "metric": "distance", "threshold": 4.0, "description": "Pitch from 30 feet."},
+	{"id": "distance_regulation", "tier": "human", "name": "Sixty Feet, Six Inches, Somehow", "metric": "distance", "threshold": 6.0, "description": "Pitch from a regulation mound."},
+	{"id": "distance_outfield", "tier": "human", "name": "Pitching from Center Field", "metric": "distance", "threshold": 8.0, "description": "Pitch from 300 feet."},
+	{"id": "speed_2fps", "tier": "human", "name": "Twice the Game’s Name", "metric": "speed", "threshold": 2.0, "description": "Throw a pitch at 2 ft/s."},
+	{"id": "speed_10fps", "tier": "human", "name": "Breaking into Double Digits", "metric": "speed", "threshold": 10.0, "description": "Throw a pitch at 10 ft/s."},
+	{"id": "speed_60fps", "tier": "human", "name": "A Brisk Sixty Feet per Second", "metric": "speed", "threshold": 60.0, "description": "Throw a pitch at 60 ft/s."},
+	{"id": "speed_100mph", "tier": "human", "name": "Three Digits", "metric": "speed", "threshold": 146.66676444450962, "description": "Throw a pitch at 100 mph."},
+	{"id": "speed_human_cap", "tier": "human", "name": "History, Doubled", "metric": "speed", "threshold": 310.3468735645824, "secret": true, "description": "Reach 211.6 mph, twice the recorded human benchmark."},
+	{"id": "velocity_rank_1", "tier": "human", "name": "Arm Day", "metric": "training", "key": "velocity", "threshold": 1.0, "description": "Buy your first Speed Training rank."},
+	{"id": "command_rank_1", "tier": "human", "name": "An Attempt Was Made", "metric": "training", "key": "command", "threshold": 1.0, "description": "Buy your first Command Drills rank."},
+	{"id": "field_hustle_rank_1", "tier": "human", "name": "Idle Game, Active Finger", "metric": "training", "key": "field_hustle", "threshold": 1.0, "description": "Buy your first Field Hustle rank."},
+	{"id": "recovery_rank_10", "tier": "human", "name": "Between-Pitch Breathing Optional", "metric": "training", "key": "recovery", "threshold": 10.0, "description": "Reach Recovery Drills rank 10."},
+	{"id": "offline_rank_10", "tier": "human", "name": "The Scorebook Worked Overnight", "metric": "training", "key": "offline_efficiency", "threshold": 10.0, "description": "Reach Scorebook Study rank 10."},
+	{"id": "arsenal_3", "tier": "human", "name": "Three Pitches Is an Arsenal", "metric": "pitches_owned", "threshold": 3.0, "description": "Learn three pitch types."},
+	{"id": "arsenal_6", "tier": "human", "name": "Six Ways to Embarrass Yourself", "metric": "pitches_owned", "threshold": 6.0, "description": "Learn six pitch types."},
+	{"id": "arsenal_9", "tier": "human", "name": "Every Legal-ish Pitch", "metric": "pitches_owned", "threshold": 9.0, "description": "Learn all nine human pitch types."},
+	{"id": "ball_upgrades_5", "tier": "human", "name": "Ball of Theseus", "metric": "ball_upgrades_owned", "threshold": 5.0, "description": "Install five ball upgrades."},
+	{"id": "ball_upgrades_10", "tier": "human", "name": "Core Curriculum", "metric": "ball_upgrades_owned", "threshold": 10.0, "description": "Install ten ball upgrades."},
+	{"id": "ball_upgrades_16", "tier": "human", "name": "World-Series Materials Science", "metric": "ball_upgrades_owned", "threshold": 16.0, "description": "Install every human ball shell."},
+	{"id": "facilities_5", "tier": "human", "name": "The Garage Is a Facility", "metric": "facilities_owned", "threshold": 5.0, "description": "Acquire five one-time facilities."},
+	{"id": "facilities_15", "tier": "human", "name": "Zoning Violation", "metric": "facilities_owned", "threshold": 15.0, "description": "Acquire fifteen one-time facilities."},
+	{"id": "first_loot", "tier": "human", "name": "Little Timmy’s Lost and Found", "metric": "loot_found", "threshold": 1.0, "description": "Find your first equipment item."},
+	{"id": "legendary_loot", "tier": "human", "name": "Orange You Glad It Dropped", "metric": "loot_rarity", "threshold": 3.0, "secret": true, "description": "Find a Legendary equipment item."},
+	{"id": "fully_equipped", "tier": "human", "name": "Dressed for the Job", "metric": "equipped_slots", "threshold": 6.0, "description": "Equip all six human clothing slots at once."},
+
+	# Genetic and alien baseball — 25 achievements.
+	{"id": "genetic_offer", "tier": "genetic", "name": "The Commissioner Has a Proposal", "metric": "genetic_offer", "threshold": 1.0, "description": "Hear Xylophax’s complete genetic proposal."},
+	{"id": "genetic_rebirth_1", "tier": "genetic", "name": "Born Again, But Baseball", "metric": "genetic_rebirths", "threshold": 1.0, "description": "Complete your first genetic rebirth."},
+	{"id": "genetic_rebirth_5", "tier": "genetic", "name": "Prenatal Free Agent", "metric": "genetic_rebirths", "threshold": 5.0, "description": "Complete five genetic rebirths."},
+	{"id": "dna_10", "tier": "genetic", "name": "Double Helix, Double Play", "metric": "lifetime_dna", "threshold": 10.0, "description": "Earn 10 lifetime DNA."},
+	{"id": "genetic_upgrades_5", "tier": "genetic", "name": "Genome Completionist, Junior", "metric": "genetic_upgrades_owned", "threshold": 5.0, "description": "Own five different genetic enhancements."},
+	{"id": "arms_2", "tier": "genetic", "name": "The Other Other Hand", "metric": "arms", "threshold": 2.0, "description": "Grow a second pitching arm."},
+	{"id": "arms_4", "tier": "genetic", "name": "Four-Seam, Four Arms", "metric": "arms", "threshold": 4.0, "description": "Pitch with four arms."},
+	{"id": "arms_8", "tier": "genetic", "name": "Octo-Pitcher, Biologically", "metric": "arms", "threshold": 8.0, "description": "Pitch with eight arms."},
+	{"id": "volley_2", "tier": "genetic", "name": "One Swing, Two Problems", "metric": "volley", "threshold": 2.0, "description": "Release two real balls in one volley."},
+	{"id": "volley_4", "tier": "genetic", "name": "Arm-Based Load Balancing", "metric": "volley", "threshold": 4.0, "description": "Release four real balls in one volley."},
+	{"id": "compressed_count", "tier": "genetic", "name": "Three Strikes, Eventually", "metric": "genetic_upgrade", "key": "compressed_strike_genome", "threshold": 1.0, "description": "Buy Compressed Strike Genome."},
+	{"id": "saved_hits_100", "tier": "genetic", "name": "Catch, Return, Reuse", "metric": "saved_hits", "threshold": 100.0, "description": "Preserve the count through 100 ordinary hits."},
+	{"id": "auto_advance", "tier": "genetic", "name": "The Legs Know the Schedule", "metric": "genetic_upgrade", "key": "migratory_instinct", "threshold": 1.0, "description": "Unlock Auto-advance."},
+	{"id": "auto_coach", "tier": "genetic", "name": "Coach in the Medulla", "metric": "genetic_upgrade", "key": "autonomic_coach", "threshold": 1.0, "description": "Unlock Auto-coach."},
+	{"id": "auto_scout", "tier": "genetic", "name": "Apex Sabermetrician", "metric": "genetic_upgrade", "key": "predator_scouting", "threshold": 1.0, "description": "Unlock Auto-scout."},
+	{"id": "auto_wardrobe", "tier": "genetic", "name": "Dressed by Reflex", "metric": "genetic_upgrade", "key": "autonomic_wardrobe", "threshold": 1.0, "description": "Unlock automatic equipment selection."},
+	{"id": "first_relic", "tier": "genetic", "name": "Post-Human Pocket", "metric": "relic_owned", "threshold": 1.0, "description": "Find your first Relic-slot item."},
+	{"id": "reach_four_armed_hitter", "tier": "genetic", "name": "Four Arms, No Waiting", "metric": "level", "threshold": 33.0, "reveal_level": 33, "description": "Reach the Four-Armed Cleanup Hitter."},
+	{"id": "reach_moonballer", "tier": "genetic", "name": "Moonball Is Now Literal", "metric": "level", "threshold": 35.0, "reveal_level": 35, "description": "Reach the Low-Gravity Moonballer."},
+	{"id": "reach_plasma_slugger", "tier": "genetic", "name": "Plasma Burns Are Still Burns", "metric": "level", "threshold": 37.0, "reveal_level": 37, "description": "Reach the Plasma-Bat Slugger."},
+	{"id": "reach_alien_champion", "tier": "genetic", "name": "Champion Beneath All Suns", "metric": "level", "threshold": 39.0, "reveal_level": 39, "description": "Reach the Interstellar Champion."},
+	{"id": "complete_alien_baseball", "tier": "genetic", "name": "Solar-System Champions", "metric": "level", "threshold": 40.0, "reveal_level": 39, "description": "Master the final alien batter."},
+	{"id": "speed_mach_1", "tier": "genetic", "name": "Sound Barrier: Optional", "metric": "speed", "threshold": 1125.33, "description": "Throw a pitch at Mach 1."},
+	{"id": "speed_mach_3", "tier": "genetic", "name": "Licensed for Mach Three", "metric": "speed", "threshold": 3375.99, "reveal_level": 39, "description": "Throw a pitch at Mach 3."},
+	{"id": "speed_mach_12", "tier": "genetic", "name": "Atmosphere Not Included", "metric": "speed", "threshold": 13503.96, "secret": true, "description": "Reach the Mach 12 genetic limit."},
+
+	# Eldritch baseball — 19 achievements.
+	{"id": "eldritch_offer", "tier": "eldritch", "name": "The Rookie Explains Reality", "metric": "eldritch_offer", "threshold": 1.0, "description": "Hear N’Kthra’s complete explanation of reality."},
+	{"id": "eldritch_ascension_1", "tier": "eldritch", "name": "This Reality Had Bad Umpires", "metric": "eldritch_ascensions", "threshold": 1.0, "description": "Destroy your first reality."},
+	{"id": "eldritch_ascension_3", "tier": "eldritch", "name": "Multiverse Journeyman", "metric": "eldritch_ascensions", "threshold": 3.0, "description": "Destroy three realities."},
+	{"id": "arcana_10", "tier": "eldritch", "name": "Pocket Full of Arcana", "metric": "lifetime_arcana", "threshold": 10.0, "description": "Earn 10 lifetime Arcana."},
+	{"id": "clones_2", "tier": "eldritch", "name": "Bullpen from Somewhere Else", "metric": "clones", "threshold": 2.0, "description": "Recruit your first mirror-reality pitcher."},
+	{"id": "clones_8", "tier": "eldritch", "name": "Eight Me’s and a Scorekeeper", "metric": "clones", "threshold": 8.0, "description": "Pitch with eight versions of yourself."},
+	{"id": "clones_32", "tier": "eldritch", "name": "Thirty-Two Pitchers, One Soul", "metric": "clones", "threshold": 32.0, "description": "Pitch with 32 versions of yourself."},
+	{"id": "time_layers_8", "tier": "eldritch", "name": "Eight Innings at Once", "metric": "time_layers", "threshold": 8.0, "description": "Stack eight time-compressed innings."},
+	{"id": "volley_16", "tier": "eldritch", "name": "Anime Bullpen Initiated", "metric": "volley", "threshold": 16.0, "description": "Release 16 real balls in one volley."},
+	{"id": "volley_256", "tier": "eldritch", "name": "Missile Budget Exceeded", "metric": "volley", "threshold": 256.0, "description": "Release 256 real balls in one volley."},
+	{"id": "volley_2048", "tier": "eldritch", "name": "Two Thousand Forty-Eight Problems", "metric": "volley", "threshold": 2048.0, "description": "Release the designed maximum 2,048-ball volley."},
+	{"id": "first_portal", "tier": "eldritch", "name": "The Ball Was Never There", "metric": "eldritch_upgrade", "key": "portal_outfield", "threshold": 1.0, "description": "Open your first bullpen portal."},
+	{"id": "reverse_terminator", "tier": "eldritch", "name": "Reverse Terminator", "metric": "eldritch_upgrade", "key": "reverse_terminator", "threshold": 1.0, "description": "Teach one outfit to time travel."},
+	{"id": "reach_phase_hitter", "tier": "eldritch", "name": "Phase Me Once", "metric": "level", "threshold": 41.0, "reveal_level": 41, "description": "Reach the Phase-Shift Hitter."},
+	{"id": "reach_nine_body_collective", "tier": "eldritch", "name": "The Nine Share One Strike Zone", "metric": "level", "threshold": 42.0, "reveal_level": 42, "description": "Reach the Nine-Body Batting Collective."},
+	{"id": "reach_ball_rog", "tier": "eldritch", "name": "You Shall Not Ball", "metric": "level", "threshold": 43.0, "reveal_level": 43, "description": "Reach Ball-rog the Unstrikeable."},
+	{"id": "reach_octathulhu", "tier": "eldritch", "name": "Eight Bats Enter", "metric": "level", "threshold": 44.0, "reveal_level": 44, "description": "Reach Octathulhu."},
+	{"id": "speed_of_light", "tier": "eldritch", "name": "At the Speed of Plot", "metric": "speed", "threshold": 983571056.0, "reveal_level": 44, "description": "Throw a pitch at exactly light speed."},
+	{"id": "cosmos_conquered", "tier": "eldritch", "name": "The Oldest Rule of Baseball", "metric": "cosmos", "threshold": 1.0, "reveal_level": 44, "description": "Defeat Octathulhu and save the universe."},
+
+	# Divine extra innings — 6 achievements.
+	{"id": "divine_ascension_1", "tier": "divine", "name": "God Is a Baseball Fan", "metric": "divine_ascensions", "threshold": 1.0, "description": "Let God restore your first universe."},
+	{"id": "divine_blessings_2", "tier": "divine", "name": "Theological Loadout", "metric": "divine_blessings", "threshold": 2.0, "description": "Own two divine blessings."},
+	{"id": "divine_ascension_3", "tier": "divine", "name": "Universal Three-Peat", "metric": "divine_ascensions", "threshold": 3.0, "description": "Save three universes."},
+	{"id": "all_divine_blessings", "tier": "divine", "name": "Six Days, Six Blessings", "metric": "divine_blessings", "threshold": 6.0, "description": "Collect every named divine blessing."},
+	{"id": "divine_halo_1", "tier": "divine", "name": "After the Afterlife", "metric": "divine_halos", "threshold": 1.0, "description": "Earn your first extra Halo."},
+	{"id": "divine_halo_5", "tier": "divine", "name": "Halo Hall of Fame", "metric": "divine_halos", "threshold": 5.0, "description": "Earn five extra Halos."},
+]
+
 const TRAINING := [
 	{
 		"id": "velocity",
@@ -1906,6 +2030,12 @@ static func trait_description(trait_id: String) -> String:
 
 static func training_by_id(id: String) -> Dictionary:
 	for item in TRAINING:
+		if item.id == id:
+			return item
+	return {}
+
+static func achievement_by_id(id: String) -> Dictionary:
+	for item in ACHIEVEMENTS:
 		if item.id == id:
 			return item
 	return {}

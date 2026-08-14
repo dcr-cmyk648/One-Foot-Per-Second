@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.10.9 Balance Audit
+# One Foot Per Second — v0.11.0 Balance Audit
 
 ## Outcome
 
@@ -8,15 +8,15 @@ The complete campaign is long but finite, every prestige layer changes the strat
 |---|---:|
 | Human baseball cleared | 37 h 30 m |
 | Xylophax's first exhibition completed | 38 h |
-| First useful replay harvest | 3 d 4 h |
-| Mid-alien harvest | 5 d 10 h |
-| Four-digit DNA harvest | 10 d 12 h |
-| Final pre-eldritch harvest | 22 d 21 h |
-| First eldritch ascension | 34 d 3 h |
-| First magic-assisted DNA rebirth | 38 d |
-| Deeper eldritch ascension | 50 d 3 h |
-| Octathulhu unlocked at 1c | 68 d 6 h |
-| First cosmic victory | 68 d 21 h |
+| First useful replay harvest | 3 d 30 m |
+| Mid-alien harvest | 5 d 30 m |
+| First four-digit DNA harvest | 11 d 18 h |
+| Final pre-eldritch climb completed | 29 d |
+| First eldritch ascension | 29 d 3 h |
+| First magic-assisted DNA rebirth | 33 d |
+| Deeper eldritch ascension | 45 d 3 h |
+| Octathulhu unlocked at 1c | 63 d 3 h |
+| First cosmic victory | 63 d 18 h |
 
 These are deterministic open-game baselines with frequent purchasing and strategically timed resets. A player who explores, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study can raise the current body to 25%, so the game meaningfully rewards being left open without making a closed session worthless.
 
@@ -75,22 +75,31 @@ Every completed plate appearance includes a three-second lineup-change baseline.
 
 Fouls are not terminal. Lineup Hustle subtracts `0.15 s` per rank from the universal three-second baseline, down to 1.5 seconds. Shake It Off subtracts `0.05` per rank from the factor applied only to the added fair-hit delay, down to `×0.60`. Facility multipliers stack separately, and later Time Compression divides the completed downtime. Reliable pitching therefore earns the only payout and returns to an occupied plate sooner.
 
-## First-universe reset cadence
+## Achievement income
 
-The current greedy audit uses twelve lower-layer resets, approximately:
+The 100 achievements are deliberately modest individually and additive rather than multiplicative with one another:
 
-1. `+20 DNA` after the initial Xylophax offer.
+```text
+achievement XP multiplier = 1 + completed achievements × 0.01
+```
+
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 100 produce `×2.00`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; this brings the current first human lifetime to roughly 37 h 30 m and the first cosmic victory to 63 d 18 h without changing any mastery requirement or story gate. A hidden achievement provides no mechanical or narrative clue before its subject is encountered.
+
+## Complete reset cadence
+
+The current greedy audit uses eleven lower-layer resets, approximately:
+
+1. `+22 DNA` after the initial Xylophax offer.
 2. `+35 DNA` after the first human replay.
-3. `+154 DNA` in the alien circuit.
-4. `+1,354 DNA` on a deeper alien run.
-5. `+3,203 DNA` on the next championship pass.
-6. `+5,537 DNA` for the final pre-eldritch build-out.
-7. `+255 Arcana` after N'Kthra; most is immediately invested.
-8. `+222 DNA` during the first magic-assisted replay.
-9. `+100,710 DNA` after a deep new-reality harvest.
-10. `+1,005 Arcana` on the deeper eldritch ascension.
-11. `+722 DNA` in the next reality.
-12. `+385,779 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
+3. `+169 DNA` in the alien circuit.
+4. `+1,623 DNA` on a deeper alien run.
+5. `+3,526 DNA` for the final pre-eldritch build-out.
+6. `+173 Arcana` after N'Kthra; most is immediately invested.
+7. `+261 DNA` during the first magic-assisted replay.
+8. `+138,206 DNA` after a deep new-reality harvest.
+9. `+1,215 Arcana` on the deeper eldritch ascension.
+10. `+1,873 DNA` in the next reality.
+11. `+1,650,037 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
 
 The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
 
@@ -126,7 +135,7 @@ Only Speed begins unlocked; the other axes appear as level-gated entries in this
 
 Active field taps begin at 5% of the current foreground timer's starting duration and can reach 8% through Field Hustle. The tap budget is capped at 50% per recovery, flight, or lineup phase. No amount of clicking can replace the other half of the timer, and untouched idle/offline pacing remains unchanged.
 
-Fourteen pitch types, twenty-six replacement ball shells, and forty-two one-time facilities/interventions run from level 1 through level 45. Facilities are costly, high-impact multipliers; several are gated by actual measured speed, mound distance, or lifetime Strikeouts in addition to campaign level. Suspicious Vitamins arrive long before Extremely Obvious Steroids, and the human ladder stays recognizably human. Every tab is sorted by unlock level and cost. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
+Fourteen pitch types, twenty-six replacement ball shells, and forty-two one-time facilities/interventions run from level 1 through level 45. Facilities are costly, high-impact multipliers; several are gated by actual measured speed, mound distance, or lifetime Strikeouts in addition to campaign level. Suspicious Vitamins arrive long before Extremely Obvious Steroids, and the human ladder stays recognizably human. Every tab is sorted by unlock level and cost; Pitch, Ball, and Facility each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
 Authored opponent mastery rises as `25 × 1.34^index`, while reward rises faster at `1.55^index`. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, and the start of logarithmic farming bonuses. A frontier opponent is attractive only when its longer count and higher failure downtime do not outweigh the reward. Auto-scout evaluates the same expected XP-per-second model across unlocked opponents and ranges.
 
@@ -155,6 +164,8 @@ The automated suite explicitly checks that:
 - all eight outcome cards remain compact and expose detail through tooltips;
 - loot obeys its restrained rarity curve, Power sorting, no-auto-equip default, prestige-only auto-equip, item amplification, caps, starred protection, Scrap conversion, resets, inheritance, and save rules;
 - every level-gated catalog is displayed in unlock order, and alternate speed/distance/Strikeout gates conceal effects until met;
+- the achievement catalog contains 100 unique entries, stacks exactly +1% XP apiece, persists through prestige and save/load, and keeps every unencountered entry anonymous;
+- each one-time catalog filter is independent, saved, touch-sized on phone, and never hides locked or available purchases;
 - progressive interface layers remain hidden until their story boundary;
 - all 45 levels, costs, deterministic era-name combinations, signature names, traits, prestige boundaries, and migrations remain valid;
 - Octathulhu cannot be completed below 1c and cosmic victory fires only once.

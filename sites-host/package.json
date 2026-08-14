@@ -1,6 +1,6 @@
 {
   "name": "one-foot-per-second-site",
-  "version": "0.10.9",
+  "version": "0.11.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

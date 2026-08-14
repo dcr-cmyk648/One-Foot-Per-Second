@@ -64,6 +64,7 @@ var training_buttons := {}
 var pitch_buttons := {}
 var ball_upgrade_buttons := {}
 var milestone_buttons := {}
+var catalog_hide_purchased_toggles := {}
 var scale_buttons := {}
 var genetic_buttons := {}
 var eldritch_buttons := {}
@@ -73,6 +74,18 @@ var stat_labels := {}
 var stat_rows := {}
 var upgrade_tabs: TabContainer
 var rebirth_tab: Control
+var achievement_tab: Control
+var achievement_count_label: Label
+var achievement_bonus_label: Label
+var achievement_cards := {}
+var achievement_section_headings := {}
+var achievement_last_revision := -1
+var achievement_last_reveal_signature := ""
+var achievement_toast: PanelContainer
+var achievement_toast_heading: Label
+var achievement_toast_name: Label
+var achievement_toast_queue: Array[Dictionary] = []
+var achievement_toast_showing := false
 var automation_section: VBoxContainer
 var genetic_section: VBoxContainer
 var eldritch_section: VBoxContainer
@@ -216,6 +229,7 @@ func _ready() -> void:
 	game.batch_resolved.connect(_on_batch_resolved)
 	game.progression_changed.connect(_on_progression_changed)
 	game.save_status_changed.connect(_on_save_status_changed)
+	game.achievement_unlocked.connect(_on_achievement_unlocked)
 	_build_interface()
 	_configure_platform_ui()
 	var offline_summary := game.load_game()
@@ -828,6 +842,10 @@ func _refresh_mobile_tab_navigation(_tab_index := -1) -> void:
 		visible_position < 0 or visible_position >= visible_indices.size() - 1
 	)
 
+func _on_upgrade_tab_changed(tab_index: int) -> void:
+	_refresh_mobile_tab_navigation(tab_index)
+	_refresh_achievement_tab(true)
+
 func _build_interface() -> void:
 	var background := ColorRect.new()
 	background.color = COLOR_BG
@@ -872,6 +890,7 @@ func _build_interface() -> void:
 	_build_mobile_overlay()
 	_build_confirmation_dialog()
 	_build_update_banner()
+	_build_achievement_toast()
 
 func _build_update_banner() -> void:
 	update_banner = PanelContainer.new()
@@ -905,6 +924,40 @@ func _build_update_banner() -> void:
 	update_later_button.tooltip_text = "Hide this reminder for ten minutes."
 	update_later_button.pressed.connect(_snooze_browser_update)
 	row.add_child(update_later_button)
+
+func _build_achievement_toast() -> void:
+	achievement_toast = PanelContainer.new()
+	achievement_toast.name = "AchievementToast"
+	achievement_toast.visible = false
+	achievement_toast.z_index = 290
+	achievement_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	achievement_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	achievement_toast.offset_left = -225.0
+	achievement_toast.offset_top = 76.0
+	achievement_toast.offset_right = 225.0
+	achievement_toast.offset_bottom = 148.0
+	var toast_style := _compact_panel_style(14.0, 9.0, 9)
+	toast_style.bg_color = Color("162234")
+	toast_style.border_color = COLOR_GOLD
+	toast_style.set_border_width_all(2)
+	achievement_toast.add_theme_stylebox_override("panel", toast_style)
+	add_child(achievement_toast)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 2)
+	achievement_toast.add_child(stack)
+	achievement_toast_heading = Label.new()
+	achievement_toast_heading.text = "ACHIEVEMENT UNLOCKED  •  +1% XP"
+	achievement_toast_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	achievement_toast_heading.add_theme_font_size_override("font_size", 11)
+	achievement_toast_heading.add_theme_color_override("font_color", COLOR_GOLD)
+	stack.add_child(achievement_toast_heading)
+	achievement_toast_name = Label.new()
+	achievement_toast_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	achievement_toast_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	achievement_toast_name.add_theme_font_size_override("font_size", 17)
+	achievement_toast_name.add_theme_color_override("font_color", COLOR_TEXT)
+	stack.add_child(achievement_toast_name)
 
 func _build_header(parent: Control) -> void:
 	header_panel = PanelContainer.new()
@@ -1237,6 +1290,13 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	update_now_button.text = "UPDATE" if mobile_layout else "SAVE & UPDATE"
 	update_now_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
 	update_later_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
+	if achievement_toast != null:
+		achievement_toast.offset_left = -176.0 if mobile_layout else -225.0
+		achievement_toast.offset_right = 176.0 if mobile_layout else 225.0
+		achievement_toast.offset_top = 62.0 if mobile_layout else 76.0
+		achievement_toast.offset_bottom = 132.0 if mobile_layout else 148.0
+		achievement_toast_heading.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
+		achievement_toast_name.add_theme_font_size_override("font_size", 14 if mobile_layout else 17)
 	page_container.add_theme_constant_override("separation", 4 if mobile_layout else (6 if dense_wide else 10))
 	body_container.add_theme_constant_override("separation", 0 if mobile_layout else (8 if dense_wide else 10))
 	header_row.add_theme_constant_override("separation", 7 if mobile_layout else (12 if dense_wide else 20))
@@ -1264,6 +1324,8 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (190.0 if dense_wide else 215.0)
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
 	mobile_upgrade_stats_panel.visible = mobile_layout
+	for catalog_toggle in catalog_hide_purchased_toggles.values():
+		(catalog_toggle as CheckButton).custom_minimum_size.y = 44.0 if mobile_layout else 0.0
 	_configure_tab_overflow_controls(mobile_layout)
 	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else (5 if dense_wide else 8))
 	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else (8 if dense_wide else 12))
@@ -2296,13 +2358,14 @@ func _build_upgrade_area(parent: Control) -> void:
 	upgrade_tabs.clip_tabs = true
 	upgrade_tabs.use_hidden_tabs_for_min_size = true
 	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 8)
-	upgrade_tabs.tab_changed.connect(_refresh_mobile_tab_navigation)
+	upgrade_tabs.tab_changed.connect(_on_upgrade_tab_changed)
 	upgrade_stack.add_child(upgrade_tabs)
 	_build_training_tab(upgrade_tabs)
 	_build_pitch_tab(upgrade_tabs)
 	_build_ball_tab(upgrade_tabs)
 	_build_scale_tab(upgrade_tabs)
 	_build_rebirth_tab(upgrade_tabs)
+	_build_achievement_tab(upgrade_tabs)
 	_build_stats_tab(upgrade_tabs)
 	_build_guide_tab(upgrade_tabs)
 
@@ -2381,6 +2444,17 @@ func _section_label(parent: Control, text: String) -> void:
 	label.add_theme_color_override("font_color", COLOR_ACCENT)
 	parent.add_child(label)
 
+func _build_catalog_hide_toggle(parent: Control, catalog_id: String) -> void:
+	var toggle := CheckButton.new()
+	toggle.name = "HidePurchased%s" % catalog_id.capitalize()
+	toggle.text = "HIDE PURCHASED"
+	toggle.tooltip_text = "Hide one-time upgrades already bought in this tab. Locked and available upgrades remain visible."
+	toggle.add_theme_font_size_override("font_size", 12)
+	toggle.add_theme_color_override("font_color", COLOR_MUTED)
+	toggle.toggled.connect(_toggle_catalog_hide_purchased.bind(catalog_id))
+	parent.add_child(toggle)
+	catalog_hide_purchased_toggles[catalog_id] = toggle
+
 func _build_training_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "TRAIN")
 	_section_label(content, "REPEATABLE FUNDAMENTALS")
@@ -2399,6 +2473,7 @@ func _build_pitch_tab(tabs: TabContainer) -> void:
 	explainer.add_theme_font_size_override("font_size", 13)
 	explainer.add_theme_color_override("font_color", COLOR_MUTED)
 	content.add_child(explainer)
+	_build_catalog_hide_toggle(content, "pitch")
 	for definition in _definitions_by_unlock(Content.PITCHES):
 		var button := _upgrade_button(_definition_tooltip(definition, ["quality", "speed"]))
 		button.pressed.connect(_buy_pitch.bind(str(definition.id)))
@@ -2414,6 +2489,7 @@ func _build_ball_tab(tabs: TabContainer) -> void:
 	ball_explainer.add_theme_font_size_override("font_size", 13)
 	ball_explainer.add_theme_color_override("font_color", COLOR_MUTED)
 	content.add_child(ball_explainer)
+	_build_catalog_hide_toggle(content, "ball")
 	for definition in _definitions_by_unlock(Content.BALL_UPGRADES):
 		var button := _upgrade_button(_definition_tooltip(definition, ["payload"]))
 		button.pressed.connect(_buy_ball_upgrade.bind(str(definition.id)))
@@ -2423,6 +2499,7 @@ func _build_ball_tab(tabs: TabContainer) -> void:
 func _build_scale_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "FACILITY")
 	_section_label(content, "ONE-TIME TRAINING, FACILITIES & QUESTIONABLE DECISIONS")
+	_build_catalog_hide_toggle(content, "facility")
 	for definition in _definitions_by_unlock(Content.MILESTONES):
 		var button := _upgrade_button(_definition_tooltip(definition))
 		button.pressed.connect(_buy_milestone.bind(str(definition.id)))
@@ -2513,6 +2590,84 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	divine_halo_button.pressed.connect(_request_divine_ascension.bind("halo"))
 	divine_section.add_child(divine_halo_button)
 
+func _build_achievement_tab(tabs: TabContainer) -> void:
+	var content := _create_scroll_tab(tabs, "ACHIEVE")
+	achievement_tab = content.get_parent() as Control
+	_section_label(content, "ACHIEVEMENTS")
+	achievement_count_label = Label.new()
+	achievement_count_label.add_theme_font_size_override("font_size", 18)
+	achievement_count_label.add_theme_color_override("font_color", COLOR_TEXT)
+	content.add_child(achievement_count_label)
+	achievement_bonus_label = Label.new()
+	achievement_bonus_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	achievement_bonus_label.add_theme_font_size_override("font_size", 12)
+	achievement_bonus_label.add_theme_color_override("font_color", COLOR_GOLD)
+	content.add_child(achievement_bonus_label)
+	var explainer := Label.new()
+	explainer.text = "Every achievement permanently adds +1% XP. Hidden achievements disclose nothing until their subject has been encountered."
+	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	explainer.add_theme_font_size_override("font_size", 12)
+	explainer.add_theme_color_override("font_color", COLOR_MUTED)
+	content.add_child(explainer)
+
+	for tier_value in Content.ACHIEVEMENT_TIER_ORDER:
+		var tier := str(tier_value)
+		var tier_heading := Label.new()
+		tier_heading.add_theme_font_size_override("font_size", 13)
+		tier_heading.add_theme_color_override("font_color", COLOR_ACCENT)
+		content.add_child(tier_heading)
+		achievement_section_headings[tier] = tier_heading
+		for definition_value in Content.ACHIEVEMENTS:
+			var definition: Dictionary = definition_value
+			if str(definition.tier) != tier:
+				continue
+			var panel := PanelContainer.new()
+			panel.custom_minimum_size.y = 104.0
+			panel.add_theme_stylebox_override("panel", _achievement_card_style("hidden"))
+			content.add_child(panel)
+			var stack := VBoxContainer.new()
+			stack.add_theme_constant_override("separation", 2)
+			panel.add_child(stack)
+			var title := Label.new()
+			title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			title.add_theme_font_size_override("font_size", 15)
+			stack.add_child(title)
+			var description := Label.new()
+			description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			description.add_theme_font_size_override("font_size", 12)
+			description.add_theme_color_override("font_color", COLOR_MUTED)
+			stack.add_child(description)
+			var progress := ProgressBar.new()
+			progress.show_percentage = false
+			progress.custom_minimum_size.y = 6.0
+			stack.add_child(progress)
+			var footer := Label.new()
+			footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			footer.add_theme_font_size_override("font_size", 11)
+			footer.add_theme_color_override("font_color", COLOR_GOLD)
+			stack.add_child(footer)
+			achievement_cards[str(definition.id)] = {
+				"panel": panel,
+				"title": title,
+				"description": description,
+				"progress": progress,
+				"footer": footer,
+			}
+
+func _achievement_card_style(state: String) -> StyleBoxFlat:
+	var style := _compact_panel_style(10.0, 7.0, 6)
+	match state:
+		"complete":
+			style.bg_color = Color("12251f")
+			style.border_color = COLOR_GOOD
+		"revealed":
+			style.bg_color = Color("111c2c")
+			style.border_color = Color("315170")
+		_:
+			style.bg_color = Color("090e17")
+			style.border_color = Color("1b2737")
+	return style
+
 func _build_stats_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "STATS")
 	_section_label(content, "CURRENT PITCHING PROFILE")
@@ -2552,6 +2707,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		"visuals": "Visible projectile policy",
 		"lifetime_pitches": "Lifetime pitches",
 		"lifetime_xp": "Lifetime XP",
+		"achievements": "Achievements / permanent XP bonus",
 		"dna": "Unspent DNA / lifetime DNA",
 		"arcana": "Unspent Arcana / lifetime Arcana",
 		"genetic_rebirths": "Genetic rebirths (reality / lifetime)",
@@ -2958,6 +3114,11 @@ func _refresh_guide_text(
 			+ "item from auto-scrap. Bonuses are capped sidegrades, and each slot keeps up to 10 items."
 		),
 		(
+			"The Achievements tab always shows the full 100-slot catalog. Each completed achievement "
+			+ "permanently adds exactly 1% XP, stacking additively; achievements survive every prestige "
+			+ "reset. Future and secret entries remain completely anonymous until their subject is encountered."
+		),
+		(
 			"A released ball keeps the speed, path, color, source, and travel time it had at release. New "
 			+ "upgrades affect only future throws. Every visible low-rate ball is one exact simulated pitch; "
 			+ "only after more than %s would overlap on this device does a labeled dot represent several pitches."
@@ -2985,6 +3146,95 @@ func _refresh_guide_text(
 			+ "universe. Every named blessing can be earned on later victories; further wins award Halos."
 		)
 	guide_label.text = "\n\n".join(sections)
+
+func _achievement_reveal_signature() -> String:
+	return "%d:%d:%d:%d:%d" % [
+		game.get_historical_highest_opponent(),
+		int(game.is_achievement_tier_revealed("genetic")),
+		int(game.is_achievement_tier_revealed("eldritch")),
+		int(game.is_achievement_tier_revealed("divine")),
+		game.unlocked_achievements.size(),
+	]
+
+func _refresh_achievement_tab(force := false) -> void:
+	if achievement_tab == null or achievement_count_label == null:
+		return
+	var reveal_signature := _achievement_reveal_signature()
+	var tab_is_open := upgrade_tabs != null and upgrade_tabs.current_tab == achievement_tab.get_index()
+	if (
+		not force
+		and not tab_is_open
+		and achievement_last_revision == game.achievement_revision
+		and achievement_last_reveal_signature == reveal_signature
+	):
+		return
+	achievement_last_revision = game.achievement_revision
+	achievement_last_reveal_signature = reveal_signature
+	achievement_count_label.text = "%d / %d UNLOCKED" % [
+		game.unlocked_achievements.size(),
+		Content.ACHIEVEMENTS.size(),
+	]
+	achievement_bonus_label.text = "PERMANENT XP BONUS  +%d%%  •  XP ×%.2f" % [
+		int(round(game.get_achievement_xp_bonus() * 100.0)),
+		game.get_achievement_xp_multiplier(),
+	]
+	for tier_value in Content.ACHIEVEMENT_TIER_ORDER:
+		var tier := str(tier_value)
+		var heading: Label = achievement_section_headings[tier]
+		var tier_revealed := game.is_achievement_tier_revealed(tier)
+		heading.visible = tier_revealed
+		if tier_revealed:
+			var tier_total := 0
+			var tier_complete := 0
+			for definition_value in Content.ACHIEVEMENTS:
+				var tier_definition: Dictionary = definition_value
+				if str(tier_definition.tier) == tier:
+					tier_total += 1
+					if game.has_achievement(str(tier_definition.id)):
+						tier_complete += 1
+			heading.text = "%s  •  %d / %d" % [
+				str(Content.ACHIEVEMENT_TIER_NAMES[tier]),
+				tier_complete,
+				tier_total,
+			]
+	for definition_value in Content.ACHIEVEMENTS:
+		var definition: Dictionary = definition_value
+		var id := str(definition.id)
+		var entry: Dictionary = achievement_cards[id]
+		var panel: PanelContainer = entry.panel
+		var title: Label = entry.title
+		var description: Label = entry.description
+		var progress_bar: ProgressBar = entry.progress
+		var footer: Label = entry.footer
+		var unlocked := game.has_achievement(id)
+		var revealed := game.is_achievement_information_revealed(definition)
+		var state := "complete" if unlocked else ("revealed" if revealed else "hidden")
+		if str(panel.get_meta("achievement_state", "")) != state:
+			panel.set_meta("achievement_state", state)
+			panel.add_theme_stylebox_override("panel", _achievement_card_style(state))
+		if not revealed:
+			title.text = "HIDDEN ACHIEVEMENT"
+			title.add_theme_color_override("font_color", COLOR_MUTED)
+			description.text = "This achievement remains hidden."
+			progress_bar.visible = false
+			footer.text = "???"
+			panel.tooltip_text = "Hidden Achievement\nNo details are available yet."
+			continue
+		var achievement_progress := game.get_achievement_progress(definition)
+		title.text = "%s%s" % ["✓  " if unlocked else "", str(definition.name)]
+		title.add_theme_color_override("font_color", COLOR_GOOD if unlocked else COLOR_TEXT)
+		description.text = str(definition.description)
+		progress_bar.visible = true
+		progress_bar.value = float(achievement_progress.ratio) * 100.0
+		footer.text = "%s  •  %s" % [
+			"COMPLETE" if unlocked else str(achievement_progress.text),
+			"PERMANENT XP +1%",
+		]
+		panel.tooltip_text = "%s\n%s\n%s" % [
+			str(definition.name),
+			str(definition.description),
+			footer.text,
+		]
 
 func _refresh_interface() -> void:
 	if game == null or pitch_field == null:
@@ -3154,6 +3404,7 @@ func _refresh_interface() -> void:
 	)
 	_refresh_purchase_buttons()
 	_refresh_rebirth_buttons()
+	_refresh_achievement_tab()
 	_refresh_stats(at_bat_metrics, estimated_xp_per_second)
 
 func _refresh_field_stats() -> void:
@@ -3329,6 +3580,9 @@ func _refresh_opponent_loadout() -> void:
 		opponent_loadout_dock.add_child(button)
 
 func _refresh_purchase_buttons() -> void:
+	for catalog_id in catalog_hide_purchased_toggles:
+		var filter_toggle: CheckButton = catalog_hide_purchased_toggles[catalog_id]
+		filter_toggle.set_pressed_no_signal(bool(game.catalog_hide_purchased.get(catalog_id, false)))
 	for definition in Content.TRAINING:
 		var id := str(definition.id)
 		var rank := int(game.training_levels[id])
@@ -3365,7 +3619,11 @@ func _refresh_purchase_buttons() -> void:
 	for definition in Content.PITCHES:
 		var id := str(definition.id)
 		var button: Button = pitch_buttons[id]
-		button.visible = _catalog_entry_is_visible(definition, id in game.unlocked_pitches)
+		var pitch_owned := id in game.unlocked_pitches
+		button.visible = (
+			_catalog_entry_is_visible(definition, pitch_owned)
+			and not (pitch_owned and bool(game.catalog_hide_purchased.pitch))
+		)
 		if not button.visible:
 			continue
 		if id in game.unlocked_pitches:
@@ -3386,7 +3644,11 @@ func _refresh_purchase_buttons() -> void:
 	for definition in Content.BALL_UPGRADES:
 		var id := str(definition.id)
 		var button: Button = ball_upgrade_buttons[id]
-		button.visible = _catalog_entry_is_visible(definition, game.has_ball_upgrade(id))
+		var ball_owned := game.has_ball_upgrade(id)
+		button.visible = (
+			_catalog_entry_is_visible(definition, ball_owned)
+			and not (ball_owned and bool(game.catalog_hide_purchased.ball))
+		)
 		if not button.visible:
 			continue
 		if game.has_ball_upgrade(id):
@@ -3407,7 +3669,11 @@ func _refresh_purchase_buttons() -> void:
 	for definition in Content.MILESTONES:
 		var id := str(definition.id)
 		var button: Button = milestone_buttons[id]
-		button.visible = _catalog_entry_is_visible(definition, game.has_milestone(id))
+		var milestone_owned := game.has_milestone(id)
+		button.visible = (
+			_catalog_entry_is_visible(definition, milestone_owned)
+			and not (milestone_owned and bool(game.catalog_hide_purchased.facility))
+		)
 		if not button.visible:
 			continue
 		if game.has_milestone(id):
@@ -3647,6 +3913,12 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	]
 	stat_labels.lifetime_pitches.text = BaseballGameState.format_number(game.lifetime_pitches)
 	stat_labels.lifetime_xp.text = BaseballGameState.format_number(game.lifetime_xp)
+	stat_labels.achievements.text = "%d / %d • +%d%% • XP ×%.2f" % [
+		game.unlocked_achievements.size(),
+		Content.ACHIEVEMENTS.size(),
+		int(round(game.get_achievement_xp_bonus() * 100.0)),
+		game.get_achievement_xp_multiplier(),
+	]
 	stat_labels.dna.text = "%s / %s" % [BaseballGameState.format_number(float(game.dna), 0), BaseballGameState.format_number(game.lifetime_dna_earned, 0)]
 	stat_labels.arcana.text = "%s / %s" % [BaseballGameState.format_number(float(game.arcana), 0), BaseballGameState.format_number(game.lifetime_arcana_earned, 0)]
 	stat_labels.genetic_rebirths.text = "%d / %d" % [game.genetic_rebirths, game.lifetime_genetic_rebirths]
@@ -3654,6 +3926,40 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	stat_labels.divine_ascensions.text = str(game.divine_ascensions)
 	stat_labels.divine_blessings.text = "%d / %d • %d Halos" % [game.divine_blessings.size(), Content.DIVINE_BLESSINGS.size(), game.divine_halos]
 	stat_labels.completion.text = "AWAITING DIVINE RESET" if game.cosmos_conquered else "In progress"
+
+func _on_achievement_unlocked(definition: Dictionary, total_unlocked: int) -> void:
+	achievement_toast_queue.append(definition)
+	_log_event("ACHIEVEMENT: %s • +1%% XP (%d/%d)." % [
+		str(definition.name),
+		total_unlocked,
+		Content.ACHIEVEMENTS.size(),
+	])
+	_refresh_achievement_tab(true)
+	if not achievement_toast_showing:
+		_show_next_achievement_toast()
+
+func _show_next_achievement_toast() -> void:
+	if achievement_toast_queue.is_empty():
+		achievement_toast_showing = false
+		if achievement_toast != null:
+			achievement_toast.visible = false
+		return
+	achievement_toast_showing = true
+	var definition: Dictionary = achievement_toast_queue.pop_front()
+	achievement_toast_name.text = str(definition.name)
+	achievement_toast.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	achievement_toast.visible = true
+	achievement_toast.move_to_front()
+	var tween := create_tween()
+	tween.tween_property(achievement_toast, "modulate:a", 1.0, 0.16)
+	tween.tween_interval(2.35)
+	tween.tween_property(achievement_toast, "modulate:a", 0.0, 0.30)
+	tween.tween_callback(_finish_achievement_toast)
+
+func _finish_achievement_toast() -> void:
+	achievement_toast.visible = false
+	achievement_toast_showing = false
+	_show_next_achievement_toast()
 
 func _on_batch_resolved(summary: Dictionary) -> void:
 	var launched: int = pitch_field.notify_batch(summary)
@@ -3833,6 +4139,10 @@ func _toggle_automation(enabled: bool, id: String) -> void:
 			game.auto_farm_enabled = enabled and game.has_genetic_upgrade("predator_scouting")
 	_log_event("%s %s." % [id.capitalize(), "enabled" if enabled else "disabled"])
 	_refresh_interface()
+
+func _toggle_catalog_hide_purchased(hidden: bool, catalog_id: String) -> void:
+	if game.set_catalog_hide_purchased(catalog_id, hidden):
+		_refresh_purchase_buttons()
 
 func _request_genetic_rebirth() -> void:
 	if game.get_potential_dna() <= 0:

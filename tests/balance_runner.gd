@@ -15,7 +15,7 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 424242
 	game.loot_drops_enabled = false
-	print("One Foot Per Second — v0.10.9 first-human-lifetime pacing simulation")
+	print("One Foot Per Second — v0.11.0 first-human-lifetime pacing simulation")
 	print("00:00:00  Level 01  %s" % game.opponents[0].name)
 	while elapsed < MAX_SECONDS and not game.genetic_offer_unlocked:
 		_purchase_available_content()

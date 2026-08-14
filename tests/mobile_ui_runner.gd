@@ -131,6 +131,18 @@ func _run() -> void:
 	_expect(not main.upgrade_tabs.get_tab_bar().scrolling_enabled, "The tiny native TabBar arrows should be removed on phone layouts")
 	_expect(main.upgrade_tabs.get_tab_bar().has_theme_icon_override("decrement") and main.upgrade_tabs.get_tab_bar().has_theme_icon_override("increment"), "Tiny native overflow arrows should yield to the explicit phone tab controls")
 	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
+	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Phone upgrade catalogs should retain every per-tab Hide Purchased control")
+	for catalog_toggle in main.catalog_hide_purchased_toggles.values():
+		_expect((catalog_toggle as CheckButton).get_combined_minimum_size().y >= 44.0, "Phone Hide Purchased controls should remain touch-sized")
+	main.upgrade_tabs.current_tab = main.achievement_tab.get_index()
+	main._refresh_achievement_tab(true)
+	await process_frame
+	_expect(main.achievement_cards.size() == 100, "The phone achievement browser should expose all 100 slots")
+	var phone_hidden_card: Dictionary = main.achievement_cards.genetic_offer
+	_expect((phone_hidden_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Phone hidden achievements should remain anonymous")
+	_expect(not (phone_hidden_card.description as Label).text.contains("Xylophax"), "Phone hidden achievements must not leak future names")
+	main.upgrade_tabs.current_tab = 0
+	main._refresh_mobile_tab_navigation()
 	main.mobile_tab_next_button.pressed.emit()
 	await process_frame
 	_expect(main.upgrade_tabs.current_tab == 1, "The touch-sized Next control did not change upgrade tabs")

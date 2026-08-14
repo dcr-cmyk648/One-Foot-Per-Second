@@ -7,8 +7,9 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.10.9 multiverse regression suite")
+	print("One Foot Per Second — v0.11.0 multiverse regression suite")
 	_test_content()
+	_test_achievements()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()
 	_test_live_field_contract()
@@ -97,6 +98,19 @@ func _test_content() -> void:
 	_expect(Content.GENETIC_UPGRADES.size() == 15, "Expected fifteen genetic enhancements")
 	_expect(Content.ELDRITCH_UPGRADES.size() == 11, "Expected eleven eldritch abilities")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
+	_expect(Content.ACHIEVEMENTS.size() == 100, "The achievement catalog should contain exactly 100 entries")
+	var achievement_ids := {}
+	var achievement_tier_counts := {"human": 0, "genetic": 0, "eldritch": 0, "divine": 0}
+	for definition in Content.ACHIEVEMENTS:
+		var achievement_id := str(definition.id)
+		_expect(not achievement_ids.has(achievement_id), "Achievement IDs must be unique: %s" % achievement_id)
+		achievement_ids[achievement_id] = true
+		var achievement_tier := str(definition.tier)
+		_expect(achievement_tier_counts.has(achievement_tier), "Achievement tier should be known: %s" % achievement_tier)
+		if achievement_tier_counts.has(achievement_tier):
+			achievement_tier_counts[achievement_tier] += 1
+	_expect(achievement_tier_counts == {"human": 50, "genetic": 25, "eldritch": 19, "divine": 6}, "Achievements should span the intended four layers")
+	_expect_close(Content.DEFAULT_ACHIEVEMENT_XP_BONUS, 0.01, "Every achievement should use the shared +1% XP reward")
 	_expect(Content.LOOT_SLOTS.size() == 7, "Expected six human equipment slots and one post-human Relic")
 	_expect(str(Content.LOOT_SLOTS[5].id) == "cleats", "Cleats should remain a regular equipment slot")
 	_expect(str(Content.LOOT_SLOTS[6].id) == "relic", "The seventh equipment slot should be the post-human Relic")
@@ -174,6 +188,41 @@ func _test_content() -> void:
 			_expect(int(definition.required_level) >= previous_level, "%s should appear in unlock-level order" % str(definition.name))
 			previous_cost = cost
 			previous_level = int(definition.required_level)
+
+func _test_achievements() -> void:
+	var game: BaseballGameState = GameStateScript.new()
+	_expect(game.unlocked_achievements.is_empty(), "A fresh pitcher should start with no achievements")
+	_expect(game.is_achievement_tier_revealed("human"), "Human achievements should be visible immediately")
+	_expect(not game.is_achievement_tier_revealed("genetic"), "Future prestige achievement tiers must begin hidden")
+	var genetic_offer := Content.achievement_by_id("genetic_offer")
+	_expect(not game.is_achievement_information_revealed(genetic_offer), "A hidden future achievement must disclose no information")
+	_expect(not game.is_achievement_information_revealed(Content.achievement_by_id("speed_human_cap")), "The ordinary body limit should not be spoiled by an early achievement")
+	game.lifetime_pitches = 1.0
+	game.result_totals[Content.STRIKE_INDEX] = 1.0
+	var first_unlocks := game.check_achievements(false)
+	_expect(first_unlocks.size() == 2, "A first resolved Strike should unlock exactly its pitch and Strike achievements")
+	_expect(game.has_achievement("first_pitch") and game.has_achievement("first_strike"), "First-pitch achievement IDs should unlock deterministically")
+	_expect_close(game.get_achievement_xp_multiplier(), 1.02, "Achievement XP should stack additively at one percentage point each")
+	var permanent_ids := game.unlocked_achievements.duplicate()
+	game._reset_body_progress()
+	_expect(game.unlocked_achievements == permanent_ids, "Ordinary time travel must not erase achievements")
+	game.highest_unlocked = 33
+	game.genetic_offer_unlocked = true
+	_expect(game.is_achievement_information_revealed(Content.achievement_by_id("reach_four_armed_hitter")), "Encountered named milestones should reveal their achievement")
+	_expect(not game.is_achievement_information_revealed(Content.achievement_by_id("reach_plasma_slugger")), "Unencountered named milestones should remain anonymous")
+	_expect(not game.is_achievement_information_revealed(Content.achievement_by_id("speed_mach_12")), "Secret achievements should remain anonymous until completed")
+	game.lifetime_max_pitch_speed_fps = BaseballGameState.ALIEN_SPEED_CAP_FPS
+	game.check_achievements(false)
+	_expect(game.has_achievement("speed_mach_12"), "A completed secret achievement should unlock")
+	_expect(game.is_achievement_information_revealed(Content.achievement_by_id("speed_mach_12")), "Completed secret achievements should reveal their details")
+	game.set_catalog_hide_purchased("pitch", true)
+	var restored: BaseballGameState = GameStateScript.new()
+	restored.apply_save_data(game.to_save_data())
+	_expect(restored.unlocked_achievements == game.unlocked_achievements, "Achievements should survive save round-trips")
+	_expect(bool(restored.catalog_hide_purchased.pitch), "Per-tab purchased filters should survive save round-trips")
+	_expect_close(restored.lifetime_max_pitch_speed_fps, game.lifetime_max_pitch_speed_fps, "Achievement peak-speed history should survive saves")
+	game.free()
+	restored.free()
 
 func _test_initial_balance_and_velocity_layers() -> void:
 	var game: BaseballGameState = GameStateScript.new()
