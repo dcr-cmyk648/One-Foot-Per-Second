@@ -741,6 +741,7 @@ const ACHIEVEMENTS := [
 	{"id": "all_divine_blessings", "tier": "divine", "name": "Six Days, Six Blessings", "metric": "divine_blessings", "threshold": 6.0, "description": "Collect every named divine blessing."},
 	{"id": "divine_halo_1", "tier": "divine", "name": "After the Afterlife", "metric": "divine_halos", "threshold": 1.0, "description": "Earn your first extra Halo."},
 	{"id": "divine_halo_5", "tier": "divine", "name": "Halo Hall of Fame", "metric": "divine_halos", "threshold": 5.0, "description": "Earn five extra Halos."},
+	{"id": "no_hitter", "tier": "divine", "name": "No Hitter", "metric": "no_hitter", "threshold": 1.0, "secret": true, "description": "Defeat the entire campaign through Octathulhu without allowing a single fair hit."},
 ]
 
 const TRAINING := [
@@ -770,7 +771,7 @@ const TRAINING := [
 		"max_level": 6,
 		"required_level": 2,
 		"stats": ["tap"],
-		"description": "Tap advance +0.5 percentage points.",
+		"description": "Tap advance +0.17 percentage points.",
 	},
 	{
 		"id": "recovery",

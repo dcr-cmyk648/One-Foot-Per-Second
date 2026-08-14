@@ -24,7 +24,7 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 
-	print("One Foot Per Second — v0.11.0 progressive-interface audit")
+	print("No Hitter — v0.12.0 progressive-interface audit")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -72,11 +72,15 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("BALL", false, false) != null, "Ball upgrades should have their own tab")
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
 	_expect(main.upgrade_tabs.find_child("ACHIEVE", false, false) != null, "Achievements should have their own tab")
-	_expect(main.achievement_cards.size() == 100, "The achievement tab should render all 100 slots")
-	_expect(main.achievement_count_label.text == "0 / 100 UNLOCKED", "The fresh achievement summary should disclose the complete catalog count")
+	_expect(main.header_title.text == "NO HITTER", "The visible game title should use the new name")
+	_expect(main.achievement_cards.size() == 101, "The achievement tab should render all 101 slots")
+	_expect(main.achievement_count_label.text == "0 / 101 UNLOCKED", "The fresh achievement summary should disclose the complete catalog count")
 	var hidden_genetic_card: Dictionary = main.achievement_cards.genetic_offer
 	_expect((hidden_genetic_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Future achievements should use anonymous placeholder titles")
 	_expect(not (hidden_genetic_card.description as Label).text.contains("Commissioner"), "A hidden achievement must not leak its true condition")
+	var hidden_no_hitter_card: Dictionary = main.achievement_cards.no_hitter
+	_expect((hidden_no_hitter_card.title as Label).text == "HIDDEN ACHIEVEMENT", "The namesake secret achievement must remain anonymous before completion")
+	_expect(not (hidden_no_hitter_card.description as Label).text.contains("Octathulhu"), "The namesake secret achievement must not leak its campaign condition")
 	_expect(not (main.achievement_section_headings.genetic as Label).visible, "A hidden achievement group must not leak its tier heading")
 	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Every one-time purchase catalog should have its own Hide Purchased toggle")
 	main._toggle_catalog_hide_purchased(true, "pitch")
@@ -88,7 +92,7 @@ func _run() -> void:
 	_expect(main.field_stat_labels.size() == 9, "The default field should expose every base trained stat in a compact overlay")
 	_expect(str(main.field_stat_labels.speed.text).contains("1.00 ft/s"), "The field overlay should begin with the game's literal one-foot-per-second speed")
 	_expect(main.field_stat_labels.offline.text == "1%", "The fresh field should make its deliberately weak offline reward rate visible")
-	_expect(main.field_stat_labels.tap.text == "5.0%", "The field should expose the starting active-tap advance")
+	_expect(main.field_stat_labels.tap.text == "1.7%", "The field should expose the reduced starting active-tap advance")
 	for stat_id in main.field_stat_labels:
 		_expect(not (main.field_stat_labels[stat_id] as Label).tooltip_text.is_empty(), "Field stat %s needs a hover explanation" % stat_id)
 	var field_click := InputEventMouseButton.new()
@@ -96,13 +100,28 @@ func _run() -> void:
 	field_click.pressed = true
 	field_click.position = Vector2(310.0, 210.0)
 	main.pitch_field._on_field_gui_input(field_click)
-	_expect(is_equal_approx(main.game.pitch_credit, 0.05), "Clicking unobstructed field space should advance the opening timer")
+	_expect(is_equal_approx(main.game.pitch_credit, 1.0 / 60.0), "Clicking unobstructed field space should advance the opening timer by one third of its former amount")
 	_expect(main.pitch_field.field_tap_effects.size() == 1, "A field click should create its local feedback ring")
 	_expect(main.game.has_achievement("first_field_tap"), "The first active field tap should unlock its achievement")
 	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast")
-	_expect(main.achievement_count_label.text == "1 / 100 UNLOCKED", "The achievement summary should update immediately after an unlock")
+	_expect(main.achievement_toast_description.text == "Hurry an active timer with a field tap.", "An achievement toast should state the completed condition")
+	_expect(main.achievement_toast_description.get_theme_font_size("font_size") < main.achievement_toast_name.get_theme_font_size("font_size"), "The completed condition should use deliberately smaller toast text")
+	_expect(main.achievement_count_label.text == "1 / 101 UNLOCKED", "The achievement summary should update immediately after an unlock")
 	main.game._clear_pitch_cycle()
 	main.pitch_field.field_tap_effects.clear()
+	main.game.batter_cooldown_remaining = 3.0
+	main.game.batter_replacement_pending = true
+	main.pitch_field.batter_phase = "waiting"
+	main.pitch_field.batter_phase_age = 0.0
+	main.pitch_field.batter_phase_duration = 3.0
+	main.pitch_field._on_field_gui_input(field_click)
+	_expect(is_equal_approx(main.game.batter_cooldown_remaining, 2.95), "A field click should hurry the authoritative next-batter timer")
+	_expect(is_equal_approx(main.pitch_field.batter_phase_age, 0.05), "A field click should hurry the visible next-batter meter in lockstep")
+	main.game.batter_cooldown_remaining = 0.0
+	main.game.batter_replacement_pending = false
+	main.pitch_field.batter_phase = "active"
+	main.pitch_field.batter_phase_age = 0.0
+	main.pitch_field.batter_phase_duration = 0.0
 	main._refresh_interface()
 	_expect(main.opponent_loadout_dock.get_child_count() == 2, "The opening opponent side should show body and bat squares")
 	_expect(not main.locker_dialog.visible, "The equipment popup should start closed")

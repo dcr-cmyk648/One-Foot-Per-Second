@@ -84,6 +84,7 @@ var achievement_last_reveal_signature := ""
 var achievement_toast: PanelContainer
 var achievement_toast_heading: Label
 var achievement_toast_name: Label
+var achievement_toast_description: Label
 var achievement_toast_queue: Array[Dictionary] = []
 var achievement_toast_showing := false
 var automation_section: VBoxContainer
@@ -390,9 +391,9 @@ func _set_mobile_install_offer_visible(visible: bool) -> void:
 func _refresh_mobile_install_offer() -> void:
 	var platform := _get_mobile_install_platform()
 	mobile_install_button.tooltip_text = (
-		"Install One Foot Per Second on this Android device."
+		"Install No Hitter on this Android device."
 		if platform == "android"
-		else "Add One Foot Per Second to this iPhone's Home Screen."
+		else "Add No Hitter to this iPhone's Home Screen."
 	)
 	_set_mobile_install_offer_visible(_should_offer_mobile_install())
 
@@ -935,7 +936,7 @@ func _build_achievement_toast() -> void:
 	achievement_toast.offset_left = -225.0
 	achievement_toast.offset_top = 76.0
 	achievement_toast.offset_right = 225.0
-	achievement_toast.offset_bottom = 148.0
+	achievement_toast.offset_bottom = 174.0
 	var toast_style := _compact_panel_style(14.0, 9.0, 9)
 	toast_style.bg_color = Color("162234")
 	toast_style.border_color = COLOR_GOLD
@@ -958,6 +959,14 @@ func _build_achievement_toast() -> void:
 	achievement_toast_name.add_theme_font_size_override("font_size", 17)
 	achievement_toast_name.add_theme_color_override("font_color", COLOR_TEXT)
 	stack.add_child(achievement_toast_name)
+	achievement_toast_description = Label.new()
+	achievement_toast_description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	achievement_toast_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	achievement_toast_description.max_lines_visible = 2
+	achievement_toast_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	achievement_toast_description.add_theme_font_size_override("font_size", 11)
+	achievement_toast_description.add_theme_color_override("font_color", COLOR_MUTED)
+	stack.add_child(achievement_toast_description)
 
 func _build_header(parent: Control) -> void:
 	header_panel = PanelContainer.new()
@@ -969,7 +978,7 @@ func _build_header(parent: Control) -> void:
 	header_title_stack = VBoxContainer.new()
 	header_row.add_child(header_title_stack)
 	header_title = Label.new()
-	header_title.text = "ONE FOOT PER SECOND"
+	header_title.text = "NO HITTER"
 	header_title.add_theme_font_size_override("font_size", 27)
 	header_title.add_theme_color_override("font_color", COLOR_ACCENT)
 	header_title_stack.add_child(header_title)
@@ -1073,7 +1082,7 @@ func _build_mobile_navigation(parent: Control) -> void:
 	mobile_install_button = Button.new()
 	mobile_install_button.name = "MobileInstallButton"
 	mobile_install_button.text = "INSTALL"
-	mobile_install_button.tooltip_text = "Install One Foot Per Second on this phone."
+	mobile_install_button.tooltip_text = "Install No Hitter on this phone."
 	mobile_install_button.custom_minimum_size.y = 44.0
 	mobile_install_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mobile_install_button.focus_mode = Control.FOCUS_NONE
@@ -1294,9 +1303,10 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 		achievement_toast.offset_left = -176.0 if mobile_layout else -225.0
 		achievement_toast.offset_right = 176.0 if mobile_layout else 225.0
 		achievement_toast.offset_top = 62.0 if mobile_layout else 76.0
-		achievement_toast.offset_bottom = 132.0 if mobile_layout else 148.0
+		achievement_toast.offset_bottom = 158.0 if mobile_layout else 174.0
 		achievement_toast_heading.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
 		achievement_toast_name.add_theme_font_size_override("font_size", 14 if mobile_layout else 17)
+		achievement_toast_description.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
 	page_container.add_theme_constant_override("separation", 4 if mobile_layout else (6 if dense_wide else 10))
 	body_container.add_theme_constant_override("separation", 0 if mobile_layout else (8 if dense_wide else 10))
 	header_row.add_theme_constant_override("separation", 7 if mobile_layout else (12 if dense_wide else 20))
@@ -2844,7 +2854,7 @@ func _build_save_transfer_dialogs() -> void:
 	export_save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	export_save_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	export_save_dialog.use_native_dialog = true
-	export_save_dialog.filters = PackedStringArray(["*.json;One Foot Per Second Save;application/json"])
+	export_save_dialog.filters = PackedStringArray(["*.json;No Hitter Save;application/json"])
 	export_save_dialog.file_selected.connect(_write_export_save)
 	add_child(export_save_dialog)
 
@@ -2853,7 +2863,7 @@ func _build_save_transfer_dialogs() -> void:
 	load_save_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	load_save_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	load_save_dialog.use_native_dialog = true
-	load_save_dialog.filters = PackedStringArray(["*.json;One Foot Per Second Save;application/json"])
+	load_save_dialog.filters = PackedStringArray(["*.json;No Hitter Save;application/json"])
 	load_save_dialog.file_selected.connect(_read_import_save)
 	add_child(load_save_dialog)
 
@@ -3095,7 +3105,7 @@ func _refresh_guide_text(
 			"Earn opponent mastery to unlock the next batter, or move backward whenever an easier opponent "
 			+ "produces more XP per second. The circle beside the pitcher fills toward the next release. While "
 			+ "the plate is empty, pitching stops and the circle beside home plate fills until the next batter "
-			+ "arrives. Tap open field space to advance whichever of recovery, flight, or lineup is active by 5%; "
+			+ "arrives. Tap open field space to advance whichever of recovery, flight, or lineup is active by the displayed Field Tap percentage; "
 			+ "taps can supply only half of one timer, and Field Hustle raises each tap without changing that cap. "
 			+ "On-Deck Hurry-Up multiplies every replacement delay by 0.930 per rank. After an opponent's "
 			+ "mastery target is passed, staying there adds a small logarithmic XP and loot-quality farming bonus."
@@ -3114,7 +3124,7 @@ func _refresh_guide_text(
 			+ "item from auto-scrap. Bonuses are capped sidegrades, and each slot keeps up to 10 items."
 		),
 		(
-			"The Achievements tab always shows the full 100-slot catalog. Each completed achievement "
+			"The Achievements tab always shows the full 101-slot catalog. Each completed achievement "
 			+ "permanently adds exactly 1% XP, stacking additively; achievements survive every prestige "
 			+ "reset. Future and secret entries remain completely anonymous until their subject is encountered."
 		),
@@ -3947,6 +3957,7 @@ func _show_next_achievement_toast() -> void:
 	achievement_toast_showing = true
 	var definition: Dictionary = achievement_toast_queue.pop_front()
 	achievement_toast_name.text = str(definition.name)
+	achievement_toast_description.text = str(definition.get("description", "Achievement completed."))
 	achievement_toast.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	achievement_toast.visible = true
 	achievement_toast.move_to_front()
@@ -4205,7 +4216,7 @@ func _save_now() -> void:
 
 func _backup_filename() -> String:
 	var now := Time.get_datetime_dict_from_system()
-	return "one-foot-per-second-save-v%d-%04d%02d%02d-%02d%02d%02d.json" % [
+	return "no-hitter-save-v%d-%04d%02d%02d-%02d%02d%02d.json" % [
 		BaseballGameState.SAVE_VERSION,
 		int(now.year),
 		int(now.month),

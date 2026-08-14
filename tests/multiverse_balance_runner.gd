@@ -16,7 +16,7 @@ func _initialize() -> void:
 	game = GameStateScript.new()
 	game.rng.seed = 303003
 	game.loot_drops_enabled = false
-	print("One Foot Per Second — v0.11.0 multiverse pacing simulation")
+	print("No Hitter — v0.12.0 multiverse pacing simulation")
 	_log_checkpoint("BEGIN")
 	while elapsed < MAX_SECONDS and not game.cosmos_conquered:
 		_purchase_meta_upgrades()

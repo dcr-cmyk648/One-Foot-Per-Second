@@ -7,9 +7,10 @@ const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
-	print("One Foot Per Second — v0.11.0 multiverse regression suite")
+	print("No Hitter — v0.12.0 multiverse regression suite")
 	_test_content()
 	_test_achievements()
+	_test_no_hitter_challenge()
 	_test_initial_balance_and_velocity_layers()
 	_test_pitch_phase_state_machine()
 	_test_live_field_contract()
@@ -98,7 +99,7 @@ func _test_content() -> void:
 	_expect(Content.GENETIC_UPGRADES.size() == 15, "Expected fifteen genetic enhancements")
 	_expect(Content.ELDRITCH_UPGRADES.size() == 11, "Expected eleven eldritch abilities")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
-	_expect(Content.ACHIEVEMENTS.size() == 100, "The achievement catalog should contain exactly 100 entries")
+	_expect(Content.ACHIEVEMENTS.size() == 101, "The achievement catalog should contain exactly 101 entries")
 	var achievement_ids := {}
 	var achievement_tier_counts := {"human": 0, "genetic": 0, "eldritch": 0, "divine": 0}
 	for definition in Content.ACHIEVEMENTS:
@@ -109,7 +110,7 @@ func _test_content() -> void:
 		_expect(achievement_tier_counts.has(achievement_tier), "Achievement tier should be known: %s" % achievement_tier)
 		if achievement_tier_counts.has(achievement_tier):
 			achievement_tier_counts[achievement_tier] += 1
-	_expect(achievement_tier_counts == {"human": 50, "genetic": 25, "eldritch": 19, "divine": 6}, "Achievements should span the intended four layers")
+	_expect(achievement_tier_counts == {"human": 50, "genetic": 25, "eldritch": 19, "divine": 7}, "Achievements should span the intended four layers")
 	_expect_close(Content.DEFAULT_ACHIEVEMENT_XP_BONUS, 0.01, "Every achievement should use the shared +1% XP reward")
 	_expect(Content.LOOT_SLOTS.size() == 7, "Expected six human equipment slots and one post-human Relic")
 	_expect(str(Content.LOOT_SLOTS[5].id) == "cleats", "Cleats should remain a regular equipment slot")
@@ -211,6 +212,7 @@ func _test_achievements() -> void:
 	_expect(game.is_achievement_information_revealed(Content.achievement_by_id("reach_four_armed_hitter")), "Encountered named milestones should reveal their achievement")
 	_expect(not game.is_achievement_information_revealed(Content.achievement_by_id("reach_plasma_slugger")), "Unencountered named milestones should remain anonymous")
 	_expect(not game.is_achievement_information_revealed(Content.achievement_by_id("speed_mach_12")), "Secret achievements should remain anonymous until completed")
+	_expect(not game.is_achievement_information_revealed(Content.achievement_by_id("no_hitter")), "No Hitter must remain fully secret before completion")
 	game.lifetime_max_pitch_speed_fps = BaseballGameState.ALIEN_SPEED_CAP_FPS
 	game.check_achievements(false)
 	_expect(game.has_achievement("speed_mach_12"), "A completed secret achievement should unlock")
@@ -223,6 +225,45 @@ func _test_achievements() -> void:
 	_expect_close(restored.lifetime_max_pitch_speed_fps, game.lifetime_max_pitch_speed_fps, "Achievement peak-speed history should survive saves")
 	game.free()
 	restored.free()
+
+func _test_no_hitter_challenge() -> void:
+	var clean_game: BaseballGameState = GameStateScript.new()
+	clean_game.no_hitter_attempt_valid = true
+	clean_game.highest_unlocked = Content.FINAL_BOSS_INDEX
+	clean_game.current_opponent = Content.FINAL_BOSS_INDEX
+	clean_game.opponent_mastery[Content.FINAL_BOSS_INDEX] = clean_game.get_mastery_requirement(Content.FINAL_BOSS_INDEX)
+	clean_game._check_opponent_unlock()
+	_expect(clean_game.cosmos_conquered, "A clean final-boss mastery should still complete the cosmos")
+	_expect(clean_game.has_achievement("no_hitter"), "Defeating Octathulhu on a clean campaign should unlock No Hitter")
+	_expect(clean_game.is_achievement_information_revealed(Content.achievement_by_id("no_hitter")), "No Hitter should reveal only after it has been earned")
+
+	var hit_game: BaseballGameState = GameStateScript.new()
+	hit_game.no_hitter_attempt_valid = true
+	var hit_summary := hit_game._empty_resolution_summary()
+	hit_game._apply_pitch_outcome(hit_summary, 4, -1.0, 1, true)
+	_expect(not hit_game.no_hitter_attempt_valid, "Even a clone-saved Single should spoil a No Hitter attempt")
+	hit_game.highest_unlocked = Content.FINAL_BOSS_INDEX
+	hit_game.current_opponent = Content.FINAL_BOSS_INDEX
+	hit_game.opponent_mastery[Content.FINAL_BOSS_INDEX] = hit_game.get_mastery_requirement(Content.FINAL_BOSS_INDEX)
+	hit_game._check_opponent_unlock()
+	_expect(not hit_game.has_achievement("no_hitter"), "A campaign containing fair contact must not earn No Hitter")
+
+	var saved_game: BaseballGameState = GameStateScript.new()
+	saved_game.no_hitter_attempt_valid = true
+	var restored_game: BaseballGameState = GameStateScript.new()
+	restored_game.apply_save_data(saved_game.to_save_data())
+	_expect(restored_game.no_hitter_attempt_valid, "A current save should preserve an active No Hitter attempt")
+	var legacy_data := saved_game.to_save_data()
+	legacy_data.version = 15
+	legacy_data.erase("no_hitter_attempt_valid")
+	var migrated_game: BaseballGameState = GameStateScript.new()
+	migrated_game.apply_save_data(legacy_data)
+	_expect(not migrated_game.no_hitter_attempt_valid, "An older save must not receive an uncertifiable clean run during migration")
+	clean_game.free()
+	hit_game.free()
+	saved_game.free()
+	restored_game.free()
+	migrated_game.free()
 
 func _test_initial_balance_and_velocity_layers() -> void:
 	var game: BaseballGameState = GameStateScript.new()
@@ -395,12 +436,12 @@ func _test_live_field_contract() -> void:
 
 func _test_field_tapping() -> void:
 	var game: BaseballGameState = GameStateScript.new()
-	_expect_close(game.get_field_tap_fraction(), 0.05, "A fresh field tap should advance five percent")
+	_expect_close(game.get_field_tap_fraction(), 1.0 / 60.0, "A fresh field tap should advance one third of the former five-percent value")
 	var first_tap := game.apply_field_tap()
 	_expect(bool(first_tap.get("applied", false)) and str(first_tap.get("phase", "")) == "recovery", "The opening field tap should advance pitch recovery")
-	_expect_close(float(first_tap.get("seconds", 0.0)), 0.20, "Five percent of the opening four-second recovery should be 0.20 seconds")
-	_expect_close(game.pitch_credit, 0.05, "A recovery tap should add exactly five percent release credit")
-	for _tap in 9:
+	_expect_close(float(first_tap.get("seconds", 0.0)), 1.0 / 15.0, "One sixtieth of the opening four-second recovery should be about 0.067 seconds")
+	_expect_close(game.pitch_credit, 1.0 / 60.0, "A recovery tap should add one sixtieth release credit")
+	for _tap in 29:
 		game.apply_field_tap()
 	_expect_close(game.pitch_credit, BaseballGameState.FIELD_TAP_PHASE_CAP, "Tapping may provide exactly half of one timer")
 	var capped_tap := game.apply_field_tap()
@@ -408,7 +449,7 @@ func _test_field_tapping() -> void:
 
 	var upgraded: BaseballGameState = GameStateScript.new()
 	upgraded.training_levels.field_hustle = BaseballGameState.FIELD_TAP_MAX_RANK
-	_expect_close(upgraded.get_field_tap_fraction(), 0.08, "Max Field Hustle should reach eight percent per tap")
+	_expect_close(upgraded.get_field_tap_fraction(), 2.0 / 75.0, "Max Field Hustle should reach one third of the former eight-percent value")
 	var summary := upgraded._empty_resolution_summary()
 	upgraded._begin_pitch_volley(summary, 0.0)
 	var immutable_speed := upgraded.pending_volley_speed_fps
@@ -416,7 +457,7 @@ func _test_field_tapping() -> void:
 	var flight_before := upgraded.pitch_flight_remaining
 	var flight_tap := upgraded.apply_field_tap()
 	_expect(str(flight_tap.get("phase", "")) == "flight", "A tap during travel should advance the immutable flight clock")
-	_expect_close(upgraded.pitch_flight_remaining, flight_before * 0.92, "An upgraded flight tap should remove eight percent of the released duration")
+	_expect_close(upgraded.pitch_flight_remaining, flight_before * (73.0 / 75.0), "An upgraded flight tap should remove 2.667 percent of the released duration")
 	_expect_close(upgraded.pending_volley_speed_fps, immutable_speed, "Tapping flight time must not mutate the sampled pitch speed")
 	_expect(upgraded.pending_volley_outcome == immutable_outcome, "Tapping flight time must not reroll the hidden outcome")
 
@@ -425,7 +466,7 @@ func _test_field_tapping() -> void:
 	field.apply_field_timer_advance("flight", float(flight_tap.seconds))
 	_expect(field.stream_time > stream_before, "The visible ball should fast-forward with the authoritative flight timer")
 	field.show_field_tap(Vector2(200.0, 140.0), flight_tap)
-	_expect(field.field_tap_effects.size() == 1 and str(field.field_tap_effects[0].label) == "+8%", "A successful tap should create the brief percentage ring")
+	_expect(field.field_tap_effects.size() == 1 and str(field.field_tap_effects[0].label) == "+2.7%", "A successful tap should create the brief reduced-percentage ring")
 	field._update_field_tap_effects(PitchField.FIELD_TAP_EFFECT_DURATION + 0.01)
 	_expect(field.field_tap_effects.is_empty(), "The field tap cue should retire quickly")
 
@@ -434,7 +475,7 @@ func _test_field_tapping() -> void:
 	upgraded.batter_replacement_pending = true
 	var lineup_tap := upgraded.apply_field_tap()
 	_expect(str(lineup_tap.get("phase", "")) == "lineup", "A tap at an empty plate should advance the lineup timer")
-	_expect_close(upgraded.batter_cooldown_remaining, 11.04, "An eight-percent lineup tap should advance 0.96 seconds")
+	_expect_close(upgraded.batter_cooldown_remaining, 11.68, "A lineup tap should advance the same 2.667 percent as every other foreground timer")
 	field.free()
 	game.free()
 	upgraded.free()
@@ -1332,11 +1373,19 @@ func _test_divine_restoration() -> void:
 	_expect(game.perform_divine_ascension("let_there_be_fastballs"), "A cosmic victory should allow one divine blessing")
 	_expect(game.has_divine_blessing("let_there_be_fastballs"), "The chosen blessing should persist")
 	_expect(game.divine_ascensions == 1, "Divine restoration should count a saved universe")
+	_expect(game.no_hitter_attempt_valid, "A restored universe should begin a fresh No Hitter attempt")
+	_expect(game.genetic_offer_unlocked and game.eldritch_offer_unlocked, "A restored universe should remember both already-seen prestige offers")
 	_expect(game.dna == 0 and game.arcana == 0, "Divine restoration should erase lower currencies")
 	_expect(game.genetic_rebirths == 0 and game.eldritch_ascensions == 0, "Divine restoration should erase current lower-layer counts")
 	_expect(game.lifetime_genetic_rebirths == 7 and game.lifetime_eldritch_ascensions == 4, "Lifetime reset statistics should survive God")
 	_expect(int(game.genetic_levels.extra_arms) == 0 and int(game.eldritch_levels.mirror_clones) == 0, "Divine restoration should erase mutations and magic")
 	_expect_close(game.get_velocity_fps(), 10.0, "Let There Be Fastballs should make the next universe start at 10 ft/s")
+	game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
+	game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
+	var repeat_pitches_before := game.lifetime_pitches
+	game.simulate_active_time(10.0)
+	_expect_close(game.lifetime_pitches, repeat_pitches_before, "A known exhibition offer should pause pitching instead of forcing another scripted hit")
+	_expect(game.no_hitter_attempt_valid, "Waiting at a remembered prestige offer should preserve a clean run")
 	_expect(not game.perform_divine_ascension("let_there_be_fastballs"), "A blessing cannot be claimed twice without another victory")
 
 	for definition in Content.DIVINE_BLESSINGS:

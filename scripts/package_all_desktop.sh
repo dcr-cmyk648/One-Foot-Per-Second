@@ -9,7 +9,7 @@ export LANG=C
 OFPS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OFPS_GODOT_BIN="${GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
 OFPS_VERSION="$(/usr/bin/sed -n 's/^config\/version="\([^"]*\)"/\1/p' "${OFPS_ROOT}/project.godot")"
-OFPS_TITLE="One Foot Per Second"
+OFPS_TITLE="No Hitter"
 
 # Generated exports live inside the repository but are not Godot resources.
 # Keep later headless runs from scanning an earlier build back into the project.

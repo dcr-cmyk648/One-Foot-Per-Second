@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "One Foot Per Second",
+  title: "No Hitter",
   description:
     "A baseball idle game about becoming cosmically overqualified, one painfully slow pitch at a time.",
   icons: {

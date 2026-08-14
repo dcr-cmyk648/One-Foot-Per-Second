@@ -1,4 +1,4 @@
-ONE FOOT PER SECOND — BROWSER BUILD
+NO HITTER — BROWSER BUILD
 
 This ZIP is a static website. Upload its contents without renaming the generated
 files, and keep index.html at the web root. It does not require an application

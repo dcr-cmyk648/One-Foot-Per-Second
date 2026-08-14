@@ -1,4 +1,4 @@
-ONE FOOT PER SECOND v0.11.0
+NO HITTER v0.12.0
 ALL-PLATFORMS RELEASE
 
 Choose the browser package or the native package matching the computer that
@@ -7,15 +7,15 @@ and the game does not install services or modify the registry.
 
 BROWSER
 
-"One Foot Per Second v0.11.0 Browser.zip" is a static website. Upload its
+"No Hitter v0.12.0 Browser.zip" is a static website. Upload its
 contents unchanged to a static host with index.html at the web root, then share
 that URL. See WEB-README.txt in the browser package for local testing and save
 details. It cannot be run reliably by double-clicking index.html.
 
 MACOS — INTEL OR APPLE SILICON
 
-1. Open "One Foot Per Second v0.11.0 macOS Universal.dmg".
-2. Drag One Foot Per Second into Applications, or run it from the disk image.
+1. Open "No Hitter v0.12.0 macOS Universal.dmg".
+2. Drag No Hitter into Applications, or run it from the disk image.
 3. The build is ad-hoc signed but not Apple-notarized. On first launch,
    Control-click the app and choose Open. If macOS still blocks it, open
    System Settings > Privacy & Security and choose Open Anyway.
@@ -26,7 +26,7 @@ an Apple Developer ID certificate and notarization.
 WINDOWS
 
 1. Most Windows PCs use the x86_64 ZIP. Windows-on-ARM devices use the ARM64 ZIP.
-2. Extract the whole ZIP, then open "One Foot Per Second.exe".
+2. Extract the whole ZIP, then open "No Hitter.exe".
 3. The EXE is not commercially code-signed. If Microsoft Defender SmartScreen
    appears, choose More info, verify that the file came from the person who sent
    it to you, then choose Run anyway.
@@ -41,7 +41,7 @@ LINUX
    the ARM64 archive.
 2. Extract the entire .tar.gz archive.
 3. Double-click the executable and allow it to run, or launch it in a terminal.
-   If needed: chmod +x "One Foot Per Second.x86_64"
+   If needed: chmod +x "No Hitter.x86_64"
 
 SAVES AND OFFLINE PROGRESS
 
@@ -56,7 +56,8 @@ Windows:
 Linux:
   ~/.local/share/godot/app_userdata/One Foot Per Second/
 
-The save is named one_foot_per_second_save.json. The in-game EXPORT and LOAD
+The renamed game deliberately keeps this original data directory. The save is
+named one_foot_per_second_save.json. The in-game EXPORT and LOAD
 buttons are the preferred way to move or back up progress on every platform.
 Browser autosaves are local to that browser and site; use EXPORT before clearing
 site data, changing browsers, or changing devices.

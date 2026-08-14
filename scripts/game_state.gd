@@ -8,7 +8,7 @@ signal achievement_unlocked(definition: Dictionary, total_unlocked: int)
 
 const Content = preload("res://scripts/content.gd")
 const SAVE_PATH := "user://one_foot_per_second_save.json"
-const SAVE_VERSION := 15
+const SAVE_VERSION := 16
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -41,8 +41,10 @@ const DISTANCE_MIN_FACTOR := 0.50
 const BASE_OFFLINE_XP_EFFICIENCY := 0.01
 const OFFLINE_XP_EFFICIENCY_PER_RANK := 0.01
 const OFFLINE_XP_MAX_RANK := 24
-const BASE_FIELD_TAP_FRACTION := 0.05
-const FIELD_TAP_FRACTION_PER_RANK := 0.005
+# Active input is deliberately modest: the displayed opening 1.7% and each
+# Field Hustle increment are exactly one third of their original values.
+const BASE_FIELD_TAP_FRACTION := 1.0 / 60.0
+const FIELD_TAP_FRACTION_PER_RANK := 1.0 / 600.0
 const FIELD_TAP_MAX_RANK := 6
 const FIELD_TAP_PHASE_CAP := 0.50
 # Every completed plate appearance has a believable lineup-change baseline.
@@ -105,6 +107,10 @@ var eldritch_offer_unlocked := false
 var alien_exhibition_seconds := 0.0
 var eldritch_exhibition_seconds := 0.0
 var cosmos_conquered := false
+# A legitimate No Hitter attempt begins when God restores a completed universe.
+# Lower prestige layers preserve it; any fair-contact outcome, including one
+# rescued by clones or portals, permanently spoils that universe's attempt.
+var no_hitter_attempt_valid := false
 
 var training_levels := {
 	"velocity": 0,
@@ -402,6 +408,12 @@ func is_eldritch_exhibition_blocked() -> bool:
 func is_story_exhibition_blocked() -> bool:
 	return is_alien_exhibition_blocked() or is_eldritch_exhibition_blocked()
 
+func is_story_offer_ready() -> bool:
+	return (
+		(is_alien_exhibition_blocked() and genetic_offer_unlocked)
+		or (is_eldritch_exhibition_blocked() and eldritch_offer_unlocked)
+	)
+
 func is_speed_gate_blocked(opponent_index: int = current_opponent) -> bool:
 	if opponent_index == Content.HUMAN_FINAL_INDEX and not genetic_offer_unlocked:
 		return get_velocity_fps() < HUMAN_SPEED_CAP_FPS * 0.999
@@ -483,6 +495,7 @@ func reset_fresh() -> void:
 	alien_exhibition_seconds = 0.0
 	eldritch_exhibition_seconds = 0.0
 	cosmos_conquered = false
+	no_hitter_attempt_valid = false
 	training_levels = {
 		"velocity": 0,
 		"command": 0,
@@ -809,6 +822,13 @@ func _resolve_elapsed(
 		pitch_credit = 0.0
 		_apply_resolution(summary, should_emit, xp_reward_multiplier)
 		return summary
+	# Repeat universes remember both prestige offers. Once their exhibition
+	# batter is reached, hold the ball until the player takes the already-known
+	# reset instead of manufacturing unavoidable Grand Slams into a clean run.
+	if is_story_offer_ready() and not is_pitch_in_flight():
+		pitch_credit = 0.0
+		_apply_resolution(summary, should_emit, xp_reward_multiplier)
+		return summary
 	var elapsed_offset := 0.0
 	var recovery_rate := maxf(get_recovery_rate(), 0.000001)
 	var active_cycle_seconds := 1.0 / recovery_rate + get_resolved_flight_seconds()
@@ -841,7 +861,7 @@ func _resolve_elapsed(
 			elapsed_offset += impact_cooldown
 			if batter_cooldown_remaining <= 0.000001:
 				_complete_batter_replacement()
-		if remaining > 0.0 and not is_pitch_in_flight():
+		if remaining > 0.0 and not is_pitch_in_flight() and not is_story_offer_ready():
 			pitch_credit = 0.0
 			_resolve_aggregate_time(remaining, summary, stochastic)
 		_apply_resolution(summary, should_emit, xp_reward_multiplier)
@@ -872,6 +892,9 @@ func _resolve_elapsed(
 			if should_emit:
 				break
 			continue
+		if is_story_offer_ready():
+			pitch_credit = 0.0
+			break
 		var needed_credit := maxf(1.0 - pitch_credit, 0.0)
 		var time_to_release := needed_credit / recovery_rate
 		if time_to_release > remaining:
@@ -889,7 +912,7 @@ func _resolve_elapsed(
 		transitions += 1
 		if should_emit:
 			break
-	if remaining > 0.000001 and not should_emit:
+	if remaining > 0.000001 and not should_emit and not is_story_offer_ready():
 		pitch_credit = 0.0
 		_resolve_aggregate_time(remaining, summary, stochastic)
 	_apply_resolution(summary, should_emit, xp_reward_multiplier)
@@ -986,6 +1009,8 @@ func _apply_pitch_outcome(
 	var saved := false
 	var struck_out := false
 	var walked := false
+	if outcome < Content.HIT_OUTCOME_COUNT:
+		no_hitter_attempt_valid = false
 	if outcome == Content.STRIKE_INDEX:
 		plate_strikes += resolved_balls
 		if plate_strikes >= get_strikes_required():
@@ -1128,6 +1153,14 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 	var released_count := float(summary.get("released_pitches", 0.0))
 	var strikeouts := float(summary.strikeouts)
 	var counts: Array = summary.counts
+	if no_hitter_attempt_valid:
+		# Aggregate catch-up resolves expected outcomes rather than individual
+		# animation events. It cannot certify a clean inning once any positive fair
+		# contact exists, so an offline shortcut never grants this extreme challenge.
+		for hit_index in Content.HIT_OUTCOME_COUNT:
+			if float(counts[hit_index]) > 0.0:
+				no_hitter_attempt_valid = false
+				break
 	for index in mini(counts.size(), result_totals.size()):
 		result_totals[index] = minf(MAX_NUMBER, result_totals[index] + float(counts[index]))
 	var reward_opponent := clampi(int(summary.get("resolved_opponent_index", current_opponent)), 0, opponents.size() - 1)
@@ -2462,6 +2495,8 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			return float(eldritch_levels.get(str(key), 0))
 		"cosmos":
 			return 1.0 if cosmos_conquered or divine_ascensions > 0 else 0.0
+		"no_hitter":
+			return 1.0 if cosmos_conquered and no_hitter_attempt_valid else 0.0
 		"divine_ascensions":
 			return float(divine_ascensions)
 		"divine_blessings":
@@ -2491,7 +2526,7 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
 		"training", "genetic_upgrade", "eldritch_upgrade":
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
-		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos":
+		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos", "no_hitter":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
 	return {
 		"current": current,
@@ -3216,15 +3251,19 @@ func perform_divine_ascension(id: String) -> bool:
 	eldritch_ascensions = 0
 	_reset_genetic_levels()
 	_reset_eldritch_levels()
-	genetic_offer_unlocked = false
-	eldritch_offer_unlocked = false
-	alien_exhibition_seconds = 0.0
-	eldritch_exhibition_seconds = 0.0
+	# God resets the universe, not the pitcher's memory of the two mandatory
+	# prestige offers. Repeat campaigns therefore pause at each known exhibition
+	# instead of forcing another minute of scripted Grand Slams.
+	genetic_offer_unlocked = true
+	eldritch_offer_unlocked = true
+	alien_exhibition_seconds = EXHIBITION_SECONDS
+	eldritch_exhibition_seconds = EXHIBITION_SECONDS
 	auto_advance_enabled = false
 	auto_train_enabled = false
 	auto_farm_enabled = false
 	_clear_all_loot_for_reset()
 	_reset_body_progress()
+	no_hitter_attempt_valid = true
 	var reward_name := "Another Halo" if id == "halo" else str(Content.divine_by_id(id).name)
 	progression_changed.emit(
 		"DIVINE GRAND SLAM: God restored the universe and granted %s." % reward_name
@@ -3258,7 +3297,7 @@ func decode_save_text(text: String) -> Dictionary:
 		return {"ok": false, "message": "The selected file is not valid save JSON."}
 	var data: Dictionary = parsed
 	if not data.has("version"):
-		return {"ok": false, "message": "This JSON file is not a One Foot Per Second save."}
+		return {"ok": false, "message": "This JSON file is not a No Hitter save."}
 	var saved_version := int(data.get("version", -1))
 	if saved_version < 1:
 		return {"ok": false, "message": "This save has an invalid version number."}
@@ -3363,6 +3402,7 @@ func to_save_data() -> Dictionary:
 		"alien_exhibition_seconds": alien_exhibition_seconds,
 		"eldritch_exhibition_seconds": eldritch_exhibition_seconds,
 		"cosmos_conquered": cosmos_conquered,
+		"no_hitter_attempt_valid": no_hitter_attempt_valid,
 		"auto_advance_enabled": auto_advance_enabled,
 		"auto_train_enabled": auto_train_enabled,
 		"auto_farm_enabled": auto_farm_enabled,
@@ -3433,6 +3473,14 @@ func apply_save_data(data: Dictionary) -> void:
 	alien_exhibition_seconds = clampf(float(data.get("alien_exhibition_seconds", EXHIBITION_SECONDS if genetic_offer_unlocked else 0.0)), 0.0, EXHIBITION_SECONDS)
 	eldritch_exhibition_seconds = clampf(float(data.get("eldritch_exhibition_seconds", EXHIBITION_SECONDS if eldritch_offer_unlocked else 0.0)), 0.0, EXHIBITION_SECONDS)
 	cosmos_conquered = bool(data.get("cosmos_conquered", false))
+	# v15 and earlier never recorded enough per-universe history to prove a
+	# campaign-wide no-hitter, so their next divine restoration starts the first
+	# eligible attempt without incorrectly granting one during migration.
+	no_hitter_attempt_valid = (
+		bool(data.get("no_hitter_attempt_valid", false))
+		if saved_version >= 16
+		else false
+	)
 	var saved_auto_advance := bool(data.get("auto_advance_enabled", false))
 	var saved_auto_train := bool(data.get("auto_train_enabled", false))
 	var saved_auto_farm := bool(data.get("auto_farm_enabled", false))

@@ -1,11 +1,15 @@
 # Changelog
 
-## 0.11.0 — The trophy case has classified files
+## 0.12.0 — The title is also a threat
 
-- Added exactly 100 permanent achievements across the complete human, genetic, alien, eldritch, and divine campaign. Each completion adds one additive percentage point to all XP income and survives every prestige layer.
+- Renamed the game **No Hitter** across the live interface, install metadata, native packages, browser manifest, documentation, and Sites shell. Existing browser URLs, app identifiers, and the original local-data directory remain stable so installed saves continue working.
+- Added exactly 101 permanent achievements across the complete human, genetic, alien, eldritch, and divine campaign. Each completion adds one additive percentage point to all XP income and survives every prestige layer.
+- Added the fully secret `No Hitter` achievement: after a divine restoration begins a clean attempt, defeat the complete campaign through Octathulhu without allowing any fair hit. Clone- or portal-saved contact still spoils the attempt; known prestige exhibitions pause for their reset instead of forcing scripted hits on repeat universes.
 - Added a dedicated achievement browser with live progress, completed styling, tier totals, a permanent-bonus summary, and queued gold unlock toasts.
-- The browser always shows all 100 achievement slots, but undiscovered subjects are represented only as `HIDDEN ACHIEVEMENT`. Their real name, description, requirement, progress, future tier heading, and tooltip remain anonymous until encountered or completed.
-- Added persistent lifetime counters and peak records for active field taps, saved hits, pitch speed, mound distance, and loot rarity. Save version 15 migrates older runs and silently backfills only achievements their saved history can prove.
+- The browser always shows all 101 achievement slots, but undiscovered subjects are represented only as `HIDDEN ACHIEVEMENT`. Their real name, description, requirement, progress, future tier heading, and tooltip remain anonymous until encountered or completed.
+- Achievement toasts now put the exact completed condition in smaller text beneath the achievement name.
+- Reduced active field-tap power to one third of its former value: 1.7% initially and 2.7% with maximum Field Hustle. Taps explicitly accelerate recovery, immutable flight, and the full next-batter handoff while keeping the authoritative and visible lineup timers synchronized.
+- Added persistent lifetime counters and peak records for active field taps, saved hits, pitch speed, mound distance, and loot rarity. Save version 16 preserves clean-run eligibility, migrates older runs, and silently backfills only achievements their saved history can prove.
 - Added a saved per-tab `HIDE PURCHASED` toggle to Pitch, Ball, and Facility. Each filter hides only completed one-time entries in its own catalog while preserving locked and available options.
 - Extended the full regression and interface matrix to validate catalog size and uniqueness, exact additive XP math, prestige permanence, secret reveal rules, save migration, anonymous desktop/phone cards, touch-sized filters, and unlock toasts.
 - Re-audited no-loot pacing with achievements active: the first human lifetime reaches Xylophax in roughly 37 hours 30 minutes, and the complete deterministic multiverse reaches cosmic victory in roughly 63 days 18 hours.

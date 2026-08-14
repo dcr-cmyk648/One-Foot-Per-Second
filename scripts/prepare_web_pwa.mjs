@@ -14,8 +14,9 @@ await copyFile(join(projectRoot, "assets", "icon-192.png"), join(webBuild, iconN
 const manifestPath = join(webBuild, "index.manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 manifest.id = "./";
-manifest.short_name = "One Foot Per Second";
-manifest.description = "An idle baseball game about pitching from one foot per second to the end of reality.";
+manifest.name = "No Hitter";
+manifest.short_name = "No Hitter";
+manifest.description = "An idle baseball game about allowing no hits from one foot per second to the end of reality.";
 manifest.theme_color = "#050810";
 manifest.icons = (Array.isArray(manifest.icons) ? manifest.icons : [])
   .filter((icon) => icon?.sizes !== "192x192")

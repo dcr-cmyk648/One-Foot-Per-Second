@@ -28,7 +28,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	print("One Foot Per Second — portrait browser-interface audit")
+	print("No Hitter — portrait browser-interface audit")
 	_expect(main.mobile_layout, "Phone layout did not activate")
 	_expect(main.mobile_portrait_layout, "Portrait field orientation did not activate")
 	_expect(is_equal_approx(main._normalize_browser_content_scale(3.0), 3.0), "A 3× phone display must retain its logical content scale")
@@ -41,6 +41,9 @@ func _run() -> void:
 	_expect(not main._mobile_install_offer_for_state(true, false, false, false), "Non-mobile browsers should not receive phone-specific instructions")
 	_expect(main.header_subtitle.visible, "The milestone subtitle should remain visible beneath the title on phone")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ guy", "Phone and desktop should share the same milestone subtitle")
+	_expect(main.achievement_toast_description != null, "Phone achievement toasts should include the completed condition")
+	_expect(main.achievement_toast_description.get_theme_font_size("font_size") < main.achievement_toast_name.get_theme_font_size("font_size"), "Phone achievement conditions should remain visually subordinate to their names")
+	_expect(main.achievement_toast.size.x <= 352.0, "The expanded achievement toast should stay inside a 390-pixel phone")
 	_expect(main._should_use_compact_layout(Vector2(1279.0, 800.0)), "A resized browser just below the wide boundary should use overlay navigation")
 	_expect(main._should_use_compact_layout(Vector2(1366.0, 680.0)), "A resized short browser window should use overlay navigation")
 	_expect(not main._should_use_compact_layout(Vector2(1280.0, 696.0)), "The complete wide interface should fit at its declared boundary")
@@ -115,7 +118,7 @@ func _run() -> void:
 		"The phone upgrade overlay should show the current effective speed"
 	)
 	_expect(main.mobile_upgrade_stat_labels.quality.text == "%.3f" % main.game.get_pitch_quality(), "The phone upgrade overlay should show current quality")
-	_expect(main.mobile_upgrade_stat_labels.tap.text == "5.0%", "The phone upgrade overlay should show the current field-tap advance")
+	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7%", "The phone upgrade overlay should show the reduced current field-tap advance")
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
 		main.mobile_tab_next_button.get_combined_minimum_size().x >= 44.0
@@ -137,10 +140,13 @@ func _run() -> void:
 	main.upgrade_tabs.current_tab = main.achievement_tab.get_index()
 	main._refresh_achievement_tab(true)
 	await process_frame
-	_expect(main.achievement_cards.size() == 100, "The phone achievement browser should expose all 100 slots")
+	_expect(main.achievement_cards.size() == 101, "The phone achievement browser should expose all 101 slots")
 	var phone_hidden_card: Dictionary = main.achievement_cards.genetic_offer
 	_expect((phone_hidden_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Phone hidden achievements should remain anonymous")
 	_expect(not (phone_hidden_card.description as Label).text.contains("Xylophax"), "Phone hidden achievements must not leak future names")
+	var phone_no_hitter_card: Dictionary = main.achievement_cards.no_hitter
+	_expect((phone_no_hitter_card.title as Label).text == "HIDDEN ACHIEVEMENT", "The phone must not reveal the namesake secret achievement")
+	_expect(not (phone_no_hitter_card.description as Label).text.contains("Octathulhu"), "The phone must not leak the namesake secret condition")
 	main.upgrade_tabs.current_tab = 0
 	main._refresh_mobile_tab_navigation()
 	main.mobile_tab_next_button.pressed.emit()

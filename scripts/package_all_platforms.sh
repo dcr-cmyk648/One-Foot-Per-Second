@@ -6,7 +6,7 @@ export LANG=C
 
 OFPS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OFPS_VERSION="$(/usr/bin/sed -n 's/^config\/version="\([^"]*\)"/\1/p' "${OFPS_ROOT}/project.godot")"
-OFPS_TITLE="One Foot Per Second"
+OFPS_TITLE="No Hitter"
 OFPS_RELEASE_ROOT="${OFPS_ROOT}/release"
 OFPS_RELEASE_DIR="${OFPS_RELEASE_ROOT}/${OFPS_TITLE} v${OFPS_VERSION}"
 OFPS_BROWSER_NAME="${OFPS_TITLE} v${OFPS_VERSION} Browser.zip"

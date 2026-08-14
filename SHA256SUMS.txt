@@ -1,8 +1,8 @@
-cfd436dc91e00ffecd80285a9c9cc9d2844efb9186f742bc04080c73baccdca4  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 macOS Universal.dmg
-aa09c7611d8e216d1ec3f7b5238ebbb8d026c4ae77ec1f34f8e890f541235690  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 Windows x86_64.zip
-a75284f63745ebad8c180c3ba5fb1c77d57527fa214c3d8ecd20786d0ec38c14  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 Windows ARM64.zip
-94e85786e7f62e4affb1031a78d9618637105a72e3029267cc1fa2ab6ccb1656  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 Linux x86_64.tar.gz
-b7a27de18d7b76d352f6b3f930b1250224b782a6f3e02213f525b42da2e71e4f  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 Linux ARM64.tar.gz
-be3bb3f7f7845ae471499a262c600b5b69f22b85716ef807ef690ef81eb5912e  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 Source.zip
-21963c78e857ec9c8ebe9f5a36dce1e87249c12d034eaf3705066f21e1f90838  One Foot Per Second v0.11.0/One Foot Per Second v0.11.0 Browser.zip
-02aa79d297d0fa3a7263bfe9a583150b7fff78436c422aa6019c11244991192c  One Foot Per Second v0.11.0 All Platforms.zip
+1c74430293c075976cb02b6903aabf0c0c8dc26da79b2e1ae27c07f9de644ef6  No Hitter v0.12.0/No Hitter v0.12.0 macOS Universal.dmg
+a8afcfa96cfae2e07593b5839eac568205531ddbe1f2f6f9f8c7916ee6337dec  No Hitter v0.12.0/No Hitter v0.12.0 Windows x86_64.zip
+9b9780fb15fd04d245ee4d6a12d9e9967c12936861bd2e33237f37460ed545af  No Hitter v0.12.0/No Hitter v0.12.0 Windows ARM64.zip
+e949d9a4a4c5fd5ef6dfa87817b0cc2d07700e96dbbbfba8d0904c6897cdf8a6  No Hitter v0.12.0/No Hitter v0.12.0 Linux x86_64.tar.gz
+24dafb3da6d3472814f21f48285d92253d922dfd8c1dc0e17b5f2f323538a694  No Hitter v0.12.0/No Hitter v0.12.0 Linux ARM64.tar.gz
+3a97909f693bb0545713f00c23b1e2199435e16a3fcb5af5644b5490a89eeea7  No Hitter v0.12.0/No Hitter v0.12.0 Source.zip
+d2fe80d4df388a7ec8656cabdd2a050078cff9f8037405cd3496bf588eccca19  No Hitter v0.12.0/No Hitter v0.12.0 Browser.zip
+f2db03f8e64c1d698940ae1cf8806ace46a1944dee17fe15732b6fb6b5d6f89c  No Hitter v0.12.0 All Platforms.zip

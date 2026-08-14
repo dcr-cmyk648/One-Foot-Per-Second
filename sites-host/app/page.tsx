@@ -2,13 +2,13 @@ export default function Home() {
   return (
     <main className="game-shell">
       <div className="loading-copy" aria-hidden="true">
-        <strong>ONE FOOT PER SECOND</strong>
-        <span>Warming up the one-foot-per-second fastball…</span>
+        <strong>NO HITTER</strong>
+        <span>Warming up the one-foot-per-second no-hitter…</span>
       </div>
       <iframe
         className="game-frame"
         src="/game/index.html"
-        title="Play One Foot Per Second"
+        title="Play No Hitter"
         allow="autoplay; fullscreen; gamepad; clipboard-read; clipboard-write"
       />
       <noscript>This baseball universe requires JavaScript.</noscript>

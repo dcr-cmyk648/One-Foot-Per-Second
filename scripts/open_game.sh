@@ -2,7 +2,7 @@
 set -euo pipefail
 
 OFPS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OFPS_APP="${OFPS_ROOT}/build/One Foot Per Second.app"
+OFPS_APP="${OFPS_ROOT}/build/No Hitter.app"
 
 if [[ -d "${OFPS_APP}" ]]; then
   exec /usr/bin/open -n "${OFPS_APP}"

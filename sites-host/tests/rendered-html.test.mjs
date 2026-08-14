@@ -21,7 +21,7 @@ test("redirects the site root into the update-controlled game scope", async () =
 });
 
 test("serves the verified Godot page with revalidation headers", async () => {
-  const gameHtml = `<!doctype html><html><head><base href="/game/"><title>One Foot Per Second</title></head><body><canvas id="canvas"></canvas><script src="index.js"></script></body></html>`;
+  const gameHtml = `<!doctype html><html><head><base href="/game/"><title>No Hitter</title></head><body><canvas id="canvas"></canvas><script src="index.js"></script></body></html>`;
   const response = await worker.fetch(
     new Request("http://localhost/game/index.html", { headers: { accept: "text/html" } }),
     {
@@ -37,7 +37,7 @@ test("serves the verified Godot page with revalidation headers", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "public, max-age=0, must-revalidate");
   const html = await response.text();
-  assert.match(html, /<title>One Foot Per Second<\/title>/i);
+  assert.match(html, /<title>No Hitter<\/title>/i);
   assert.match(html, /<base href="\/game\/">/i);
   assert.match(html, /<canvas id="canvas"/i);
   assert.doesNotMatch(html, /iframe|codex-preview|SkeletonPreview|react-loading-skeleton/i);

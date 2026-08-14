@@ -1,4 +1,4 @@
-# One Foot Per Second — v0.11.0 Balance Audit
+# No Hitter — v0.12.0 Balance Audit
 
 ## Outcome
 
@@ -77,13 +77,13 @@ Fouls are not terminal. Lineup Hustle subtracts `0.15 s` per rank from the unive
 
 ## Achievement income
 
-The 100 achievements are deliberately modest individually and additive rather than multiplicative with one another:
+The 101 achievements are deliberately modest individually and additive rather than multiplicative with one another:
 
 ```text
 achievement XP multiplier = 1 + completed achievements × 0.01
 ```
 
-Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 100 produce `×2.00`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; this brings the current first human lifetime to roughly 37 h 30 m and the first cosmic victory to 63 d 18 h without changing any mastery requirement or story gate. A hidden achievement provides no mechanical or narrative clue before its subject is encountered.
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; this brings the current first human lifetime to roughly 37 h 30 m and the first cosmic victory to 63 d 18 h without changing any mastery requirement or story gate. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
 
 ## Complete reset cadence
 
@@ -123,7 +123,7 @@ Ordinary Training has one clear purchase per displayed base stat:
 |---|---:|---|---:|---:|
 | Speed Training | 1 | base speed +0.15 ft/s | ×1.30 | current body |
 | Command Drills | 2 | base quality +0.08 | ×1.105 | none |
-| Field Hustle | 3 | tap advance +0.5 percentage points | ×2.10 | 6 |
+| Field Hustle | 3 | tap advance +0.17 percentage points | ×2.10 | 6 |
 | Recovery Drills | 4 | base recovery +0.035/s | ×1.45 | 26 |
 | Scorebook Study | 5 | offline XP +1 percentage point | ×1.65 | 24 |
 | Long-Toss Mechanics | 6 | distance-threat factor −0.025 | ×1.72 | 20 |
@@ -133,7 +133,7 @@ Ordinary Training has one clear purchase per displayed base stat:
 
 Only Speed begins unlocked; the other axes appear as level-gated entries in this order. The former Command, Spin, and Deception buttons were all additive quality purchases and are folded into Command. Distinct operations intentionally stack across systems: Training raises the additive base, while one-time Facilities multiply the completed stat.
 
-Active field taps begin at 5% of the current foreground timer's starting duration and can reach 8% through Field Hustle. The tap budget is capped at 50% per recovery, flight, or lineup phase. No amount of clicking can replace the other half of the timer, and untouched idle/offline pacing remains unchanged.
+Active field taps begin at 1.7% of the current foreground timer's starting duration and can reach 2.7% through Field Hustle. The tap budget is capped at 50% per recovery, flight, or lineup phase. The next-batter handoff is accelerated in the same way as wind-up and flight, with its authoritative cooldown and visual on-deck meter kept synchronized. No amount of clicking can replace the other half of the timer, and untouched idle/offline pacing remains unchanged.
 
 Fourteen pitch types, twenty-six replacement ball shells, and forty-two one-time facilities/interventions run from level 1 through level 45. Facilities are costly, high-impact multipliers; several are gated by actual measured speed, mound distance, or lifetime Strikeouts in addition to campaign level. Suspicious Vitamins arrive long before Extremely Obvious Steroids, and the human ladder stays recognizably human. Every tab is sorted by unlock level and cost; Pitch, Ball, and Facility each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
@@ -164,7 +164,7 @@ The automated suite explicitly checks that:
 - all eight outcome cards remain compact and expose detail through tooltips;
 - loot obeys its restrained rarity curve, Power sorting, no-auto-equip default, prestige-only auto-equip, item amplification, caps, starred protection, Scrap conversion, resets, inheritance, and save rules;
 - every level-gated catalog is displayed in unlock order, and alternate speed/distance/Strikeout gates conceal effects until met;
-- the achievement catalog contains 100 unique entries, stacks exactly +1% XP apiece, persists through prestige and save/load, and keeps every unencountered entry anonymous;
+- the achievement catalog contains 101 unique entries, stacks exactly +1% XP apiece, persists through prestige and save/load, and keeps every unencountered entry anonymous;
 - each one-time catalog filter is independent, saved, touch-sized on phone, and never hides locked or available purchases;
 - progressive interface layers remain hidden until their story boundary;
 - all 45 levels, costs, deterministic era-name combinations, signature names, traits, prestige boundaries, and migrations remain valid;

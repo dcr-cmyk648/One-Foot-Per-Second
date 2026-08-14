@@ -1,8 +1,8 @@
 {
-  "game": "One Foot Per Second",
-  "version": "0.11.0",
+  "game": "No Hitter",
+  "version": "0.12.0",
   "engine": "Godot 4.7.1",
-  "save_version": 15,
+  "save_version": 16,
   "platforms": [
     {
       "id": "macos-universal",

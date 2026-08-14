@@ -10,7 +10,7 @@ if [[ ! -s "${OFPS_WEB_DIR}/index.html" ]]; then
   exit 1
 fi
 
-echo "Serving One Foot Per Second at http://127.0.0.1:${OFPS_WEB_PORT}/"
+echo "Serving No Hitter at http://127.0.0.1:${OFPS_WEB_PORT}/"
 exec /usr/bin/python3 -m http.server "${OFPS_WEB_PORT}" \
   --bind 127.0.0.1 \
   --directory "${OFPS_WEB_DIR}"
