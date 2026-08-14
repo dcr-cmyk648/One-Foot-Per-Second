@@ -65,6 +65,14 @@ const LOOT_SCRAP_RARITY_MULTIPLIERS := [1.0, 3.0, 8.0, 20.0, 50.0]
 const OVERMASTERY_XP_PER_DOUBLING := 0.0125
 const OVERMASTERY_LOOT_LUCK_PER_DOUBLING := 0.05
 const MASTERY_REQUIREMENT_FACTOR_PER_RANK := 0.85
+# Every point of opponent mastery makes that exact matchup a little easier.
+# The logarithm deliberately has no hard ceiling: doubling an already enormous
+# mastery total always helps, but by the same modest +quality step.
+const MASTERY_MATCHUP_QUALITY_PER_DOUBLING := 0.12
+# A dry spell supplies a second, temporary adaptation bonus. The first fifteen
+# seconds are noticeable; each additional +0.08 quality takes twice as long.
+const FRUSTRATION_INTERVAL_SECONDS := 15.0
+const FRUSTRATION_QUALITY_PER_DOUBLING := 0.08
 const EQUIPMENT_EFFECT_FACTOR_PER_RANK := 1.20
 const EQUIPMENT_CAPS := {
 	"speed_bonus": 0.15,
@@ -171,6 +179,7 @@ var opponent_mastery: Array[float] = []
 var result_totals: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var lifetime_strikeouts := 0.0
 var current_body_strikeouts := 0.0
+var seconds_since_strikeout := 0.0
 var plate_strikes := 0
 var plate_balls := 0
 var batter_cooldown_remaining := 0.0
@@ -525,6 +534,7 @@ func reset_fresh() -> void:
 	result_totals = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	lifetime_strikeouts = 0.0
 	current_body_strikeouts = 0.0
+	seconds_since_strikeout = 0.0
 	plate_strikes = 0
 	plate_balls = 0
 	batter_cooldown_remaining = 0.0
@@ -788,6 +798,7 @@ func _empty_resolution_summary() -> Dictionary:
 		"raw_earned_xp": 0.0,
 		"earned_xp": 0.0,
 		"base_score": 0.0,
+		"mastery_gained": 0.0,
 		"visual_outcome": Content.STRIKE_INDEX,
 		"visual_strikeout": false,
 		"visual_saved": false,
@@ -1166,9 +1177,22 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 	var reward_opponent := clampi(int(summary.get("resolved_opponent_index", current_opponent)), 0, opponents.size() - 1)
 	var reward_distance := int(summary.get("resolved_distance_index", selected_distance_index))
 	var base_score := minf(strikeouts * get_strikeout_base_points(reward_opponent), MAX_NUMBER)
+	var called_strikes := maxf(float(counts[Content.STRIKE_INDEX]), 0.0)
+	# A normal completed count is worth the same mastery it was before, but its
+	# value now arrives one called Strike at a time. Reduced post-human counts
+	# preserve the old per-strikeout progression benefit of count compression.
+	var mastery_per_strike := (
+		get_strikeout_base_points(reward_opponent)
+		/ float(maxi(get_strikes_required(reward_opponent), 1))
+	)
+	var mastery_gained := minf(
+		called_strikes * mastery_per_strike * get_mastery_multiplier(),
+		MAX_NUMBER
+	)
 	var raw_earned_xp := minf(base_score * get_xp_multiplier(reward_opponent, reward_distance), MAX_NUMBER)
 	var earned_xp := minf(raw_earned_xp * maxf(xp_reward_multiplier, 0.0), MAX_NUMBER)
 	summary.base_score = base_score
+	summary.mastery_gained = mastery_gained
 	summary.raw_earned_xp = raw_earned_xp
 	summary.earned_xp = earned_xp
 	xp = minf(MAX_NUMBER, xp + earned_xp)
@@ -1184,8 +1208,15 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 	_resolve_strikeout_loot(strikeouts, float(summary.elapsed_seconds), summary)
 	opponent_mastery[reward_opponent] = minf(
 		MAX_NUMBER,
-		opponent_mastery[reward_opponent] + base_score * get_mastery_multiplier()
+		opponent_mastery[reward_opponent] + mastery_gained
 	)
+	if strikeouts > 0.0:
+		seconds_since_strikeout = 0.0
+	else:
+		seconds_since_strikeout = minf(
+			MAX_NUMBER,
+			seconds_since_strikeout + maxf(float(summary.get("elapsed_seconds", 0.0)), 0.0)
+		)
 	summary.unlocked_message = _check_opponent_unlock()
 	check_achievements()
 	last_batch = summary
@@ -1884,6 +1915,8 @@ func get_outcome_probabilities_for_pitch(
 		return [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	var margin := (
 		get_pitch_quality_for_pitch(pitch_id, pitch_speed_fps)
+		+ get_opponent_mastery_quality_bonus(opponent_index)
+		+ get_frustration_quality_bonus()
 		- get_effective_opponent_difficulty(opponent_index, distance_index)
 	)
 	var spread := 0.85
@@ -1956,6 +1989,25 @@ func get_strikeout_base_points(opponent_index: int = current_opponent) -> float:
 		* STRIKEOUT_POINTS_PER_REQUIRED_STRIKE
 	)
 	return minf(full_count_bounty, OPENING_STRIKEOUT_BASE_POINTS + float(bounded))
+
+func get_opponent_mastery_quality_bonus(opponent_index: int = current_opponent) -> float:
+	if opponent_mastery.is_empty():
+		return 0.0
+	var bounded := clampi(opponent_index, 0, opponent_mastery.size() - 1)
+	var requirement := maxf(get_mastery_requirement(bounded), 0.000001)
+	var ratio := maxf(opponent_mastery[bounded] / requirement, 0.0)
+	return MASTERY_MATCHUP_QUALITY_PER_DOUBLING * log(1.0 + ratio) / log(2.0)
+
+func get_frustration_quality_bonus() -> float:
+	var intervals := maxf(seconds_since_strikeout, 0.0) / FRUSTRATION_INTERVAL_SECONDS
+	return FRUSTRATION_QUALITY_PER_DOUBLING * log(1.0 + intervals) / log(2.0)
+
+func get_frustration_meter_ratio() -> float:
+	# A monotonic visual meter for an uncapped logarithmic bonus: it fills half
+	# way during the first interval, then approaches full without falsely
+	# implying that the underlying bonus has reached a cap.
+	var intervals := maxf(seconds_since_strikeout, 0.0) / FRUSTRATION_INTERVAL_SECONDS
+	return intervals / (1.0 + intervals)
 
 func get_hit_save_chance(outcome: int, _opponent_index: int = current_opponent) -> float:
 	if outcome < 0 or outcome >= Content.HIT_OUTCOME_COUNT or outcome == Content.GRAND_SLAM_INDEX:
@@ -3168,6 +3220,7 @@ func _reset_body_progress() -> void:
 	batter_cooldown_remaining = 0.0
 	_reset_batter_identity()
 	current_body_strikeouts = 0.0
+	seconds_since_strikeout = 0.0
 	current_body_loot_found = 0.0
 	loot_dry_streak = 0
 	loot_roll_cooldown_remaining = 0.0
@@ -3359,6 +3412,7 @@ func to_save_data() -> Dictionary:
 		"lifetime_max_loot_rarity": lifetime_max_loot_rarity,
 		"lifetime_strikeouts": lifetime_strikeouts,
 		"current_body_strikeouts": current_body_strikeouts,
+		"seconds_since_strikeout": seconds_since_strikeout,
 		"lifetime_loot_found": lifetime_loot_found,
 		"current_body_loot_found": current_body_loot_found,
 		"loot_overflow_discarded": loot_overflow_discarded,
@@ -3434,6 +3488,7 @@ func apply_save_data(data: Dictionary) -> void:
 	lifetime_max_loot_rarity = clampi(int(data.get("lifetime_max_loot_rarity", -1)), -1, Content.LOOT_RARITIES.size() - 1)
 	lifetime_strikeouts = clampf(float(data.get("lifetime_strikeouts", 0.0)), 0.0, MAX_NUMBER)
 	current_body_strikeouts = clampf(float(data.get("current_body_strikeouts", 0.0)), 0.0, MAX_NUMBER)
+	seconds_since_strikeout = clampf(float(data.get("seconds_since_strikeout", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_loot_found = clampf(float(data.get("lifetime_loot_found", 0.0)), 0.0, MAX_NUMBER)
 	current_body_loot_found = clampf(float(data.get("current_body_loot_found", 0.0)), 0.0, MAX_NUMBER)
 	loot_overflow_discarded = clampf(float(data.get("loot_overflow_discarded", 0.0)), 0.0, MAX_NUMBER)

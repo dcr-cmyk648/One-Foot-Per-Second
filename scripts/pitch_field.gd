@@ -1289,6 +1289,15 @@ func _get_batter_transition_visual() -> Dictionary:
 		)
 		visual.rotation = -0.14 * (1.0 - progress)
 		visual.scale = 0.72 + progress * 0.28
+	# The transition vectors above are authored in the desktop field basis. Rotate
+	# them with the lane on portrait screens: desktop right becomes phone up and
+	# desktop down becomes phone right. This keeps exits and entrances on their
+	# baseball sides instead of mirroring them after the phone layout rotates.
+	if portrait_layout:
+		visual.offset = (
+			_get_pitch_direction() * float(Vector2(visual.offset).x)
+			+ _get_lateral_direction() * float(Vector2(visual.offset).y)
+		)
 	return visual
 
 func _create_return_ball(

@@ -167,6 +167,17 @@ func _test_content() -> void:
 	_expect(generated_names.size() >= 900, "Composable naming should provide broad variation across a long farm session")
 	_expect(saw_mononym and saw_two_part and saw_three_part, "The generator should mix single, two-part, and longer names")
 	_expect(saw_initial and saw_nickname and saw_epithet, "The generator should mix initials, nicknames, and titled names")
+	var ornate_preschool_names := 0
+	for generation in 512:
+		var preschool_name := Content.batter_display_name(2, generation + 1)
+		_expect(not preschool_name.contains("The The ") and not preschool_name.begins_with("The Who "), "Generated titles must not duplicate articles")
+		if preschool_name.contains(", ") or preschool_name.contains(" of ") or preschool_name.begins_with("The "):
+			ornate_preschool_names += 1
+	_expect(ornate_preschool_names <= 64, "Ordinary human replacements should overwhelmingly resemble scorecard names")
+	for opponent_index in opponents.size():
+		for generation in range(1, 65):
+			var candidate_name := Content.batter_display_name(opponent_index, generation)
+			_expect(not candidate_name.contains("The The ") and not candidate_name.begins_with("The Who "), "Every era should use grammatical standalone titles")
 	var unique_bats := {}
 	for bat_name in Content.BAT_NAMES:
 		unique_bats[str(bat_name)] = true
@@ -603,6 +614,31 @@ func _test_opponent_variants() -> void:
 	game.free()
 
 func _test_strikeout_only_economy() -> void:
+	var adaptation_game: BaseballGameState = GameStateScript.new()
+	var opening_strike_rate := float(adaptation_game.get_outcome_probabilities()[Content.STRIKE_INDEX])
+	var opening_mastery_per_strike := (
+		adaptation_game.get_strikeout_base_points()
+		/ float(adaptation_game.get_strikes_required())
+	)
+	var first_strike_summary := adaptation_game._empty_resolution_summary()
+	first_strike_summary.elapsed_seconds = BaseballGameState.FRUSTRATION_INTERVAL_SECONDS
+	adaptation_game._apply_pitch_outcome(first_strike_summary, Content.STRIKE_INDEX)
+	adaptation_game._apply_resolution(first_strike_summary, false)
+	_expect_close(adaptation_game.xp, 0.0, "A called Strike that does not complete the count must still pay no XP")
+	_expect_close(float(first_strike_summary.mastery_gained), opening_mastery_per_strike, "Every called Strike should immediately award one count-share of mastery")
+	_expect_close(adaptation_game.opponent_mastery[0], opening_mastery_per_strike, "Partial-count mastery should be banked against the active batter")
+	_expect_close(adaptation_game.get_frustration_quality_bonus(), BaseballGameState.FRUSTRATION_QUALITY_PER_DOUBLING, "The first frustration interval should grant one logarithmic quality step")
+	_expect_close(adaptation_game.get_frustration_meter_ratio(), 0.5, "The uncapped frustration meter should reach half fill after its first interval")
+	_expect(float(adaptation_game.get_outcome_probabilities()[Content.STRIKE_INDEX]) > opening_strike_rate, "Mastery and frustration should immediately improve the called-Strike rate")
+	var second_strike_summary := adaptation_game._empty_resolution_summary()
+	adaptation_game._apply_pitch_outcome(second_strike_summary, Content.STRIKE_INDEX)
+	adaptation_game._apply_resolution(second_strike_summary, false)
+	var terminal_strike_summary := adaptation_game._empty_resolution_summary()
+	adaptation_game._apply_pitch_outcome(terminal_strike_summary, Content.STRIKE_INDEX)
+	adaptation_game._apply_resolution(terminal_strike_summary, false)
+	_expect_close(adaptation_game.opponent_mastery[0], adaptation_game.get_strikeout_base_points(), "Three ordinary called Strikes should retain the former one-strikeout mastery value")
+	_expect_close(adaptation_game.seconds_since_strikeout, 0.0, "Completing a strikeout should reset frustration")
+
 	var game: BaseballGameState = GameStateScript.new()
 	var strike_summary := game._empty_resolution_summary()
 	game._apply_pitch_outcome(strike_summary, Content.STRIKE_INDEX)
@@ -628,6 +664,7 @@ func _test_strikeout_only_economy() -> void:
 	_expect(hit_game.plate_strikes == 0, "An unprotected single should erase the count")
 	_expect_close(hit_game.batter_cooldown_remaining, 4.0, "A single should create the three-second base change plus one extra second")
 	_expect_close(hit_game.xp, 0.0, "A hit must never award XP")
+	_expect_close(hit_game.opponent_mastery[0], 0.0, "Fair contact should not award called-Strike mastery")
 
 	var count_game: BaseballGameState = GameStateScript.new()
 	count_game.plate_strikes = 1
@@ -695,6 +732,7 @@ func _test_strikeout_only_economy() -> void:
 	_expect(stalled_live_game.is_pitch_in_flight(), "The stalled-frame ball should remain the only authoritative live projectile")
 
 	game.free()
+	adaptation_game.free()
 	hit_game.free()
 	count_game.free()
 	protected_game.free()
@@ -1431,6 +1469,7 @@ func _test_save_round_trip_and_migration() -> void:
 	original.eldritch_levels.portal_outfield = 3
 	original.lifetime_strikeouts = 2468.0
 	original.current_body_strikeouts = 135.0
+	original.seconds_since_strikeout = 47.5
 	original.plate_strikes = 3
 	original.plate_balls = 2
 	original.batter_cooldown_remaining = 0.8
@@ -1448,6 +1487,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(restored.get_strikes_per_batter() == 4, "Genetic count compression should survive saves")
 	_expect(int(restored.genetic_levels.prehensile_outfield) == 2 and int(restored.eldritch_levels.portal_outfield) == 3, "Hit-protection upgrades should survive saves")
 	_expect_close(restored.lifetime_strikeouts, 2468.0, "Strikeout totals should survive saves")
+	_expect_close(restored.seconds_since_strikeout, 47.5, "The active frustration dry spell should survive saves")
 	_expect(restored.plate_strikes == 3 and restored.plate_balls == 2 and restored.batter_cooldown_remaining > 0.0, "The complete live count should survive saves")
 	_expect_close(restored.get_clone_count(), 4.0, "Eldritch clones should survive saves")
 	_expect(restored.has_divine_blessing("let_there_be_fastballs") and restored.divine_halos == 1, "Divine rewards should survive saves")

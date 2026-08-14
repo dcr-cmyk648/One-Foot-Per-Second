@@ -172,7 +172,8 @@ const STAT_HELP := {
 	"offline": "Offline efficiency is the share of normal strikeout XP deposited while the game is closed or suspended.",
 	"tap": "Tapping the open field advances the active pitch, flight, or lineup timer. Taps may supply at most half of one timer; the rest must pass normally.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
-	"mastery": "Mastery fills opponent unlock bars and continues logarithmically after a batter is mastered.",
+	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
+	"frustration": "Time since the last strikeout. Its uncapped logarithmic quality bonus helps break dry spells and resets when a strikeout is completed.",
 }
 
 const LOOT_PREFIXES := [
@@ -501,8 +502,8 @@ const BATTER_NAME_POOLS := [
 const BATTER_NAME_COMPONENTS := [
 	{
 		"given": ["Timmy", "Nora", "Kevin", "Maddie", "Sam", "Sophie", "Ben", "Claire"],
-		"middle": ["Snack", "Crayon", "Juice", "Nap", "Biscuit", "Pajama", "Wiggle", "Bubbles"],
-		"family": ["McGee", "Crumb", "Juicebox", "Wobble", "Sprinkles", "Two-Socks", "Puddles", "Dinosaur"],
+		"middle": ["Bea", "James", "Mae", "Lee", "Jo", "Ray", "Lou", "Kai"],
+		"family": ["McGee", "Crumb", "Wobble", "Parker", "Brooks", "Rivera", "Patel", "Dinosaur"],
 		"nickname": ["No-Nap", "Sticky Hands", "Tiny", "Big Kid", "Snacktime", "Uh-Oh", "Fast Shoes", "Again!"],
 		"epithet": ["Breaker of Bedtime", "Keeper of the Juice Box", "Terror of the Sandbox", "Who Refuses Naps", "Champion of Sharing", "Bearer of the Blue Crayon", "Lord of the Playroom", "The Very Four-Year-Old"],
 		"mononym": ["Binky", "Sprout", "Scooter", "Muffin", "Pickles", "Button", "Noodle", "Tater"],
@@ -511,8 +512,8 @@ const BATTER_NAME_COMPONENTS := [
 	},
 	{
 		"given": ["Brayden", "Kayleigh", "Jaxxon", "Trevor", "Riley", "Easton", "Harper", "Gabe"],
-		"middle": ["Elite", "Travel", "Launch", "Tournament", "Composite", "All-Star", "Select", "Weekend"],
-		"family": ["Batson", "Cleats", "Moonshot", "Dugout", "Rally", "Fencewell", "Gloveson", "Coachman"],
+		"middle": ["James", "Marie", "Lee", "Kai", "Cole", "June", "Jay", "Rae"],
+		"family": ["Batson", "Moonshot", "Dugout", "Rally", "Martinez", "Kim", "Johnson", "Coachman"],
 		"nickname": ["Two Xs", "Tournament", "Helmet Hair", "The Ringer", "Bat Flip", "Early Practice", "Matching Socks", "Pool Play"],
 		"epithet": ["Crown of Little League", "Tyrant of Pool Play", "Destroyer of Orange Slices", "First of the Select Team", "Who Never Misses Practice", "Bearer of the Composite Bat", "Scourge of Saturday Mornings", "Champion of the Snack Stand"],
 		"mononym": ["Sluggo", "Rally", "Dinger", "Rocket", "Webgem", "Shortstop", "Acekid", "Moonshot"],
@@ -521,8 +522,8 @@ const BATTER_NAME_COMPONENTS := [
 	},
 	{
 		"given": ["Seth", "Lola", "Gavin", "Vanessa", "Derek", "Casey", "Holly", "Stella"],
-		"middle": ["Varsity", "Detention", "Honor-Roll", "Aluminum", "Cafeteria", "Pep-Rally", "Study-Hall", "Late-Bus"],
-		"family": ["Lineup", "Lockermore", "Pepper", "Blacktop", "Bellringer", "Hallpass", "Scorebook", "Backstop"],
+		"middle": ["Anne", "Michael", "Grace", "Jordan", "Taylor", "Morgan", "Quinn", "Reese"],
+		"family": ["Lineup", "Lockermore", "Pepper", "Nguyen", "Bellringer", "Hall", "Morales", "Backstop"],
 		"nickname": ["JV", "Pop Quiz", "The Senior", "Extra Credit", "Lunch Period", "No Homework", "Bus Ride", "Coach's Nephew"],
 		"epithet": ["Sovereign of Varsity", "Dread of the Faculty Lot", "Keeper of the Hall Pass", "Who Bats After Detention", "Champion of Third Period", "Breaker of Aluminum", "First Name on the Lineup Card", "The Unbenched"],
 		"mononym": ["Yearbook", "Hallpass", "Prom", "Pepper", "Crammer", "Letterman", "Backstop", "Homeroom"],
@@ -531,8 +532,8 @@ const BATTER_NAME_COMPONENTS := [
 	},
 	{
 		"given": ["Randy", "Tina", "Neil", "Stan", "Wanda", "Sheldon", "Cami", "Miranda"],
-		"middle": ["Redshirt", "Portal", "Scholarship", "Statistics", "Midterm", "NIL", "Walk-On", "Fifth-Year"],
-		"family": ["Slugworth", "Woodbat", "Campus", "Transfer", "Seminar", "Bursar", "Syllabus", "Alumni"],
+		"middle": ["Alan", "Elise", "Thomas", "June", "Renee", "Victor", "Dale", "Simone"],
+		"family": ["Slugworth", "Wood", "Campbell", "Turner", "Santiago", "Bauer", "Ellis", "Alumni"],
 		"nickname": ["The Undeclared", "Office Hours", "Meal Plan", "Extra Semester", "Transfer Portal", "Lab Partner", "Tenured", "The Walk-On"],
 		"epithet": ["Eater of Aluminum", "Lord of the Transfer Portal", "Bearer of the NIL Deal", "Who Majors in Exit Velocity", "Champion of the College World", "The Permanently Eligible", "Destroyer of Office Hours", "First of the Redshirts"],
 		"mononym": ["Syllabus", "Redshirt", "Bursar", "Seminar", "Woodbat", "Campus", "Tenure", "Portal"],
@@ -541,8 +542,8 @@ const BATTER_NAME_COMPONENTS := [
 	},
 	{
 		"given": ["Bobby", "Penny", "Dave", "Pete", "Miguel", "Carla", "Oscar", "Olivia"],
-		"middle": ["Per-Diem", "Call-Up", "Option-Year", "Rehab", "Roster", "Bus-League", "Prospect", "Clubhouse"],
-		"family": ["Motel", "Callahan", "Transactions", "Coffee", "Waiver", "Doubleheader", "Farmhand", "Futures"],
+		"middle": ["Ray", "Louise", "Anthony", "Dean", "Luis", "Marie", "Evan", "Rose"],
+		"family": ["Motel", "Callahan", "Torres", "Coffey", "Waiver", "Bennett", "Farmhand", "Futures"],
 		"nickname": ["Player To Be Named", "The Call-Up", "Forty-Man", "Cash Considerations", "Long Bus", "Rehab Start", "Options Left", "Organizational Depth"],
 		"epithet": ["Awaiting Judgment", "Rider of the Fourteen-Hour Bus", "Keeper of the Meal Money", "Who Survived Double-A", "Last of the Options", "The Per-Diem Crowned", "Lord of Future Considerations", "Summoned to the Show"],
 		"mononym": ["Callup", "Waivers", "Perdiem", "Prospect", "Rehab", "Options", "Clubhouse", "Futures"],
@@ -551,8 +552,8 @@ const BATTER_NAME_COMPONENTS := [
 	},
 	{
 		"given": ["Connor", "Alice", "Walter", "Larry", "Evelyn", "Arnie", "Freddie", "Emma"],
-		"middle": ["Contract-Year", "Arbitration", "Launch-Angle", "Exit-Velo", "October", "Franchise", "No-Trade", "Endorsement"],
-		"family": ["Winslow", "Statcast", "Luxurytax", "Pennant", "Walkoff", "Dugout", "Clubhouse", "Cooperstown"],
+		"middle": ["James", "Rose", "Henry", "Paul", "Louise", "Martin", "George", "Jane"],
+		"family": ["Winslow", "Stanton", "Lux", "Pennant", "Walker", "Duggan", "Clubb", "Cooper"],
 		"nickname": ["WARlord", "Mr. October-ish", "The Franchise", "No-Trade", "Exit Velo", "Press Conference", "Walk-Off", "Club Option"],
 		"epithet": ["Last of the Mortals", "Lord of Launch Angle", "Arbiter of Arbitration", "Bearer of the No-Trade Clause", "King Beneath the Luxury Tax", "Who Walks Off October", "The Five-Tool Crowned", "First Ballot of the Old Order"],
 		"mononym": ["Walkoff", "Statcast", "October", "Franchise", "Cooperstown", "Pennant", "WARlord", "Slugger"],
@@ -589,6 +590,21 @@ const BATTER_NAME_COMPONENTS := [
 		"title": ["Elder", "Void", "Aeon", "Ninefold", "Last", "Unfixed", "Moonless", "Causal"],
 		"origin": ["the Outer Dark", "the Last Aeon", "Between Seconds", "Nine Dead Moons", "the Unplayed Inning", "Beyond the Scorebook"],
 	},
+]
+
+# Humans usually get human-looking scorecard names. The name generator only
+# leans hard into titles, origins, and mononyms after baseball leaves biology
+# behind; signature bosses remain deliberately ornate at generation zero.
+const BATTER_NAME_STYLE_TABLES := [
+	[0, 3, 3, 4, 5, 6, 3, 11, 12, 3, 4, 5, 6, 3, 10, 7],
+	[0, 3, 4, 5, 6, 3, 11, 12, 3, 4, 5, 6, 10, 3, 7, 1],
+	[0, 3, 4, 5, 6, 3, 11, 12, 3, 4, 5, 10, 7, 3, 8, 1],
+	[0, 3, 4, 5, 6, 7, 3, 5, 10, 11, 12, 2, 4, 7, 8, 14],
+	[0, 3, 4, 5, 6, 7, 3, 5, 10, 11, 12, 3, 7, 8, 14, 2],
+	[0, 3, 4, 5, 6, 7, 8, 3, 10, 11, 12, 7, 8, 14, 2, 15],
+	[0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 2, 7, 8, 15],
+	[0, 3, 4, 6, 7, 8, 9, 10, 11, 14, 15, 2, 7, 8, 9, 15],
+	[0, 2, 7, 8, 9, 14, 15, 2, 7, 8, 9, 14, 15, 9, 2, 15],
 ]
 
 # The first member of important classes gets a deliberately authored title;
@@ -1864,7 +1880,10 @@ static func opponents() -> Array[Dictionary]:
 			distance = 120.0
 		elif era_index == 8:
 			distance = 300.0
-		var mastery_required := 25.0 * pow(1.34, index)
+		# Per-Strike mastery and adaptive matchup odds smooth out unlucky openings.
+		# A modest twelve-percent requirement increase keeps the broad campaign pace
+		# near the original strikeout-only curve without erasing that improvement.
+		var mastery_required := 28.0 * pow(1.34, index)
 		result.append({
 			"id": "opponent_%02d" % (index + 1),
 			"name": OPPONENT_NAMES[index],
@@ -1906,7 +1925,8 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 	var bounded_generation := maxi(generation, 0)
 	var bounded_opponent := maxi(opponent_index, 0)
 	var seed := bounded_generation * 104729 + bounded_opponent * 15485863 + era_index * 32452843
-	var style := posmod(seed, 16)
+	var style_table: Array = BATTER_NAME_STYLE_TABLES[era_index]
+	var style := int(style_table[posmod(seed, style_table.size())])
 	var first := _batter_name_component(parts, "given", seed, 1)
 	var middle := _batter_name_component(parts, "middle", seed, 2)
 	var family := _batter_name_component(parts, "family", seed, 3)
@@ -1931,11 +1951,11 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 		6:
 			return "%s \"%s\" %s" % [first, nickname, family]
 		7:
-			return "%s %s, %s" % [first, family, epithet]
+			return "%s %s, %s" % [first, family, _batter_epithet_after_comma(epithet)]
 		8:
 			return "%s %s %s" % [title, first, family]
 		9:
-			return "The %s" % epithet
+			return _batter_epithet_as_standalone_title(epithet)
 		10:
 			return "%s %s" % [nickname, family]
 		11:
@@ -1947,7 +1967,19 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 		14:
 			return "%s of %s" % [first, origin]
 		_:
-			return "%s %s, %s" % [title, mononym, epithet]
+			return "%s %s, %s" % [title, mononym, _batter_epithet_after_comma(epithet)]
+
+static func _batter_epithet_after_comma(epithet: String) -> String:
+	if epithet.begins_with("The "):
+		return "the %s" % epithet.trim_prefix("The ")
+	return epithet
+
+static func _batter_epithet_as_standalone_title(epithet: String) -> String:
+	if epithet.begins_with("The "):
+		return epithet
+	if epithet.begins_with("Who "):
+		return "The One %s" % epithet
+	return "The %s" % epithet
 
 static func _batter_name_component(parts: Dictionary, key: String, seed: int, salt: int) -> String:
 	var pool: Array = parts.get(key, [])

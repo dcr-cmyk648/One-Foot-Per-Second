@@ -84,8 +84,8 @@ func _run() -> void:
 	_expect(not (main.achievement_section_headings.genetic as Label).visible, "A hidden achievement group must not leak its tier heading")
 	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Every one-time purchase catalog should have its own Hide Purchased toggle")
 	main._toggle_catalog_hide_purchased(true, "pitch")
-	_expect(not (main.pitch_buttons.dead_fish as Button).visible, "Hide Purchased should remove learned pitches from only their catalog")
-	_expect((main.pitch_buttons.knuckleball as Button).visible, "Hide Purchased should retain locked and available pitch entries")
+	_expect(not (main.pitch_buttons.dead_fish.container as Control).visible, "Hide Purchased should remove learned pitches from only their catalog")
+	_expect((main.pitch_buttons.knuckleball.container as Control).visible, "Hide Purchased should retain locked and available pitch entries")
 	main._toggle_catalog_hide_purchased(false, "pitch")
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
@@ -149,11 +149,17 @@ func _run() -> void:
 			_expect(outcome_heading.get_child_count() == 2, "Outcome names and lineup-delay bonuses should share one compact row")
 			_expect(str((outcome_heading.get_child(1) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus beside its name")
 			_expect(not outcome_panel.tooltip_text.is_empty(), "Detailed outcome rules should live in hover text")
+	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("cannot be saved"), "The Grand Slam tooltip should explicitly distinguish its absolute terminal rule from a Home Run")
+	_expect(main.outcome_panels[1].tooltip_text.contains("unless saved"), "The Home Run tooltip should retain ordinary hit-save behavior")
 	_expect(not main.strikeout_payout_label.text.begins_with("0 XP"), "The separate strikeout payout should not repeat zero-XP clutter")
 	_expect(main.strikeout_payout_label.text.begins_with("COMPLETED STRIKEOUT:"), "Strikeout XP should appear in one small separate readout")
+	_expect(main.frustration_status.get_parent() == main.outcome_footer, "Frustration and strikeout payout should share the compact outcome footer")
+	_expect(main.frustration_label.text.begins_with("FRUSTRATION +"), "The field should expose the current dry-spell quality bonus")
 	_expect(main.hard_reset_button != null and main.hard_reset_button.text == "RESET PROGRESS", "A visible progress-reset control should exist")
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
 	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
+	_expect(main.browser_save_slot_entries.size() == 3, "The shared interface should build three phone manual-save slots")
+	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE ANYWAY", "Browser updates should require an explicit backup-aware confirmation")
 	_expect(not main.import_save_confirmation.visible, "The load-save replacement confirmation should begin closed")
 	_expect(not main.offline_progress_dialog.visible, "The offline-XP return popup should begin closed")
 	main._show_offline_progress({
@@ -188,9 +194,13 @@ func _run() -> void:
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "Closing reset confirmation should relock it")
 	main.development_session = true
 	_audit_catalog_visibility(main, 0, "fresh")
-	_expect(not str(main.training_buttons.velocity.text).contains("REACH LEVEL"), "Speed Training should be the only fundamental available from the opening level")
+	_expect(not str(main.training_buttons.velocity.label.text).contains("REACH LEVEL"), "Speed Training should be the only fundamental available from the opening level")
 	for training_id in ["command", "field_hustle", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"]:
-		_expect(str(main.training_buttons[training_id].text).contains("REACH LEVEL"), "%s should begin level-gated" % training_id)
+		_expect(str(main.training_buttons[training_id].label.text).contains("REACH LEVEL"), "%s should begin level-gated" % training_id)
+	var opening_training: Dictionary = main.training_buttons.velocity
+	_expect(opening_training.container is PanelContainer and not (opening_training.container is BaseButton), "Upgrade descriptions should live in passive scrollable cards")
+	_expect((opening_training.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Dragging an upgrade description should reach the ScrollContainer")
+	_expect((opening_training.button as Button).text == "BUY" and (opening_training.button as Button).custom_minimum_size.y >= 44.0, "Each purchasable upgrade needs a separate touch-sized BUY control")
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({
 		"id": "ui_rare_hat",
@@ -348,17 +358,20 @@ func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 	for collection in collections:
 		for definition in collection.definitions:
 			var id := str(definition.id)
-			var button: Button = collection.buttons[id]
+			var entry: Dictionary = collection.buttons[id]
+			var container := entry.container as Control
+			var button := entry.button as Button
+			var label := entry.label as Label
 			var tier := 0 if int(definition.required_level) <= Content.HUMAN_FINAL_INDEX else (1 if int(definition.required_level) <= Content.ALIEN_FINAL_INDEX else 2)
 			var owned: bool = id in collection.owned
 			var should_show: bool = owned or tier <= visible_tier
-			_expect(button.visible == should_show, "%s catalog visibility is wrong for %s" % [stage, definition.name])
+			_expect(container.visible == should_show, "%s catalog visibility is wrong for %s" % [stage, definition.name])
 			if not should_show or owned or main.game.highest_unlocked >= int(definition.required_level):
 				continue
 			_expect(button.disabled, "%s should lock %s until its level requirement" % [stage, definition.name])
-			_expect(button.text.begins_with("%s\n" % definition.name), "%s locked entry should show only its name and requirements" % stage)
+			_expect(label.text.begins_with("%s\n" % definition.name), "%s locked entry should show only its name and requirements" % stage)
 			_expect(button.tooltip_text.contains("REACH LEVEL %d" % (int(definition.required_level) + 1)), "%s locked tooltip should include its level requirement" % stage)
-			_expect(not button.text.contains(str(definition.description)), "%s locked entry leaks its effect" % stage)
+			_expect(not label.text.contains(str(definition.description)), "%s locked entry leaks its effect" % stage)
 			_expect(not button.tooltip_text.contains(str(definition.description)), "%s locked tooltip leaks its effect" % stage)
 
 func _audit_upgrade_order(main) -> void:
@@ -371,9 +384,10 @@ func _audit_upgrade_order(main) -> void:
 	for collection in collections:
 		var previous_index := -1
 		for definition in main._definitions_by_unlock(collection.definitions):
-			var button: Button = collection.buttons[str(definition.id)]
-			_expect(button.get_index() > previous_index, "%s is not displayed in unlock-level order" % definition.name)
-			previous_index = button.get_index()
+			var entry: Dictionary = collection.buttons[str(definition.id)]
+			var container := entry.container as Control
+			_expect(container.get_index() > previous_index, "%s is not displayed in unlock-level order" % definition.name)
+			previous_index = container.get_index()
 
 func _audit_tab_geometry(main, stage: String) -> void:
 	var expected_size: Vector2 = main.upgrade_tabs.size

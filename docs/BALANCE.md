@@ -6,17 +6,17 @@ The complete campaign is long but finite, every prestige layer changes the strat
 
 | Milestone | Approximate active-production time |
 |---|---:|
-| Human baseball cleared | 37 h 30 m |
-| Xylophax's first exhibition completed | 38 h |
-| First useful replay harvest | 3 d 30 m |
-| Mid-alien harvest | 5 d 30 m |
-| First four-digit DNA harvest | 11 d 18 h |
-| Final pre-eldritch climb completed | 29 d |
-| First eldritch ascension | 29 d 3 h |
-| First magic-assisted DNA rebirth | 33 d |
-| Deeper eldritch ascension | 45 d 3 h |
-| Octathulhu unlocked at 1c | 63 d 3 h |
-| First cosmic victory | 63 d 18 h |
+| Human baseball cleared | 41 h 30 m |
+| Xylophax's first exhibition completed | 42 h |
+| First useful replay harvest | 3 d |
+| Mid-alien harvest | 4 d 21 h 30 m |
+| First four-digit DNA harvest | 11 d |
+| Final pre-eldritch climb completed | 30 d 3 h |
+| First eldritch ascension | 30 d 6 h |
+| First magic-assisted DNA rebirth | 34 d 3 h |
+| Deeper eldritch ascension | 44 d 3 h |
+| Octathulhu unlocked at 1c | 58 d 12 h |
+| First cosmic victory | 58 d 15 h |
 
 These are deterministic open-game baselines with frequent purchasing and strategically timed resets. A player who explores, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study can raise the current body to 25%, so the game meaningfully rewards being left open without making a closed session worthless.
 
@@ -34,6 +34,8 @@ The idle solver uses the same exact absorbing model at every level:
 - an unprotected fair hit terminates the at-bat;
 - a completed Strike count is the only XP-earning terminal state;
 - post-human volleys can advance a count by more than one at impact.
+
+XP remains strikeout-only, but every called Strike now banks one live-count share of that opponent's former strikeout mastery award. A normal three-Strike count still produces the same total mastery as before; receiving it incrementally means an unlucky early run always makes visible progress. Mastery also makes that exact matchup easier by `+0.12 quality × log₂(1 + mastery / requirement)`. A separate strikeout-drought bonus grows as `+0.08 quality × log₂(1 + seconds / 15)` and resets on a completed strikeout. Both curves are uncapped but logarithmic, so they smooth long droughts without replacing upgrades or guaranteeing an immediate result.
 
 The fully purchased audit profile reaches a 100% Strike result, and its 2,048-ball terminal volley exceeds Octathulhu's 61 live Strikes after compression. That final form is intentionally a victory lap. Earlier eldritch builds still have smaller volleys and imperfect odds, so they depend on count preservation: genetics guarantee saves on Singles, Doubles, and Triples; five clone ranks leave `0.60⁵ = 7.776%` ordinary-hit failure; portals apply a second independent save layer. Grand Slams remain unsavable at every stage.
 
@@ -83,23 +85,24 @@ The 101 achievements are deliberately modest individually and additive rather th
 achievement XP multiplier = 1 + completed achievements × 0.01
 ```
 
-Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; this brings the current first human lifetime to roughly 37 h 30 m and the first cosmic victory to 63 d 18 h without changing any mastery requirement or story gate. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 101 produce `×2.01`. The multiplier applies alongside ball, opponent, prestige, distance, mastery, and equipment factors and survives every prestige reset. The no-loot runners earn achievements from the same authoritative events as normal play; after per-Strike adaptation and the 12% mastery-target adjustment, the current first human lifetime is roughly 41 h 30 m and the first cosmic victory is 58 d 15 h. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. The final No Hitter slot is deliberately an extreme post-victory replay challenge rather than part of baseline progression: a divine reset opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
 
 ## Complete reset cadence
 
-The current greedy audit uses eleven lower-layer resets, approximately:
+The current greedy audit uses twelve lower-layer resets, approximately:
 
-1. `+22 DNA` after the initial Xylophax offer.
+1. `+23 DNA` after the initial Xylophax offer.
 2. `+35 DNA` after the first human replay.
-3. `+169 DNA` in the alien circuit.
-4. `+1,623 DNA` on a deeper alien run.
-5. `+3,526 DNA` for the final pre-eldritch build-out.
-6. `+173 Arcana` after N'Kthra; most is immediately invested.
-7. `+261 DNA` during the first magic-assisted replay.
-8. `+138,206 DNA` after a deep new-reality harvest.
-9. `+1,215 Arcana` on the deeper eldritch ascension.
-10. `+1,873 DNA` in the next reality.
-11. `+1,650,037 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
+3. `+173 DNA` in the alien circuit.
+4. `+1,494 DNA` on a deeper alien run.
+5. `+2,896 DNA` on the next championship harvest.
+6. `+3,947 DNA` for the final pre-eldritch build-out.
+7. `+228 Arcana` after N'Kthra; most is immediately invested.
+8. `+261 DNA` during the first magic-assisted replay.
+9. `+77,798 DNA` after a deep new-reality harvest.
+10. `+861 Arcana` on the deeper eldritch ascension.
+11. `+867 DNA` in the next reality.
+12. `+254,127 DNA` before the terminal body reaches exactly `1c` and defeats Octathulhu.
 
 The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
 
@@ -137,7 +140,7 @@ Active field taps begin at 1.7% of the current foreground timer's starting durat
 
 Fourteen pitch types, twenty-six replacement ball shells, and forty-two one-time facilities/interventions run from level 1 through level 45. Facilities are costly, high-impact multipliers; several are gated by actual measured speed, mound distance, or lifetime Strikeouts in addition to campaign level. Suspicious Vitamins arrive long before Extremely Obvious Steroids, and the human ladder stays recognizably human. Every tab is sorted by unlock level and cost; Pitch, Ball, and Facility each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
-Authored opponent mastery rises as `25 × 1.34^index`, while reward rises faster at `1.55^index`. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, and the start of logarithmic farming bonuses. A frontier opponent is attractive only when its longer count and higher failure downtime do not outweigh the reward. Auto-scout evaluates the same expected XP-per-second model across unlocked opponents and ranges.
+Authored opponent mastery rises as `28 × 1.34^index`, a 12% increase that offsets guaranteed per-Strike progress without removing its early smoothing, while reward rises faster at `1.55^index`. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, matchup adaptation, and the start of logarithmic farming bonuses. A frontier opponent is attractive only when its longer count and higher failure downtime do not outweigh the reward. Auto-scout evaluates the same expected XP-per-second model across unlocked opponents and ranges.
 
 ## Renderer and simulation budget
 
@@ -151,7 +154,7 @@ Dense and offline production use the exact count-state renewal model rather than
 
 The automated suite explicitly checks that:
 
-- hits, walks, Fouls, and partial Strikes cannot award XP or mastery;
+- hits, walks, Fouls, and partial Strikes cannot award XP; only called Strikes award mastery;
 - Fouls stop adding Strikes at two and four human Balls cause a walk;
 - unprotected hits and walks clear both counts and start the correct full downtime;
 - protected hits hold the count, while Grand Slams bypass every protection layer;

@@ -15,6 +15,8 @@ const COLOR_GOOD := Color("6ee7a8")
 const COLOR_BAD := Color("ff667d")
 const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
+const BROWSER_SAVE_MIRROR_KEY := "no_hitter_portable_save_mirror_v1"
+const BROWSER_MANUAL_SAVE_SLOT_COUNT := 3
 const WEB_WIDE_MIN_WIDTH := 1280.0
 const WEB_WIDE_MIN_HEIGHT := 696.0
 const WEB_LAYOUT_HYSTERESIS := 24.0
@@ -46,7 +48,6 @@ var previous_button: Button
 var next_button: Button
 var previous_navigation_icon: ImageTexture
 var next_navigation_icon: ImageTexture
-var transparent_navigation_icon: ImageTexture
 var favorite_open_icon: ImageTexture
 var favorite_kept_icon: ImageTexture
 var distance_label: Label
@@ -60,6 +61,10 @@ var outcome_name_labels: Array[Label] = []
 var outcome_probability_labels: Array[Label] = []
 var outcome_delay_labels: Array[Label] = []
 var strikeout_payout_label: Label
+var outcome_footer: HBoxContainer
+var frustration_status: HBoxContainer
+var frustration_label: Label
+var frustration_bar: ProgressBar
 var training_buttons := {}
 var pitch_buttons := {}
 var ball_upgrade_buttons := {}
@@ -143,6 +148,7 @@ var save_transfer_message_dialog: AcceptDialog
 var mobile_install_dialog: AcceptDialog
 var mobile_inspection_dialog: AcceptDialog
 var offline_progress_dialog: AcceptDialog
+var browser_update_confirmation: ConfirmationDialog
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
 var web_file_input: Variant = null
@@ -161,6 +167,7 @@ var web_update_check_elapsed := WEB_UPDATE_CHECK_INTERVAL - 5.0
 var web_update_status_elapsed := 0.0
 var web_update_ready := false
 var web_update_snoozed_until := 0.0
+var browser_save_recovered := false
 var update_banner: PanelContainer
 var update_banner_label: Label
 var update_now_button: Button
@@ -180,6 +187,7 @@ var mobile_overlay_control: Control
 var mobile_overlay_home: Control
 var mobile_overlay_home_index := -1
 var mobile_tab_navigation: HBoxContainer
+var mobile_tab_label: Label
 var mobile_tab_previous_button: Button
 var mobile_tab_next_button: Button
 var mobile_upgrade_stats_panel: PanelContainer
@@ -195,6 +203,8 @@ var header_title: Label
 var header_spacer: Control
 var save_stack: VBoxContainer
 var save_action_row: HBoxContainer
+var browser_save_slots_panel: VBoxContainer
+var browser_save_slot_entries: Array[Dictionary] = []
 var play_panel: PanelContainer
 var play_stack: VBoxContainer
 var opponent_row: HBoxContainer
@@ -233,11 +243,16 @@ func _ready() -> void:
 	game.achievement_unlocked.connect(_on_achievement_unlocked)
 	_build_interface()
 	_configure_platform_ui()
+	var browser_had_primary_save := FileAccess.file_exists(BaseballGameState.SAVE_PATH)
 	var offline_summary := game.load_game()
+	if is_web_build and not browser_had_primary_save:
+		var mirror_summary := _recover_browser_save_mirror()
+		if not mirror_summary.is_empty():
+			offline_summary = mirror_summary
 	_apply_development_arguments()
 	if not offline_summary.is_empty():
 		_log_offline_summary(offline_summary, "Welcome back")
-	else:
+	elif not browser_save_recovered:
 		_log_event("The toddler is ready. Your arm is not.")
 	if is_web_build and not web_storage_persistent:
 		_log_event("Browser storage is temporary here. Use EXPORT after playing if you want to keep this run.")
@@ -278,6 +293,98 @@ func _process(delta: float) -> void:
 	if autosave_elapsed >= 10.0 and not development_session:
 		autosave_elapsed = 0.0
 		game.save_game()
+
+func _write_browser_save_mirror() -> void:
+	if not is_web_build or game == null or development_session:
+		return
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage != null:
+		storage.setItem(BROWSER_SAVE_MIRROR_KEY, game.get_save_json())
+
+func _recover_browser_save_mirror() -> Dictionary:
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage == null:
+		return {}
+	var mirrored_text := str(storage.getItem(BROWSER_SAVE_MIRROR_KEY))
+	if mirrored_text.is_empty() or mirrored_text == "null":
+		return {}
+	var decoded := game.decode_save_text(mirrored_text)
+	if not bool(decoded.get("ok", false)):
+		return {}
+	var mirrored_data: Dictionary = decoded.data
+	var has_progress := (
+		float(mirrored_data.get("lifetime_pitches", 0.0)) > 0.0
+		or float(mirrored_data.get("lifetime_xp", 0.0)) > 0.0
+		or int(mirrored_data.get("highest_unlocked", 0)) > 0
+		or int(mirrored_data.get("genetic_rebirths", 0)) > 0
+		or int(mirrored_data.get("eldritch_ascensions", 0)) > 0
+		or int(mirrored_data.get("divine_ascensions", 0)) > 0
+	)
+	if not has_progress:
+		return {}
+	game.apply_save_data(mirrored_data)
+	browser_save_recovered = true
+	var saved_at := float(mirrored_data.get("saved_at", Time.get_unix_time_from_system()))
+	var recovered_summary := game.simulate_offline(maxf(Time.get_unix_time_from_system() - saved_at, 0.0))
+	game.save_game()
+	_log_event("Recovered progress from the browser's secondary save mirror.")
+	return recovered_summary
+
+func _browser_save_slot_key(slot_index: int) -> String:
+	return "no_hitter_manual_save_slot_%d" % (clampi(slot_index, 0, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1) + 1)
+
+func _read_browser_save_slot(slot_index: int) -> Dictionary:
+	if not is_web_build:
+		return {}
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage == null:
+		return {}
+	var slot_text := str(storage.getItem(_browser_save_slot_key(slot_index)))
+	var decoded := game.decode_save_text(slot_text)
+	return decoded.data if bool(decoded.get("ok", false)) else {}
+
+func _format_browser_save_slot(slot_index: int, data: Dictionary) -> String:
+	var heading := "SLOT %d" % (slot_index + 1)
+	if data.is_empty():
+		return "%s\nEMPTY" % heading
+	var timestamp := Time.get_datetime_dict_from_unix_time(int(data.get("saved_at", 0)))
+	return "%s\nLEVEL %d • %s XP • %02d/%02d %02d:%02d" % [
+		heading,
+		clampi(int(data.get("current_opponent", 0)) + 1, 1, Content.OPPONENT_NAMES.size()),
+		BaseballGameState.format_number(maxf(float(data.get("xp", 0.0)), 0.0)),
+		int(timestamp.get("month", 0)),
+		int(timestamp.get("day", 0)),
+		int(timestamp.get("hour", 0)),
+		int(timestamp.get("minute", 0)),
+	]
+
+func _refresh_browser_save_slots() -> void:
+	if browser_save_slots_panel == null:
+		return
+	for slot_index in browser_save_slot_entries.size():
+		var entry: Dictionary = browser_save_slot_entries[slot_index]
+		var data := _read_browser_save_slot(slot_index)
+		(entry.label as Label).text = _format_browser_save_slot(slot_index, data)
+		(entry.load_button as Button).disabled = data.is_empty()
+
+func _save_browser_slot(slot_index: int) -> void:
+	if not is_web_build or game == null or development_session:
+		return
+	game.save_game()
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage == null:
+		_show_save_transfer_error("This browser is not allowing a manual save slot.")
+		return
+	storage.setItem(_browser_save_slot_key(slot_index), game.get_save_json())
+	_refresh_browser_save_slots()
+	_on_save_status_changed("Saved to slot %d" % (slot_index + 1))
+	_log_event("Manual phone save written to Slot %d." % (slot_index + 1))
+
+func _load_browser_slot(slot_index: int) -> void:
+	var data := _read_browser_save_slot(slot_index)
+	if data.is_empty():
+		return
+	_stage_import_save(JSON.stringify(data), "Phone Slot %d" % (slot_index + 1))
 
 func _input(event: InputEvent) -> void:
 	# Observe without consuming the event. The embedded ScrollContainer keeps its
@@ -406,7 +513,7 @@ func _configure_mobile_install_dialog(platform: String) -> void:
 			"1. Open this game in Chrome.\n\n"
 			+ "2. Tap Chrome's ⋮ menu, then tap INSTALL APP or ADD TO HOME SCREEN.\n\n"
 			+ "3. Confirm Install, then launch the game from its new app icon.\n\n"
-			+ "The installed game stays on the browser update channel and will offer SAVE & UPDATE when a new build is ready. EXPORT is still the safest portable backup."
+			+ "The installed game stays on the browser update channel and will offer REVIEW UPDATE when a new build is ready. Export a portable backup before accepting an update."
 		)
 	else:
 		mobile_install_dialog.title = "INSTALL ON IPHONE"
@@ -508,6 +615,11 @@ func _snooze_browser_update() -> void:
 	web_update_snoozed_until = Time.get_unix_time_from_system() + WEB_UPDATE_SNOOZE_SECONDS
 	update_banner.visible = false
 
+func _request_browser_update() -> void:
+	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
+		return
+	browser_update_confirmation.popup_centered_clamped(Vector2i(570, 285), 0.94)
+
 func _install_browser_update() -> void:
 	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
 		return
@@ -515,10 +627,14 @@ func _install_browser_update() -> void:
 	update_banner_label.text = "SAVING YOUR RUN…"
 	if game != null and not development_session:
 		game.save_game()
+		_write_browser_save_mirror()
 	# Web saves live in IndexedDB. Flush them before asking the service worker to
 	# activate the new release and reload every open game tab.
 	JavaScriptBridge.force_fs_sync()
-	await get_tree().create_timer(0.35).timeout
+	# Godot's Web filesystem flush is asynchronous. Leave a conservative window
+	# after also writing the synchronous localStorage mirror before the service
+	# worker reloads every open tab.
+	await get_tree().create_timer(1.50).timeout
 	var update_error := JavaScriptBridge.pwa_update()
 	if update_error != OK:
 		update_now_button.disabled = false
@@ -764,10 +880,6 @@ func _ensure_navigation_icons() -> void:
 		previous_navigation_icon = _create_navigation_icon("left")
 	if next_navigation_icon == null:
 		next_navigation_icon = _create_navigation_icon("right")
-	if transparent_navigation_icon == null:
-		var empty_image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
-		empty_image.fill(Color.TRANSPARENT)
-		transparent_navigation_icon = ImageTexture.create_from_image(empty_image)
 
 func _create_favorite_icon(filled: bool) -> ImageTexture:
 	var image := Image.create(28, 28, false, Image.FORMAT_RGBA8)
@@ -803,16 +915,12 @@ func _configure_tab_overflow_controls(for_mobile: bool) -> void:
 		return
 	mobile_tab_navigation.visible = for_mobile
 	var tab_bar := upgrade_tabs.get_tab_bar()
-	# The explicit 44-pixel buttons own phone tab traversal. Disabling native
-	# scrolling removes TabBar's second, tiny overflow-arrow pair entirely.
+	# clip_tabs always draws its own tiny overflow pair whenever the titles do not
+	# fit; scrolling_enabled only controls wheel input. Phones therefore hide the
+	# native bar completely and use the explicit 44-pixel controls plus a current-
+	# tab label. Desktop keeps the ordinary clickable tab strip.
+	tab_bar.visible = not for_mobile
 	tab_bar.scrolling_enabled = not for_mobile
-	if for_mobile:
-		_ensure_navigation_icons()
-		tab_bar.add_theme_icon_override("decrement", transparent_navigation_icon)
-		tab_bar.add_theme_icon_override("increment", transparent_navigation_icon)
-	else:
-		tab_bar.remove_theme_icon_override("decrement")
-		tab_bar.remove_theme_icon_override("increment")
 	_refresh_mobile_tab_navigation()
 
 func _visible_upgrade_tab_indices() -> Array[int]:
@@ -838,6 +946,12 @@ func _refresh_mobile_tab_navigation(_tab_index := -1) -> void:
 		return
 	var visible_indices := _visible_upgrade_tab_indices()
 	var visible_position := visible_indices.find(upgrade_tabs.current_tab)
+	if mobile_tab_label != null and visible_position >= 0:
+		mobile_tab_label.text = "%s TAB  •  %d / %d" % [
+			upgrade_tabs.get_tab_title(upgrade_tabs.current_tab),
+			visible_position + 1,
+			visible_indices.size(),
+		]
 	mobile_tab_previous_button.disabled = visible_position <= 0
 	mobile_tab_next_button.disabled = (
 		visible_position < 0 or visible_position >= visible_indices.size() - 1
@@ -910,15 +1024,15 @@ func _build_update_banner() -> void:
 	row.add_theme_constant_override("separation", 8)
 	update_banner.add_child(row)
 	update_banner_label = Label.new()
-	update_banner_label.text = "NEW VERSION READY"
+	update_banner_label.text = "UPDATE READY • EXPORT BACKUP FIRST"
 	update_banner_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_banner_label.add_theme_color_override("font_color", COLOR_GOOD)
 	update_banner_label.add_theme_font_size_override("font_size", 13)
 	row.add_child(update_banner_label)
 	update_now_button = Button.new()
-	update_now_button.text = "SAVE & UPDATE"
-	update_now_button.tooltip_text = "Save this run, install the newest browser build, and reload."
-	update_now_button.pressed.connect(_install_browser_update)
+	update_now_button.text = "REVIEW UPDATE"
+	update_now_button.tooltip_text = "Review the save-backup warning before installing the browser update."
+	update_now_button.pressed.connect(_request_browser_update)
 	row.add_child(update_now_button)
 	update_later_button = Button.new()
 	update_later_button.text = "LATER"
@@ -1035,6 +1149,52 @@ func _build_header(parent: Control) -> void:
 	save_label.add_theme_font_size_override("font_size", 10)
 	save_label.add_theme_color_override("font_color", COLOR_MUTED)
 	save_stack.add_child(save_label)
+	_build_browser_save_slots(save_stack)
+
+func _build_browser_save_slots(parent: Control) -> void:
+	browser_save_slots_panel = VBoxContainer.new()
+	browser_save_slots_panel.name = "BrowserManualSaveSlots"
+	browser_save_slots_panel.visible = false
+	browser_save_slots_panel.add_theme_constant_override("separation", 5)
+	parent.add_child(browser_save_slots_panel)
+	var heading := Label.new()
+	heading.text = "MANUAL PHONE SAVES"
+	heading.add_theme_font_size_override("font_size", 12)
+	heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	browser_save_slots_panel.add_child(heading)
+	var note := Label.new()
+	note.text = "Stored in this browser. EXPORT is the portable cross-device backup."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_font_size_override("font_size", 10)
+	note.add_theme_color_override("font_color", COLOR_MUTED)
+	browser_save_slots_panel.add_child(note)
+	for slot_index in BROWSER_MANUAL_SAVE_SLOT_COUNT:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 5)
+		browser_save_slots_panel.add_child(row)
+		var summary_label := Label.new()
+		summary_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		summary_label.add_theme_font_size_override("font_size", 11)
+		summary_label.add_theme_color_override("font_color", COLOR_TEXT)
+		row.add_child(summary_label)
+		var save_slot_button := Button.new()
+		save_slot_button.text = "SAVE"
+		save_slot_button.custom_minimum_size = Vector2(58.0, 44.0)
+		save_slot_button.focus_mode = Control.FOCUS_NONE
+		save_slot_button.pressed.connect(_save_browser_slot.bind(slot_index))
+		row.add_child(save_slot_button)
+		var load_slot_button := Button.new()
+		load_slot_button.text = "LOAD"
+		load_slot_button.custom_minimum_size = Vector2(58.0, 44.0)
+		load_slot_button.focus_mode = Control.FOCUS_NONE
+		load_slot_button.pressed.connect(_load_browser_slot.bind(slot_index))
+		row.add_child(load_slot_button)
+		browser_save_slot_entries.append({
+			"label": summary_label,
+			"save_button": save_slot_button,
+			"load_button": load_slot_button,
+		})
 
 func _header_metric(parent: Control, heading: String, value: String) -> Label:
 	var stack := VBoxContainer.new()
@@ -1168,6 +1328,8 @@ func _show_mobile_overlay(control: Control, title: String) -> void:
 		upgrade_panel.custom_minimum_size.x = 0.0
 	if control == equipment_sidebar:
 		equipment_sidebar.custom_minimum_size.x = 0.0
+	if control == save_stack:
+		_refresh_browser_save_slots()
 	mobile_overlay_title.text = title
 	mobile_overlay_xp_label.visible = control == upgrade_panel
 	mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_number(game.xp)
@@ -1295,8 +1457,8 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	update_banner.offset_bottom = 61.0 if mobile_layout else 66.0
 	update_banner_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
 	if not update_now_button.disabled:
-		update_banner_label.text = "UPDATE READY" if mobile_layout else "NEW VERSION READY"
-	update_now_button.text = "UPDATE" if mobile_layout else "SAVE & UPDATE"
+		update_banner_label.text = "UPDATE • BACK UP FIRST" if mobile_layout else "UPDATE READY • EXPORT BACKUP FIRST"
+	update_now_button.text = "REVIEW" if mobile_layout else "REVIEW UPDATE"
 	update_now_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
 	update_later_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
 	if achievement_toast != null:
@@ -1326,6 +1488,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 		header_metric_headings[2].text = "DNA • ARCANA"
 	prestige_header_stack.visible = _has_genetic_reveal() and not mobile_layout
 	save_stack.visible = not mobile_layout
+	browser_save_slots_panel.visible = mobile_layout and is_web_build
 	mobile_nav.visible = mobile_layout
 	upgrade_panel.visible = not mobile_layout
 	equipment_sidebar.visible = not mobile_layout
@@ -1336,6 +1499,13 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	mobile_upgrade_stats_panel.visible = mobile_layout
 	for catalog_toggle in catalog_hide_purchased_toggles.values():
 		(catalog_toggle as CheckButton).custom_minimum_size.y = 44.0 if mobile_layout else 0.0
+	for collection in [training_buttons, pitch_buttons, ball_upgrade_buttons, milestone_buttons, genetic_buttons, eldritch_buttons, divine_buttons]:
+		for entry_value in collection.values():
+			var entry: Dictionary = entry_value
+			(entry.container as PanelContainer).custom_minimum_size.y = 88.0 if mobile_layout else 82.0
+			(entry.label as Label).add_theme_font_size_override("font_size", 15 if mobile_layout else 15)
+			(entry.button as Button).custom_minimum_size = Vector2(76.0, 44.0)
+			(entry.button as Button).add_theme_font_size_override("font_size", 12)
 	_configure_tab_overflow_controls(mobile_layout)
 	play_stack.add_theme_constant_override("separation", 4 if mobile_layout else (5 if dense_wide else 8))
 	opponent_row.add_theme_constant_override("separation", 5 if mobile_layout else (8 if dense_wide else 12))
@@ -1380,6 +1550,8 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 		outcome_name_labels[index].add_theme_font_size_override("font_size", 8 if mobile_layout and mobile_portrait_layout else (9 if web_dense_layout else 11))
 		outcome_probability_labels[index].add_theme_font_size_override("font_size", 12 if mobile_layout else (14 if dense_wide else 16))
 		outcome_delay_labels[index].add_theme_font_size_override("font_size", 8 if mobile_layout else (9 if dense_wide else 10))
+	frustration_label.add_theme_font_size_override("font_size", 8 if mobile_layout else (9 if dense_wide else 10))
+	frustration_bar.custom_minimum_size = Vector2(55.0 if mobile_layout else 90.0, 6.0 if mobile_layout else 7.0)
 	strikeout_payout_label.add_theme_font_size_override("font_size", 9 if mobile_layout else (10 if dense_wide else 11))
 	mobile_nav.custom_minimum_size.y = 44.0 if mobile_portrait_layout else 34.0
 	for mobile_button in mobile_nav.get_children():
@@ -1553,11 +1725,32 @@ func _build_play_area(parent: Control) -> void:
 		probability_label.add_theme_font_size_override("font_size", 16)
 		outcome_stack.add_child(probability_label)
 		outcome_probability_labels.append(probability_label)
+	outcome_footer = HBoxContainer.new()
+	outcome_footer.add_theme_constant_override("separation", 8)
+	field_stack.add_child(outcome_footer)
+	frustration_status = HBoxContainer.new()
+	frustration_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frustration_status.add_theme_constant_override("separation", 5)
+	outcome_footer.add_child(frustration_status)
+	frustration_label = Label.new()
+	frustration_label.add_theme_font_size_override("font_size", 10)
+	frustration_label.add_theme_color_override("font_color", COLOR_GOLD)
+	frustration_label.mouse_default_cursor_shape = Control.CURSOR_HELP
+	_enable_mobile_inspection(frustration_label, "Frustration")
+	frustration_status.add_child(frustration_label)
+	frustration_bar = ProgressBar.new()
+	frustration_bar.min_value = 0.0
+	frustration_bar.max_value = 100.0
+	frustration_bar.show_percentage = false
+	frustration_bar.custom_minimum_size = Vector2(75.0, 7.0)
+	frustration_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frustration_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frustration_status.add_child(frustration_bar)
 	strikeout_payout_label = Label.new()
 	strikeout_payout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	strikeout_payout_label.add_theme_font_size_override("font_size", 11)
 	strikeout_payout_label.add_theme_color_override("font_color", COLOR_MUTED)
-	field_stack.add_child(strikeout_payout_label)
+	outcome_footer.add_child(strikeout_payout_label)
 
 func _build_distance_status(parent: Control) -> void:
 	distance_label = Label.new()
@@ -2326,7 +2519,7 @@ func _build_upgrade_area(parent: Control) -> void:
 	mobile_tab_navigation.visible = false
 	mobile_tab_navigation.add_theme_constant_override("separation", 8)
 	upgrade_stack.add_child(mobile_tab_navigation)
-	var mobile_tab_label := Label.new()
+	mobile_tab_label = Label.new()
 	mobile_tab_label.text = "BROWSE TABS"
 	mobile_tab_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mobile_tab_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2469,10 +2662,10 @@ func _build_training_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "TRAIN")
 	_section_label(content, "REPEATABLE FUNDAMENTALS")
 	for definition in _definitions_by_unlock(Content.TRAINING):
-		var button := _upgrade_button(_definition_tooltip(definition))
-		button.pressed.connect(_buy_training.bind(str(definition.id)))
-		content.add_child(button)
-		training_buttons[definition.id] = button
+		var entry := _upgrade_row(_definition_tooltip(definition))
+		(entry.button as Button).pressed.connect(_buy_training.bind(str(definition.id)))
+		content.add_child(entry.container)
+		training_buttons[definition.id] = entry
 
 func _build_pitch_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "PITCH")
@@ -2485,10 +2678,10 @@ func _build_pitch_tab(tabs: TabContainer) -> void:
 	content.add_child(explainer)
 	_build_catalog_hide_toggle(content, "pitch")
 	for definition in _definitions_by_unlock(Content.PITCHES):
-		var button := _upgrade_button(_definition_tooltip(definition, ["quality", "speed"]))
-		button.pressed.connect(_buy_pitch.bind(str(definition.id)))
-		content.add_child(button)
-		pitch_buttons[definition.id] = button
+		var entry := _upgrade_row(_definition_tooltip(definition, ["quality", "speed"]))
+		(entry.button as Button).pressed.connect(_buy_pitch.bind(str(definition.id)))
+		content.add_child(entry.container)
+		pitch_buttons[definition.id] = entry
 
 func _build_ball_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "BALL")
@@ -2501,20 +2694,20 @@ func _build_ball_tab(tabs: TabContainer) -> void:
 	content.add_child(ball_explainer)
 	_build_catalog_hide_toggle(content, "ball")
 	for definition in _definitions_by_unlock(Content.BALL_UPGRADES):
-		var button := _upgrade_button(_definition_tooltip(definition, ["payload"]))
-		button.pressed.connect(_buy_ball_upgrade.bind(str(definition.id)))
-		content.add_child(button)
-		ball_upgrade_buttons[definition.id] = button
+		var entry := _upgrade_row(_definition_tooltip(definition, ["payload"]))
+		(entry.button as Button).pressed.connect(_buy_ball_upgrade.bind(str(definition.id)))
+		content.add_child(entry.container)
+		ball_upgrade_buttons[definition.id] = entry
 
 func _build_scale_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "FACILITY")
 	_section_label(content, "ONE-TIME TRAINING, FACILITIES & QUESTIONABLE DECISIONS")
 	_build_catalog_hide_toggle(content, "facility")
 	for definition in _definitions_by_unlock(Content.MILESTONES):
-		var button := _upgrade_button(_definition_tooltip(definition))
-		button.pressed.connect(_buy_milestone.bind(str(definition.id)))
-		content.add_child(button)
-		milestone_buttons[definition.id] = button
+		var entry := _upgrade_row(_definition_tooltip(definition))
+		(entry.button as Button).pressed.connect(_buy_milestone.bind(str(definition.id)))
+		content.add_child(entry.container)
+		milestone_buttons[definition.id] = entry
 	automation_section = VBoxContainer.new()
 	automation_section.add_theme_constant_override("separation", 7)
 	content.add_child(automation_section)
@@ -2569,10 +2762,10 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	genetic_reset_button.pressed.connect(_request_genetic_rebirth)
 	genetic_section.add_child(genetic_reset_button)
 	for definition in Content.GENETIC_UPGRADES:
-		var button := _upgrade_button(str(definition.description))
-		button.pressed.connect(_buy_genetic.bind(str(definition.id)))
-		genetic_section.add_child(button)
-		genetic_buttons[definition.id] = button
+		var entry := _upgrade_row(str(definition.description))
+		(entry.button as Button).pressed.connect(_buy_genetic.bind(str(definition.id)))
+		genetic_section.add_child(entry.container)
+		genetic_buttons[definition.id] = entry
 
 	eldritch_section = VBoxContainer.new()
 	eldritch_section.add_theme_constant_override("separation", 7)
@@ -2582,20 +2775,20 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	eldritch_reset_button.pressed.connect(_request_eldritch_ascension)
 	eldritch_section.add_child(eldritch_reset_button)
 	for definition in Content.ELDRITCH_UPGRADES:
-		var button := _upgrade_button(str(definition.description))
-		button.pressed.connect(_buy_eldritch.bind(str(definition.id)))
-		eldritch_section.add_child(button)
-		eldritch_buttons[definition.id] = button
+		var entry := _upgrade_row(str(definition.description))
+		(entry.button as Button).pressed.connect(_buy_eldritch.bind(str(definition.id)))
+		eldritch_section.add_child(entry.container)
+		eldritch_buttons[definition.id] = entry
 
 	divine_section = VBoxContainer.new()
 	divine_section.add_theme_constant_override("separation", 7)
 	content.add_child(divine_section)
 	_section_label(divine_section, "III • DIVINE GRAND SLAM — ONE BLESSING PER SAVED UNIVERSE")
 	for definition in Content.DIVINE_BLESSINGS:
-		var button := _upgrade_button(str(definition.description))
-		button.pressed.connect(_request_divine_ascension.bind(str(definition.id)))
-		divine_section.add_child(button)
-		divine_buttons[definition.id] = button
+		var entry := _upgrade_row(str(definition.description))
+		(entry.button as Button).pressed.connect(_request_divine_ascension.bind(str(definition.id)))
+		divine_section.add_child(entry.container)
+		divine_buttons[definition.id] = entry
 	divine_halo_button = _upgrade_button("After every blessing is owned, each additional Halo multiplies XP and mastery ×1.50.")
 	divine_halo_button.pressed.connect(_request_divine_ascension.bind("halo"))
 	divine_section.add_child(divine_halo_button)
@@ -2772,6 +2965,68 @@ func _build_guide_tab(tabs: TabContainer) -> void:
 	guide_label.add_theme_color_override("font_color", COLOR_TEXT)
 	content.add_child(guide_label)
 
+func _upgrade_row(description: String) -> Dictionary:
+	var container := PanelContainer.new()
+	container.custom_minimum_size.y = 82.0
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.mouse_filter = Control.MOUSE_FILTER_PASS
+	container.tooltip_text = description
+	container.add_theme_stylebox_override("panel", _compact_panel_style(8.0, 5.0, 7))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	container.add_child(row)
+	var label := Label.new()
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.max_lines_visible = 3
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", COLOR_TEXT)
+	# Passive copy is the draggable region. It deliberately ignores pointer input
+	# so a finger swipe reaches the surrounding ScrollContainer.
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.tooltip_text = description
+	row.add_child(label)
+	var action := Button.new()
+	action.text = "BUY"
+	action.custom_minimum_size = Vector2(76.0, 44.0)
+	action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	action.focus_mode = Control.FOCUS_NONE
+	action.add_theme_font_size_override("font_size", 12)
+	action.tooltip_text = description
+	row.add_child(action)
+	return {
+		"container": container,
+		"label": label,
+		"button": action,
+	}
+
+func _set_upgrade_row(
+	entry: Dictionary,
+	text: String,
+	disabled: bool,
+	tooltip: String,
+	action_text := "BUY"
+) -> void:
+	var container := entry.container as PanelContainer
+	var label := entry.label as Label
+	var button := entry.button as Button
+	label.text = text
+	label.tooltip_text = tooltip
+	container.tooltip_text = tooltip
+	button.text = action_text
+	button.disabled = disabled
+	button.tooltip_text = tooltip
+
+func _set_upgrade_row_visible(entry: Dictionary, visible: bool) -> void:
+	(entry.container as Control).visible = visible
+
+func _upgrade_row_is_visible(entry: Dictionary) -> bool:
+	return (entry.container as Control).visible
+
 func _upgrade_button(description: String) -> Button:
 	var button := Button.new()
 	button.custom_minimum_size.y = 78.0
@@ -2804,6 +3059,7 @@ func _build_confirmation_dialog() -> void:
 	_build_mobile_install_dialog()
 	_build_mobile_inspection_dialog()
 	_build_offline_progress_dialog()
+	_build_browser_update_confirmation()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
 	add_child(body_limit_dialog)
@@ -2819,6 +3075,20 @@ func _build_confirmation_dialog() -> void:
 	divine_confirmation.title = "Let God restore the universe?"
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
+
+func _build_browser_update_confirmation() -> void:
+	browser_update_confirmation = ConfirmationDialog.new()
+	browser_update_confirmation.title = "BACK UP BEFORE UPDATING"
+	browser_update_confirmation.dialog_text = (
+		"Browser updates should preserve local progress, and this build keeps a second browser save mirror. "
+		+ "Browser or Home Screen storage can still be cleared or isolated by the operating system.\n\n"
+		+ "Recommended: choose CANCEL, open SAVE, and use EXPORT to download a portable backup. "
+		+ "Continue only if you already have a backup or accept that risk."
+	)
+	browser_update_confirmation.ok_button_text = "UPDATE ANYWAY"
+	browser_update_confirmation.cancel_button_text = "CANCEL — EXPORT FIRST"
+	browser_update_confirmation.confirmed.connect(_install_browser_update)
+	add_child(browser_update_confirmation)
 
 func _build_offline_progress_dialog() -> void:
 	offline_progress_dialog = AcceptDialog.new()
@@ -3010,15 +3280,19 @@ func _definition_tooltip(definition: Dictionary, fallback_stats: Array = []) -> 
 			lines.append(help)
 	return "\n\n".join(lines)
 
-func _set_catalog_lock(button: Button, definition: Dictionary) -> void:
+func _set_catalog_lock(entry: Dictionary, definition: Dictionary) -> void:
 	var unlock_text := "REACH LEVEL %d" % (int(definition.required_level) + 1)
-	_set_catalog_lock_text(button, definition, [unlock_text])
+	_set_catalog_lock_text(entry, definition, [unlock_text])
 
-func _set_catalog_lock_text(button: Button, definition: Dictionary, requirements: Array[String]) -> void:
+func _set_catalog_lock_text(entry: Dictionary, definition: Dictionary, requirements: Array[String]) -> void:
 	var unlock_text := " • ".join(requirements)
-	button.text = "%s\n%s" % [str(definition.name), "\n".join(requirements)]
-	button.tooltip_text = unlock_text
-	button.disabled = true
+	_set_upgrade_row(
+		entry,
+		"%s\n%s" % [str(definition.name), "\n".join(requirements)],
+		true,
+		unlock_text,
+		"LOCKED"
+	)
 
 func _refresh_reveal_visibility() -> void:
 	var genetic_revealed := _has_genetic_reveal()
@@ -3090,8 +3364,9 @@ func _refresh_guide_text(
 ) -> void:
 	var sections: Array[String] = [
 		(
-			"Only a complete strikeout awards XP or mastery. Individual strikes and every hit award "
-			+ "zero. An unprotected hit sends the batter away, clears every accumulated strike, and "
+			"Only a complete strikeout awards XP. Every called Strike banks a small share of mastery "
+			+ "against that exact batter, while every hit awards neither XP nor mastery. An unprotected "
+			+ "hit sends the batter away, clears every accumulated strike, and "
 			+ "leaves the plate empty: Singles are annoying, Home Runs are long, and Grand Slams impose "
 			+ "the full twelve-second humiliation. Even a clean strikeout takes three seconds for the next batter."
 		),
@@ -3102,8 +3377,11 @@ func _refresh_guide_text(
 			+ "on screen, while Stats keeps the true physical time."
 		),
 		(
-			"Earn opponent mastery to unlock the next batter, or move backward whenever an easier opponent "
-			+ "produces more XP per second. The circle beside the pitcher fills toward the next release. While "
+			"Earn opponent mastery to unlock the next batter. Every point also improves the odds against "
+			+ "that batter on an uncapped logarithmic curve. A second logarithmic Frustration bonus grows "
+			+ "during a strikeout drought and resets when one finally lands; its nearly full bar means diminishing "
+			+ "returns, not a hard cap. Move backward whenever an easier opponent produces more XP per second. "
+			+ "The circle beside the pitcher fills toward the next release. While "
 			+ "the plate is empty, pitching stops and the circle beside home plate fills until the next batter "
 			+ "arrives. Tap open field space to advance whichever of recovery, flight, or lineup is active by the displayed Field Tap percentage; "
 			+ "taps can supply only half of one timer, and Field Hustle raises each tap without changing that cap. "
@@ -3315,8 +3593,12 @@ func _refresh_interface() -> void:
 	)
 	var mastery_value := game.opponent_mastery[game.current_opponent]
 	var mastery_required := game.get_mastery_requirement()
+	var mastery_quality_bonus := game.get_opponent_mastery_quality_bonus()
 	var overmastery_summary := game.get_overmastery_summary()
-	mastery_label.tooltip_text = "Strikeouts build opponent mastery. Complete the displayed target to unlock progression; excess mastery adds logarithmic farming bonuses."
+	mastery_label.tooltip_text = (
+		"Every called Strike builds mastery against this batter. Current mastery adds +%.3f quality to this matchup. "
+		+ "The advantage is uncapped and logarithmic; reaching 100%% unlocks progression, while excess mastery also improves XP and loot."
+	) % mastery_quality_bonus
 	if game.is_alien_exhibition_blocked():
 		mastery_label.text = game.get_story_status_text()
 		mastery_bar.value = game.alien_exhibition_seconds / BaseballGameState.EXHIBITION_SECONDS * 100.0
@@ -3332,36 +3614,40 @@ func _refresh_interface() -> void:
 				"  •  %s" % overmastery_summary if not overmastery_summary.is_empty() else ""
 			)
 			if game.cosmos_conquered
-			else "FINAL BOSS MASTERY  %s / %s  •  Conquer the cosmos at 100%%" % [
+			else "FINAL BOSS MASTERY  %s / %s  •  ODDS +%.3f" % [
 				BaseballGameState.format_number(mastery_value),
 				BaseballGameState.format_number(mastery_required),
+				mastery_quality_bonus,
 			]
 		)
 	elif mastery_value >= mastery_required:
 		var target_ratio := mastery_value / maxf(mastery_required, 0.000001)
-		var full_mastery_text := "OPPONENT MASTERED  •  ×%s TARGET%s" % [
+		var full_mastery_text := "OPPONENT MASTERED  •  ×%s TARGET  •  ODDS +%.3f%s" % [
 			BaseballGameState.format_number(target_ratio),
+			mastery_quality_bonus,
 			"  •  %s" % overmastery_summary if not overmastery_summary.is_empty() else "",
 		]
 		if mobile_layout and not overmastery_summary.is_empty():
-			mastery_label.text = "MASTERED ×%s  •  XP ×%.3f  •  LOOT +%.1f%%" % [
+			mastery_label.text = "MASTERED ×%s  •  ODDS +%.3f  •  XP ×%.3f  •  LOOT +%.1f%%" % [
 				BaseballGameState.format_number(target_ratio),
+				mastery_quality_bonus,
 				game.get_opponent_farm_xp_multiplier(),
 				game.get_opponent_loot_luck() * 100.0,
 			]
 		else:
 			mastery_label.text = full_mastery_text
-		mastery_label.tooltip_text = (
-			full_mastery_text
-			+ "\nStaying on a mastered batter grants a small logarithmic XP bonus and better loot rolls."
-		)
+			mastery_label.tooltip_text = (
+				full_mastery_text
+				+ "\nEvery called Strike still increases the uncapped logarithmic matchup advantage, XP bonus, and loot rolls."
+			)
 	else:
-		mastery_label.text = "OPPONENT MASTERY  %s / %s  •  Next level unlocks at 100%%" % [
+		mastery_label.text = "OPPONENT MASTERY  %s / %s  •  ODDS +%.3f" % [
 			BaseballGameState.format_number(mastery_value),
 			BaseballGameState.format_number(mastery_required),
+			mastery_quality_bonus,
 		]
 		mastery_label.tooltip_text = (
-			"Strikeouts build mastery. Reach 100% to unlock the next batter; progress beyond the target improves XP and loot rolls logarithmically."
+			"Every called Strike builds mastery and immediately improves the called-Strike rate against this batter. Reach 100% to unlock the next batter; every point beyond it still helps logarithmically."
 		)
 	if not game.is_story_exhibition_blocked() and not game.is_speed_gate_blocked():
 		mastery_bar.value = game.get_mastery_ratio() * 100.0
@@ -3370,7 +3656,9 @@ func _refresh_interface() -> void:
 		var bonus_seconds := game.get_outcome_turnover_bonus(index)
 		outcome_delay_labels[index].text = "+%s" % _format_compact_seconds(bonus_seconds)
 		var detail := ""
-		if index < Content.HIT_OUTCOME_COUNT:
+		if index == Content.GRAND_SLAM_INDEX:
+			detail = "Always ends the plate appearance and cannot be saved by any fielder, clone, portal, or blessing. Adds %s beyond the base lineup change." % _format_compact_seconds(bonus_seconds)
+		elif index < Content.HIT_OUTCOME_COUNT:
 			detail = "Ends the plate appearance unless saved. Adds %s beyond the base lineup change." % _format_compact_seconds(bonus_seconds)
 		elif index == Content.FOUL_INDEX:
 			detail = "Adds one strike, but cannot supply the final strike. The batter stays at the plate."
@@ -3387,6 +3675,13 @@ func _refresh_interface() -> void:
 	strikeout_payout_label.text = "COMPLETED STRIKEOUT: %s XP" % BaseballGameState.format_number(
 		game.get_strikeout_base_points() * game.get_xp_multiplier()
 	)
+	var frustration_bonus := game.get_frustration_quality_bonus()
+	frustration_label.text = "FRUSTRATION +%.3f" % frustration_bonus
+	frustration_bar.value = game.get_frustration_meter_ratio() * 100.0
+	frustration_label.tooltip_text = (
+		"%s since the last strikeout • +%.3f quality against the active batter. "
+		+ "The bonus has no cap but grows logarithmically, and resets only when a strikeout is completed."
+	) % [_format_compact_seconds(game.seconds_since_strikeout), frustration_bonus]
 
 	pitch_field.configure_from_game(game, at_bat_metrics)
 	_refresh_field_stats()
@@ -3596,110 +3891,99 @@ func _refresh_purchase_buttons() -> void:
 	for definition in Content.TRAINING:
 		var id := str(definition.id)
 		var rank := int(game.training_levels[id])
-		var button: Button = training_buttons[id]
+		var entry: Dictionary = training_buttons[id]
 		if game.highest_unlocked < int(definition.get("required_level", 0)):
-			_set_catalog_lock(button, definition)
+			_set_catalog_lock(entry, definition)
 		elif id == "velocity" and game.is_velocity_body_capped():
-			button.text = "%s  •  RANK %d\nBODY LIMIT REACHED — CLICK FOR DETAILS" % [
-				definition.name,
-				rank,
-			]
-			button.disabled = false
-			button.tooltip_text = str(Content.STAT_HELP.speed)
+			_set_upgrade_row(
+				entry,
+				"%s  •  RANK %d\nBODY LIMIT REACHED" % [definition.name, rank],
+				false,
+				str(Content.STAT_HELP.speed),
+				"DETAILS"
+			)
 		elif definition.has("max_level") and rank >= int(definition.max_level):
-			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [
-				definition.name,
-				rank,
-				int(definition.max_level),
-				definition.description,
-			]
-			button.disabled = true
-			button.tooltip_text = _definition_tooltip(definition)
+			_set_upgrade_row(
+				entry,
+				"%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description],
+				true,
+				_definition_tooltip(definition),
+				"MAXED"
+			)
 		else:
 			var cost := game.get_training_cost(id)
-			button.text = "%s  •  RANK %d\n%s XP  —  %s" % [
-				definition.name,
-				rank,
-				BaseballGameState.format_cost(cost),
-				definition.description,
-			]
-			button.disabled = game.xp < cost
-			button.tooltip_text = _definition_tooltip(definition)
+			_set_upgrade_row(
+				entry,
+				"%s  •  RANK %d  •  %s XP\n%s" % [definition.name, rank, BaseballGameState.format_cost(cost), definition.description],
+				game.xp < cost,
+				_definition_tooltip(definition)
+			)
 
 	for definition in Content.PITCHES:
 		var id := str(definition.id)
-		var button: Button = pitch_buttons[id]
+		var entry: Dictionary = pitch_buttons[id]
 		var pitch_owned := id in game.unlocked_pitches
-		button.visible = (
+		_set_upgrade_row_visible(entry, (
 			_catalog_entry_is_visible(definition, pitch_owned)
 			and not (pitch_owned and bool(game.catalog_hide_purchased.pitch))
-		)
-		if not button.visible:
+		))
+		if not _upgrade_row_is_visible(entry):
 			continue
 		if id in game.unlocked_pitches:
-			button.text = "%s  •  LEARNED\n%s" % [definition.name, definition.description]
-			button.tooltip_text = _definition_tooltip(definition, ["quality", "speed"])
-			button.disabled = true
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, _definition_tooltip(definition, ["quality", "speed"]), "LEARNED")
 		elif game.highest_unlocked < int(definition.required_level):
-			_set_catalog_lock(button, definition)
+			_set_catalog_lock(entry, definition)
 		else:
-			button.text = "%s  •  %s XP\n%s" % [
-				definition.name,
-				BaseballGameState.format_cost(game.get_pitch_cost(id)),
-				definition.description,
-			]
-			button.tooltip_text = _definition_tooltip(definition, ["quality", "speed"])
-			button.disabled = not game.can_buy_pitch(id)
+			_set_upgrade_row(
+				entry,
+				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_pitch_cost(id)), definition.description],
+				not game.can_buy_pitch(id),
+				_definition_tooltip(definition, ["quality", "speed"])
+			)
 
 	for definition in Content.BALL_UPGRADES:
 		var id := str(definition.id)
-		var button: Button = ball_upgrade_buttons[id]
+		var entry: Dictionary = ball_upgrade_buttons[id]
 		var ball_owned := game.has_ball_upgrade(id)
-		button.visible = (
+		_set_upgrade_row_visible(entry, (
 			_catalog_entry_is_visible(definition, ball_owned)
 			and not (ball_owned and bool(game.catalog_hide_purchased.ball))
-		)
-		if not button.visible:
+		))
+		if not _upgrade_row_is_visible(entry):
 			continue
 		if game.has_ball_upgrade(id):
-			button.text = "%s  •  INSTALLED\n%s" % [definition.name, definition.description]
-			button.tooltip_text = _definition_tooltip(definition, ["payload"])
-			button.disabled = true
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, _definition_tooltip(definition, ["payload"]), "INSTALLED")
 		elif game.highest_unlocked < int(definition.required_level):
-			_set_catalog_lock(button, definition)
+			_set_catalog_lock(entry, definition)
 		else:
-			button.text = "%s  •  %s XP\n%s" % [
-				definition.name,
-				BaseballGameState.format_cost(game.get_ball_upgrade_cost(id)),
-				definition.description,
-			]
-			button.tooltip_text = _definition_tooltip(definition, ["payload"])
-			button.disabled = not game.can_buy_ball_upgrade(id)
+			_set_upgrade_row(
+				entry,
+				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_ball_upgrade_cost(id)), definition.description],
+				not game.can_buy_ball_upgrade(id),
+				_definition_tooltip(definition, ["payload"])
+			)
 
 	for definition in Content.MILESTONES:
 		var id := str(definition.id)
-		var button: Button = milestone_buttons[id]
+		var entry: Dictionary = milestone_buttons[id]
 		var milestone_owned := game.has_milestone(id)
-		button.visible = (
+		_set_upgrade_row_visible(entry, (
 			_catalog_entry_is_visible(definition, milestone_owned)
 			and not (milestone_owned and bool(game.catalog_hide_purchased.facility))
-		)
-		if not button.visible:
+		))
+		if not _upgrade_row_is_visible(entry):
 			continue
 		if game.has_milestone(id):
-			button.text = "%s  •  OWNED\n%s" % [definition.name, definition.description]
-			button.tooltip_text = _definition_tooltip(definition)
-			button.disabled = true
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, _definition_tooltip(definition), "OWNED")
 		elif not game.get_milestone_unmet_requirements(definition).is_empty():
-			_set_catalog_lock_text(button, definition, game.get_milestone_unmet_requirements(definition))
+			_set_catalog_lock_text(entry, definition, game.get_milestone_unmet_requirements(definition))
 		else:
-			button.text = "%s  •  %s XP\n%s" % [
-				definition.name,
-				BaseballGameState.format_cost(game.get_milestone_cost(id)),
-				definition.description,
-			]
-			button.tooltip_text = _definition_tooltip(definition)
-			button.disabled = not game.can_buy_milestone(id)
+			_set_upgrade_row(
+				entry,
+				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_milestone_cost(id)), definition.description],
+				not game.can_buy_milestone(id),
+				_definition_tooltip(definition)
+			)
 
 	for definition in Content.SCALE_UPGRADES:
 		var id := str(definition.id)
@@ -3808,16 +4092,13 @@ func _refresh_rebirth_buttons() -> void:
 	for definition in Content.GENETIC_UPGRADES:
 		var id := str(definition.id)
 		var rank := int(game.genetic_levels[id])
-		var button: Button = genetic_buttons[id]
+		var entry: Dictionary = genetic_buttons[id]
 		if not game.genetic_offer_unlocked:
-			button.text = "%s  •  LOCKED\n%s" % [definition.name, definition.description]
-			button.disabled = true
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, str(definition.description), "LOCKED")
 		elif rank >= int(definition.max_level):
-			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [definition.name, rank, int(definition.max_level), definition.description]
-			button.disabled = true
+			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description], true, str(definition.description), "MAXED")
 		else:
-			button.text = "%s  •  RANK %d  •  %d DNA\n%s" % [definition.name, rank, game.get_genetic_cost(id), definition.description]
-			button.disabled = not game.can_buy_genetic(id)
+			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d DNA\n%s" % [definition.name, rank, game.get_genetic_cost(id), definition.description], not game.can_buy_genetic(id), str(definition.description))
 
 	var potential_arcana := game.get_potential_arcana()
 	if not game.eldritch_offer_unlocked:
@@ -3836,26 +4117,21 @@ func _refresh_rebirth_buttons() -> void:
 	for definition in Content.ELDRITCH_UPGRADES:
 		var id := str(definition.id)
 		var rank := int(game.eldritch_levels[id])
-		var button: Button = eldritch_buttons[id]
+		var entry: Dictionary = eldritch_buttons[id]
 		if not game.eldritch_offer_unlocked:
-			button.text = "%s  •  LOCKED\n%s" % [definition.name, definition.description]
-			button.disabled = true
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, str(definition.description), "LOCKED")
 		elif rank >= int(definition.max_level):
-			button.text = "%s  •  RANK %d / %d  •  MAXED\n%s" % [definition.name, rank, int(definition.max_level), definition.description]
-			button.disabled = true
+			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description], true, str(definition.description), "MAXED")
 		else:
-			button.text = "%s  •  RANK %d  •  %d ARCANA\n%s" % [definition.name, rank, game.get_eldritch_cost(id), definition.description]
-			button.disabled = not game.can_buy_eldritch(id)
+			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d ARCANA\n%s" % [definition.name, rank, game.get_eldritch_cost(id), definition.description], not game.can_buy_eldritch(id), str(definition.description))
 
 	for definition in Content.DIVINE_BLESSINGS:
 		var id := str(definition.id)
-		var button: Button = divine_buttons[id]
+		var entry: Dictionary = divine_buttons[id]
 		if game.has_divine_blessing(id):
-			button.text = "%s  •  ETERNALLY OWNED\n%s" % [definition.name, definition.description]
-			button.disabled = true
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, str(definition.description), "OWNED")
 		else:
-			button.text = "%s  •  CHOOSE AFTER COSMIC VICTORY\n%s" % [definition.name, definition.description]
-			button.disabled = not game.cosmos_conquered
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], not game.cosmos_conquered, str(definition.description), "CHOOSE")
 	divine_halo_button.text = "ANOTHER HALO  •  CURRENT RANK %d\nAll XP and opponent mastery ×1.50; requires every named blessing." % game.divine_halos
 	divine_halo_button.disabled = not game.cosmos_conquered or not game.all_divine_blessings_owned()
 
@@ -4054,6 +4330,8 @@ func _on_progression_changed(message: String) -> void:
 	_refresh_interface()
 
 func _on_save_status_changed(message: String) -> void:
+	if message == "Saved":
+		_write_browser_save_mirror()
 	if is_web_build and not web_storage_persistent:
 		save_label.text = "temporary save"
 	else:

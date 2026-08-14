@@ -62,7 +62,7 @@ func _run() -> void:
 	main._configure_mobile_install_dialog("android")
 	_expect(main.mobile_install_dialog.title == "INSTALL ON ANDROID", "The Android install guide should identify its platform")
 	_expect(main.mobile_install_dialog.dialog_text.contains("INSTALL APP"), "The Android fallback should name Chrome's install action")
-	_expect(main.mobile_install_dialog.dialog_text.contains("SAVE & UPDATE"), "The Android guide should explain that installed builds stay web-updated")
+	_expect(main.mobile_install_dialog.dialog_text.contains("REVIEW UPDATE"), "The Android guide should explain that installed builds stay web-updated")
 	main._set_mobile_install_offer_visible(false)
 	_expect(not main.upgrade_panel.visible, "Upgrade panel should not squeeze the phone field")
 	_expect(not main.equipment_sidebar.visible, "Loadout sidebar should not squeeze the phone field")
@@ -73,6 +73,10 @@ func _run() -> void:
 		"The phone pitcher must appear below the batter"
 	)
 	_expect(main.outcomes_grid.columns == 4, "Phone outcomes should wrap into a readable 4-by-2 grid")
+	_expect(main.frustration_status.get_parent() == main.outcome_footer, "The phone frustration meter should occupy the strip directly beneath the outcome cards")
+	_expect(main.outcome_footer.get_index() == main.outcomes_grid.get_index() + 1, "The frustration strip should immediately follow the outcome grid")
+	_expect(main.frustration_bar.get_combined_minimum_size().x >= 55.0, "The phone frustration meter should remain legible")
+	_expect(main.frustration_label.tooltip_text.contains("no cap"), "Phone inspection should explain the uncapped logarithmic frustration bonus")
 	_expect(main.previous_button.text.is_empty() and main.next_button.text.is_empty(), "Phone opponent controls should not depend on font arrow glyphs")
 	_expect(main.previous_button.icon != null and main.next_button.icon != null, "Phone opponent controls should provide rasterized back/forward icons")
 	_expect(main.previous_button.get_combined_minimum_size().y >= 44.0 and main.next_button.get_combined_minimum_size().y >= 44.0, "Phone opponent controls should remain touch-sized")
@@ -93,13 +97,24 @@ func _run() -> void:
 	_expect(main.pitch_field.move_farther_arrow.position.x > portrait_mound.x, "The farther-mound control should not cover the cooldown meter")
 	_expect(main.pitch_field.move_closer_arrow.position.y < main.pitch_field.move_farther_arrow.position.y, "Move closer should point up above Move farther")
 	main.is_web_build = true
+	main._set_mobile_layout(false, false)
+	main._set_mobile_layout(true, true)
+	_expect(main.browser_save_slots_panel.visible, "The phone Web save overlay should expose manual save slots")
+	_expect(main.browser_save_slot_entries.size() == 3, "Installed phone builds should provide three visible manual save slots")
+	_expect(main._format_browser_save_slot(0, {}).contains("SLOT 1\nEMPTY"), "An unused phone save slot should identify itself as empty")
+	var slot_summary: String = main._format_browser_save_slot(1, {"current_opponent": 4, "xp": 123.0, "saved_at": 1_700_000_000})
+	_expect(slot_summary.contains("SLOT 2") and slot_summary.contains("LEVEL 5") and slot_summary.contains("123 XP"), "Occupied phone save slots should show level and XP at a glance")
 	main._on_browser_update_available()
 	await process_frame
 	_expect(main.update_banner.visible, "An available browser release should show the update banner")
 	_expect(main.update_banner.size.x <= 370.0, "The browser update banner should fit a 390-pixel phone")
+	_expect(main.update_banner_label.text.contains("BACK UP"), "The update banner should warn phone players before reloading")
+	_expect(main.update_now_button.text == "REVIEW", "A phone update should open a warning instead of updating immediately")
+	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.dialog_text.contains("portable backup"), "The update confirmation should recommend exporting a portable backup")
 	main._snooze_browser_update()
 	_expect(not main.update_banner.visible, "Choosing Later should dismiss the browser update banner")
 	main.is_web_build = false
+	main.browser_save_slots_panel.visible = false
 
 	main._show_mobile_overlay(main.upgrade_panel, "UPGRADES")
 	await process_frame
@@ -119,6 +134,10 @@ func _run() -> void:
 	)
 	_expect(main.mobile_upgrade_stat_labels.quality.text == "%.3f" % main.game.get_pitch_quality(), "The phone upgrade overlay should show current quality")
 	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7%", "The phone upgrade overlay should show the reduced current field-tap advance")
+	var phone_training_row: Dictionary = main.training_buttons.velocity
+	_expect((phone_training_row.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone upgrade descriptions should remain draggable scroll regions")
+	_expect((phone_training_row.button as Button).text == "BUY", "Phone purchases should use an explicit BUY control")
+	_expect((phone_training_row.button as Button).get_combined_minimum_size().y >= 44.0, "Phone upgrade BUY controls should be touch-sized")
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
 		main.mobile_tab_next_button.get_combined_minimum_size().x >= 44.0
@@ -131,8 +150,20 @@ func _run() -> void:
 		"The phone tab-back control should provide a 44-by-44 touch target"
 	)
 	_expect(main.mobile_tab_previous_button.icon != null and main.mobile_tab_next_button.icon != null, "Phone tab traversal should not depend on font arrow glyphs")
-	_expect(not main.upgrade_tabs.get_tab_bar().scrolling_enabled, "The tiny native TabBar arrows should be removed on phone layouts")
-	_expect(main.upgrade_tabs.get_tab_bar().has_theme_icon_override("decrement") and main.upgrade_tabs.get_tab_bar().has_theme_icon_override("increment"), "Tiny native overflow arrows should yield to the explicit phone tab controls")
+	_expect(not main.upgrade_tabs.get_tab_bar().visible, "The native TabBar and its tiny overflow arrows should be absent on phone layouts")
+	_expect(main.mobile_tab_label.text.begins_with("TRAIN TAB"), "The large phone navigation should identify the current tab without the native strip")
+	main.pitch_field.batter_phase = "leaving"
+	main.pitch_field.batter_phase_age = 0.5
+	main.pitch_field.batter_phase_duration = 1.0
+	main.pitch_field.batter_exit_outcome = 1
+	var portrait_exit: Dictionary = main.pitch_field._get_batter_transition_visual()
+	_expect(Vector2(portrait_exit.offset).x < 0.0 and Vector2(portrait_exit.offset).y < 0.0, "A portrait hit exit should rotate toward the phone field's upper-left foul side")
+	main.pitch_field.batter_phase = "entering"
+	main.pitch_field.batter_phase_age = 0.0
+	main.pitch_field.batter_phase_duration = 1.0
+	var portrait_entrance: Dictionary = main.pitch_field._get_batter_transition_visual()
+	_expect(Vector2(portrait_entrance.offset).x > 0.0 and Vector2(portrait_entrance.offset).y > 0.0, "A portrait replacement should enter from the opposite lower-right side")
+	main.pitch_field.batter_phase = "active"
 	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
 	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Phone upgrade catalogs should retain every per-tab Hide Purchased control")
 	for catalog_toggle in main.catalog_hide_purchased_toggles.values():
@@ -163,6 +194,7 @@ func _run() -> void:
 	await process_frame
 	_expect(main.mobile_inspection_dialog.visible, "Tapping a result card should open mobile details")
 	_expect(main.mobile_inspection_dialog.dialog_text.to_upper().contains("GRAND SLAM"), "Result-card details should reuse the desktop tooltip")
+	_expect(main.mobile_inspection_dialog.dialog_text.contains("cannot be saved"), "Phone Grand Slam details should state that no save mechanic applies")
 	_expect(
 		main.mobile_inspection_dialog.get_ok_button().get_combined_minimum_size().y >= 44.0,
 		"Mobile inspection should always have a touch-sized Close action, not %s"

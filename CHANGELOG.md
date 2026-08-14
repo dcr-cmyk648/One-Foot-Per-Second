@@ -9,10 +9,19 @@
 - The browser always shows all 101 achievement slots, but undiscovered subjects are represented only as `HIDDEN ACHIEVEMENT`. Their real name, description, requirement, progress, future tier heading, and tooltip remain anonymous until encountered or completed.
 - Achievement toasts now put the exact completed condition in smaller text beneath the achievement name.
 - Reduced active field-tap power to one third of its former value: 1.7% initially and 2.7% with maximum Field Hustle. Taps explicitly accelerate recovery, immutable flight, and the full next-batter handoff while keeping the authoritative and visible lineup timers synchronized.
+- Corrected Grand Slam's desktop and phone inspection text to say explicitly that no fielder, clone, portal, or blessing can save it; Home Runs retain ordinary hit-save behavior.
+- Removed the native phone TabBar entirely, including its persistent miniature overflow arrows. The large accessible controls now show the current tab and position themselves.
+- Rotated batter exits and entrances with the portrait field so hit batters leave along the correct phone foul side and replacements approach from the opposite side.
+- Every called Strike now banks one count-share of opponent mastery even before the strikeout is complete. Mastery immediately improves the odds against that exact batter on an uncapped logarithmic curve; authored mastery targets increased by 12% to preserve the campaign's intended length.
+- Added an uncapped logarithmic Frustration bonus that grows during a strikeout drought, resets on a completed strikeout, and appears in the compact strip beneath the outcome cards. Its asymptotic meter communicates diminishing returns without pretending the bonus has a hard cap.
+- Rebuilt catalog entries as passive scrollable descriptions with separate touch-sized Buy buttons, preventing a phone drag from purchasing an upgrade while keeping the spend action obvious.
+- Retuned generated human identities toward ordinary names, initials, and family names, reserving ornate epithets and increasingly strange structures for later eras while preserving authored bosses.
+- Added an explicit browser-update review warning recommending a portable Export first, a synchronous secondary save mirror, a longer IndexedDB flush window, and automatic recovery when the primary browser filesystem unexpectedly starts empty.
+- Added three manual save slots to the installed phone Web interface. Each slot shows its level, spendable XP, and timestamp and can be saved or staged for confirmation without replacing portable Export/Load.
 - Added persistent lifetime counters and peak records for active field taps, saved hits, pitch speed, mound distance, and loot rarity. Save version 16 preserves clean-run eligibility, migrates older runs, and silently backfills only achievements their saved history can prove.
 - Added a saved per-tab `HIDE PURCHASED` toggle to Pitch, Ball, and Facility. Each filter hides only completed one-time entries in its own catalog while preserving locked and available options.
 - Extended the full regression and interface matrix to validate catalog size and uniqueness, exact additive XP math, prestige permanence, secret reveal rules, save migration, anonymous desktop/phone cards, touch-sized filters, and unlock toasts.
-- Re-audited no-loot pacing with achievements active: the first human lifetime reaches Xylophax in roughly 37 hours 30 minutes, and the complete deterministic multiverse reaches cosmic victory in roughly 63 days 18 hours.
+- Re-audited no-loot pacing with achievements, per-Strike adaptation, and Frustration active: the first human lifetime reaches Xylophax in roughly 41 hours 30 minutes, and the complete deterministic multiverse reaches cosmic victory in roughly 58 days 15 hours.
 
 ## 0.10.9 — The pants have a nametag
 
