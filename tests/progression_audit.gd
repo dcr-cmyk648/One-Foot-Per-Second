@@ -71,7 +71,7 @@ func _audit_encounter_profiles() -> void:
 	_max_genetics(alien)
 	alien.highest_unlocked = Content.ALIEN_FINAL_INDEX
 	alien.current_opponent = Content.ALIEN_FINAL_INDEX
-	alien.selected_distance_index = alien.get_max_distance_index()
+	alien._sync_distance_to_current_opponent()
 	_print_profile("Genetic ace vs Solar Champ", alien)
 	_expect(alien.get_strikes_required() == 6, "Alien final should be nine base strikes compressed to six")
 	_expect(alien.get_strikeout_chance_per_at_bat() > 0.01, "The alien final is mathematically impractical at its layer ceiling")
@@ -87,7 +87,7 @@ func _audit_encounter_profiles() -> void:
 	for opponent_index in [40, 41, 42, 43, 44]:
 		elder.highest_unlocked = opponent_index
 		elder.current_opponent = opponent_index
-		elder.selected_distance_index = elder.get_max_distance_index()
+		elder._sync_distance_to_current_opponent()
 		_print_profile("Eldritch L%02d" % (opponent_index + 1), elder)
 		_expect(elder.get_strikeout_chance_per_at_bat() > 0.001, "Eldritch level %d is mathematically impractical at its layer ceiling" % (opponent_index + 1))
 

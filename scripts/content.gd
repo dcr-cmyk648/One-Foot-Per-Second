@@ -168,7 +168,7 @@ const STAT_HELP := {
 	"lineup": "Lineup time is the universal delay before any replacement batter reaches the plate.",
 	"hit_delay": "Hit delay scales only the extra lineup penalty caused by a fair hit; it does not shorten the universal lineup time.",
 	"calling": "Calling biases the random arsenal toward stronger learned pitch types without removing weaker ones.",
-	"distance": "Distance control reduces the added batter threat from moving the mound farther away.",
+	"distance": "Distance control reduces the added batter threat from the range assigned to the current opponent level.",
 	"offline": "Offline efficiency is the share of normal strikeout XP deposited while the game is closed or suspended.",
 	"tap": "Tapping the open field advances the active pitch, flight, or lineup timer. Taps may supply at most half of one timer; the rest must pass normally.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
@@ -773,7 +773,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 0,
 		"visual_size": 1.00,
 		"effects": {"speed": 1.00, "quality": 0.00, "recovery": 1.00},
-		"description": "Toddler penalties vs. a Regular Ol’ Guy: Speed ×0.44; Quality −0.30; Recovery ×0.70.",
+		"description": "Toddler penalties vs. a Regular Ol’ Guy: Speed ×0.73; Quality −0.15; Recovery ×0.86.",
 	},
 	{
 		"id": "little_kid",
@@ -783,8 +783,8 @@ const BODY_GROWTH_STAGES := [
 		"cost": 3.0,
 		"required_level": 0,
 		"visual_size": 1.12,
-		"effects": {"speed": 1.25, "quality": 0.08, "recovery": 1.15},
-		"description": "Speed ×1.25; Quality +0.08; Recovery ×1.15.",
+		"effects": {"speed": 1.08, "quality": 0.025, "recovery": 1.04},
+		"description": "Speed ×1.08; Quality +0.025; Recovery ×1.04.",
 	},
 	{
 		"id": "big_kid",
@@ -794,8 +794,8 @@ const BODY_GROWTH_STAGES := [
 		"cost": 500.0,
 		"required_level": 5,
 		"visual_size": 1.21,
-		"effects": {"speed": 1.18, "quality": 0.06, "recovery": 1.08},
-		"description": "Speed ×1.18; Quality +0.06; Recovery ×1.08.",
+		"effects": {"speed": 1.07, "quality": 0.025, "recovery": 1.035},
+		"description": "Speed ×1.07; Quality +0.025; Recovery ×1.035.",
 	},
 	{
 		"id": "teenager",
@@ -805,8 +805,8 @@ const BODY_GROWTH_STAGES := [
 		"cost": 100000.0,
 		"required_level": 11,
 		"visual_size": 1.34,
-		"effects": {"speed": 1.18, "quality": 0.06, "recovery": 1.06},
-		"description": "Speed ×1.18; Quality +0.06; Recovery ×1.06.",
+		"effects": {"speed": 1.07, "quality": 0.03, "recovery": 1.03},
+		"description": "Speed ×1.07; Quality +0.03; Recovery ×1.03.",
 	},
 	{
 		"id": "young_adult",
@@ -816,8 +816,8 @@ const BODY_GROWTH_STAGES := [
 		"cost": 25000000.0,
 		"required_level": 18,
 		"visual_size": 1.47,
-		"effects": {"speed": 1.16, "quality": 0.05, "recovery": 1.05},
-		"description": "Speed ×1.16; Quality +0.05; Recovery ×1.05.",
+		"effects": {"speed": 1.06, "quality": 0.03, "recovery": 1.025},
+		"description": "Speed ×1.06; Quality +0.03; Recovery ×1.025.",
 	},
 	{
 		"id": "regular_guy",
@@ -827,8 +827,8 @@ const BODY_GROWTH_STAGES := [
 		"cost": 10000000000.0,
 		"required_level": 24,
 		"visual_size": 1.60,
-		"effects": {"speed": 1.12, "quality": 0.05, "recovery": 1.03},
-		"description": "Speed ×1.12; Quality +0.05; Recovery ×1.03.",
+		"effects": {"speed": 1.05, "quality": 0.04, "recovery": 1.02},
+		"description": "Speed ×1.05; Quality +0.04; Recovery ×1.02.",
 	},
 ]
 

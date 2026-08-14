@@ -88,6 +88,7 @@ var rebirth_tab: Control
 var achievement_tab: Control
 var achievement_count_label: Label
 var achievement_bonus_label: Label
+var achievement_hide_achieved_toggle: CheckButton
 var achievement_cards := {}
 var achievement_section_headings := {}
 var achievement_last_revision := -1
@@ -970,6 +971,7 @@ func _apply_development_arguments() -> void:
 	_clear_achievement_toasts()
 	game.highest_unlocked = 34 if preview == "alien" else (43 if preview == "eldritch" else 44)
 	game.current_opponent = 33 if preview == "alien" else game.highest_unlocked
+	game._sync_distance_to_current_opponent()
 	game._reset_batter_identity()
 	game.genetic_offer_unlocked = true
 	game.genetic_rebirths = 1
@@ -991,9 +993,6 @@ func _apply_development_arguments() -> void:
 	if preview != "alien":
 		for definition in Content.ELDRITCH_UPGRADES:
 			game.eldritch_levels[definition.id] = mini(int(definition.max_level), 3) if preview == "eldritch" else int(definition.max_level)
-	game.selected_distance_index = game.get_max_distance_index()
-	if preview == "alien":
-		game.selected_distance_index = 9
 	for definition in Content.PITCHES:
 		if int(definition.required_level) <= game.highest_unlocked and str(definition.id) not in game.unlocked_pitches:
 			game.unlocked_pitches.append(str(definition.id))
@@ -2038,6 +2037,14 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 		mobile_tab_label_card.custom_minimum_size.y = 48.0 if mobile_layout else 40.0
 	for catalog_toggle in catalog_hide_purchased_toggles.values():
 		(catalog_toggle as CheckButton).custom_minimum_size.y = 44.0 if mobile_layout else 0.0
+	if achievement_hide_achieved_toggle != null:
+		achievement_hide_achieved_toggle.custom_minimum_size.y = 44.0 if mobile_layout else 0.0
+	for achievement_entry_value in achievement_cards.values():
+		var achievement_entry: Dictionary = achievement_entry_value
+		(achievement_entry.details_button as Button).custom_minimum_size = Vector2(
+			78.0,
+			44.0 if mobile_layout else 36.0
+		)
 	for collection in [training_buttons, pitch_buttons, ball_upgrade_buttons, milestone_buttons, body_growth_buttons, genetic_buttons, eldritch_buttons, divine_buttons]:
 		for entry_value in collection.values():
 			var entry: Dictionary = entry_value
@@ -2299,6 +2306,9 @@ func _build_distance_status(parent: Control) -> void:
 	distance_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	distance_label.add_theme_font_size_override("font_size", 13)
 	distance_label.add_theme_color_override("font_color", COLOR_GOLD)
+	distance_label.tooltip_text = "This opponent level sets the active range. Distance Control reduces its added threat; released balls keep their original range."
+	distance_label.mouse_default_cursor_shape = Control.CURSOR_HELP
+	_enable_mobile_inspection(distance_label, "Level range")
 	parent.add_child(distance_label)
 
 func _build_equipment_sidebar(parent: Control) -> void:
@@ -3353,7 +3363,7 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 			"id": "farm",
 			"name": "Auto-scout",
 			"upgrade": "predator_scouting",
-			"description": "Farm the unlocked opponent and range with the best estimated XP/sec.",
+			"description": "Farm the unlocked opponent with the best estimated XP/sec at that level's assigned range.",
 		},
 	]
 	for definition in automation_definitions:
@@ -3452,6 +3462,14 @@ func _build_achievement_tab(tabs: TabContainer) -> void:
 	explainer.add_theme_font_size_override("font_size", 12)
 	explainer.add_theme_color_override("font_color", COLOR_MUTED)
 	content.add_child(explainer)
+	achievement_hide_achieved_toggle = CheckButton.new()
+	achievement_hide_achieved_toggle.name = "HideAchieved"
+	achievement_hide_achieved_toggle.text = "HIDE ACHIEVED"
+	achievement_hide_achieved_toggle.tooltip_text = "Hide completed achievements while leaving every unfinished and hidden slot visible."
+	achievement_hide_achieved_toggle.add_theme_font_size_override("font_size", 12)
+	achievement_hide_achieved_toggle.add_theme_color_override("font_color", COLOR_MUTED)
+	achievement_hide_achieved_toggle.toggled.connect(_toggle_hide_achieved)
+	content.add_child(achievement_hide_achieved_toggle)
 
 	for tier_value in Content.ACHIEVEMENT_TIER_ORDER:
 		var tier := str(tier_value)
@@ -3466,36 +3484,83 @@ func _build_achievement_tab(tabs: TabContainer) -> void:
 				continue
 			var panel := PanelContainer.new()
 			panel.custom_minimum_size.y = 104.0
+			# Achievement copy is passive so swipes reach the ScrollContainer. The
+			# one bounded Details button below is the card's only tap target.
+			panel.mouse_filter = Control.MOUSE_FILTER_PASS
 			panel.add_theme_stylebox_override("panel", _achievement_card_style("hidden"))
 			content.add_child(panel)
+			var row := HBoxContainer.new()
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_theme_constant_override("separation", 8)
+			row.mouse_filter = Control.MOUSE_FILTER_PASS
+			panel.add_child(row)
 			var stack := VBoxContainer.new()
+			stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			stack.add_theme_constant_override("separation", 2)
-			panel.add_child(stack)
+			stack.mouse_filter = Control.MOUSE_FILTER_PASS
+			row.add_child(stack)
 			var title := Label.new()
 			title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			title.add_theme_font_size_override("font_size", 15)
+			title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			stack.add_child(title)
 			var description := Label.new()
 			description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			description.add_theme_font_size_override("font_size", 12)
 			description.add_theme_color_override("font_color", COLOR_MUTED)
+			description.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			stack.add_child(description)
 			var progress := ProgressBar.new()
 			progress.show_percentage = false
 			progress.custom_minimum_size.y = 6.0
+			progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			stack.add_child(progress)
 			var footer := Label.new()
 			footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			footer.add_theme_font_size_override("font_size", 11)
 			footer.add_theme_color_override("font_color", COLOR_GOLD)
+			footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			stack.add_child(footer)
+			var details_button := Button.new()
+			details_button.text = "DETAILS"
+			details_button.custom_minimum_size = Vector2(78.0, 44.0)
+			details_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			details_button.focus_mode = Control.FOCUS_NONE
+			details_button.add_theme_font_size_override("font_size", 11)
+			details_button.pressed.connect(_show_achievement_details.bind(str(definition.id)))
+			row.add_child(details_button)
 			achievement_cards[str(definition.id)] = {
 				"panel": panel,
 				"title": title,
 				"description": description,
 				"progress": progress,
 				"footer": footer,
+				"details_button": details_button,
 			}
+
+func _show_achievement_details(id: String) -> void:
+	if mobile_inspection_dialog == null:
+		return
+	var definition := Content.achievement_by_id(id)
+	if definition.is_empty():
+		return
+	var revealed := game.is_achievement_information_revealed(definition)
+	mobile_inspection_dialog.title = (
+		str(definition.name).to_upper() if revealed else "HIDDEN ACHIEVEMENT"
+	)
+	if not revealed:
+		mobile_inspection_dialog.dialog_text = "No details are available yet."
+	else:
+		var progress := game.get_achievement_progress(definition)
+		mobile_inspection_dialog.dialog_text = "%s\n\n%s  •  PERMANENT XP +1%%" % [
+			str(definition.description),
+			"COMPLETE" if game.has_achievement(id) else str(progress.text),
+		]
+	mobile_inspection_dialog.popup_centered_clamped(Vector2i(360, 245), 0.94)
+	mobile_inspection_dialog.get_ok_button().set_deferred(
+		"custom_minimum_size",
+		Vector2(100.0, 44.0)
+	)
 
 func _achievement_card_style(state: String) -> StyleBoxFlat:
 	var style := _compact_panel_style(10.0, 7.0, 6)
@@ -4025,8 +4090,8 @@ func _refresh_guide_text(
 			+ "the full twelve-second humiliation. Even a clean strikeout takes three seconds for the next batter."
 		),
 		(
-			"The three diamonds beside a human batter are the remaining strikes. Move the mound farther "
-			+ "from the plate for a larger XP multiplier and a harder batter. At the opening 3-foot range, "
+			"The three diamonds beside a human batter are the remaining strikes. Each opponent level "
+			+ "sets its own distance, XP multiplier, and added range threat. At the opening 3-foot range, "
 			+ "the 1 ft/s lob genuinely takes three seconds to arrive; extreme travel times compress only "
 			+ "on screen, while Stats keeps the true physical time."
 		),
@@ -4121,6 +4186,7 @@ func _refresh_achievement_tab(force := false) -> void:
 		int(round(game.get_achievement_xp_bonus() * 100.0)),
 		game.get_achievement_xp_multiplier(),
 	]
+	achievement_hide_achieved_toggle.set_pressed_no_signal(game.achievement_hide_achieved)
 	for tier_value in Content.ACHIEVEMENT_TIER_ORDER:
 		var tier := str(tier_value)
 		var heading: Label = achievement_section_headings[tier]
@@ -4149,8 +4215,12 @@ func _refresh_achievement_tab(force := false) -> void:
 		var description: Label = entry.description
 		var progress_bar: ProgressBar = entry.progress
 		var footer: Label = entry.footer
+		var details_button: Button = entry.details_button
 		var unlocked := game.has_achievement(id)
 		var revealed := game.is_achievement_information_revealed(definition)
+		panel.visible = not (unlocked and game.achievement_hide_achieved)
+		if not panel.visible:
+			continue
 		var state := "complete" if unlocked else ("revealed" if revealed else "hidden")
 		if str(panel.get_meta("achievement_state", "")) != state:
 			panel.set_meta("achievement_state", state)
@@ -4162,6 +4232,7 @@ func _refresh_achievement_tab(force := false) -> void:
 			progress_bar.visible = false
 			footer.text = "???"
 			panel.tooltip_text = "Hidden Achievement\nNo details are available yet."
+			details_button.tooltip_text = panel.tooltip_text
 			continue
 		var achievement_progress := game.get_achievement_progress(definition)
 		title.text = "%s%s" % ["✓  " if unlocked else "", str(definition.name)]
@@ -4178,6 +4249,7 @@ func _refresh_achievement_tab(force := false) -> void:
 			str(definition.description),
 			footer.text,
 		]
+		details_button.tooltip_text = panel.tooltip_text
 
 func _refresh_interface() -> void:
 	if game == null or pitch_field == null:
@@ -4235,13 +4307,13 @@ func _refresh_interface() -> void:
 			next_button.text = "NEXT BATTER LOCKED"
 	var distance := game.get_current_distance()
 	distance_label.text = (
-		"%s  •  XP ×%s  •  THREAT +%.2f" % [
+		"LEVEL RANGE  •  %s  •  XP ×%s  •  THREAT +%.2f" % [
 			str(distance.label),
 			BaseballGameState.format_number(game.get_distance_xp_multiplier()),
 			game.get_distance_difficulty(),
 		]
 		if mobile_layout
-		else "%s  •  %s  •  XP ×%s  •  BATTER THREAT +%.2f" % [
+		else "LEVEL RANGE  •  %s  •  %s  •  XP ×%s  •  BATTER THREAT +%.2f" % [
 			str(distance.name),
 			str(distance.label),
 			BaseballGameState.format_number(game.get_distance_xp_multiplier()),
@@ -5280,6 +5352,10 @@ func _toggle_automation(enabled: bool, id: String) -> void:
 func _toggle_catalog_hide_purchased(hidden: bool, catalog_id: String) -> void:
 	if game.set_catalog_hide_purchased(catalog_id, hidden):
 		_refresh_purchase_buttons()
+
+func _toggle_hide_achieved(hidden: bool) -> void:
+	game.achievement_hide_achieved = hidden
+	_refresh_achievement_tab(true)
 
 func _request_genetic_rebirth() -> void:
 	if game.get_potential_dna() <= 0:

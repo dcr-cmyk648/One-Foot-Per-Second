@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.2 — The mound has a schedule now
+
+- Replaced manual mound optimization with one authored range per opponent level. Selecting a batter now sets the thematic distance automatically, while an already-released pitch retains its exact original distance, speed, and flight time.
+- Removed the obsolete field range arrows on desktop and phone. The compact range readout now identifies itself as `LEVEL RANGE`, and distance-gated Facilities unlock when campaign progress first reaches their required range.
+- Rebuilt achievement cards as passive scroll surfaces with a single bounded Details button. Added a saved, touch-sized Hide Achieved filter without concealing unfinished or anonymous hidden slots.
+- Made XP totals keep roughly three useful digits after suffixes begin, so values such as `1.2M` and `1.8M` visibly differ while costs remain rounded.
+- Reduced the close-up character rendering ceiling so the pitcher and toddler remain clear of home plate at three feet while preserving the pitcher's initial 50% size advantage and later biological growth.
+- Retuned the optional body track from roughly ×2.46 cumulative adult speed to ×1.38, with proportionately gentler quality and recovery gains. Growth remains useful, but no longer produces a large surprise acceleration when an older save infers its current age.
+- Re-audited the no-loot campaign under level-assigned ranges: the first human lifetime now takes about 43 hours and the complete deterministic multiverse about 63 days 21 hours.
+- Kept save schema 18. Existing saves retain every resource and released-pitch snapshot; the selected opponent simply supplies the new authoritative range after loading.
+
 ## 0.13.1 — The title card has seen things
 
 - Added a responsive title screen with Resume Game, Start New Game, and Import Save. Resume opens the autosave and three device-local manual slots; starting over keeps those slots and exported backups behind the existing typed `RESET` safeguard.

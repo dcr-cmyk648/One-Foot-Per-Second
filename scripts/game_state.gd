@@ -184,6 +184,7 @@ var catalog_hide_purchased := {
 	"ball": false,
 	"facility": false,
 }
+var achievement_hide_achieved := false
 var milestone_effect_cache_count := -1
 var milestone_effect_cache := {}
 var opponent_mastery: Array[float] = []
@@ -566,6 +567,7 @@ func reset_fresh() -> void:
 		"ball": false,
 		"facility": false,
 	}
+	achievement_hide_achieved = false
 	_invalidate_milestone_effect_cache()
 	result_totals = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	lifetime_strikeouts = 0.0
@@ -766,24 +768,21 @@ func _run_automation(elapsed: float) -> void:
 		and batter_cooldown_remaining <= 0.0
 	):
 		var best_opponent := current_opponent
-		var best_distance := selected_distance_index
 		var best_rate := get_estimated_xp_per_second(current_opponent)
 		var original_opponent := current_opponent
 		var original_distance := selected_distance_index
 		for opponent_index in highest_unlocked + 1:
 			current_opponent = opponent_index
-			for distance_index in get_max_distance_index() + 1:
-				selected_distance_index = distance_index
-				var candidate_rate := get_estimated_xp_per_second(opponent_index)
-				if candidate_rate > best_rate * 1.02:
-					best_rate = candidate_rate
-					best_opponent = opponent_index
-					best_distance = distance_index
+			selected_distance_index = get_prescribed_distance_index(opponent_index)
+			var candidate_rate := get_estimated_xp_per_second(opponent_index)
+			if candidate_rate > best_rate * 1.02:
+				best_rate = candidate_rate
+				best_opponent = opponent_index
 		current_opponent = original_opponent
 		selected_distance_index = original_distance
-		if best_opponent != current_opponent or best_distance != selected_distance_index:
+		if best_opponent != current_opponent:
 			current_opponent = best_opponent
-			selected_distance_index = best_distance
+			_sync_distance_to_current_opponent()
 			_clear_pitch_cycle()
 			plate_strikes = 0
 			plate_balls = 0
@@ -792,7 +791,7 @@ func _run_automation(elapsed: float) -> void:
 			consecutive_home_runs = 0
 			progression_changed.emit(
 				"Auto-scout moved to %s at %s."
-				% [opponents[best_opponent].name, Content.DISTANCE_TIERS[best_distance].label]
+				% [opponents[best_opponent].name, get_current_distance().label]
 			)
 
 func simulate_offline(seconds: float) -> Dictionary:
@@ -2806,31 +2805,30 @@ func get_current_opponent() -> Dictionary:
 func get_current_distance() -> Dictionary:
 	return Content.DISTANCE_TIERS[clampi(selected_distance_index, 0, Content.DISTANCE_TIERS.size() - 1)]
 
-func get_max_distance_index() -> int:
+func get_prescribed_distance_index(opponent_index: int = current_opponent) -> int:
+	var bounded_opponent := clampi(opponent_index, 0, opponents.size() - 1)
 	var result := 0
 	for index in Content.DISTANCE_TIERS.size():
-		if highest_unlocked >= int(Content.DISTANCE_TIERS[index].required_level):
+		if bounded_opponent >= int(Content.DISTANCE_TIERS[index].required_level):
 			result = index
 	return result
 
-func set_distance_index(index: int) -> bool:
-	var bounded := clampi(index, 0, get_max_distance_index())
-	if bounded == selected_distance_index:
+func get_max_distance_index() -> int:
+	return get_prescribed_distance_index(highest_unlocked)
+
+func _sync_distance_to_current_opponent() -> bool:
+	var prescribed := get_prescribed_distance_index(current_opponent)
+	if prescribed == selected_distance_index:
 		return false
-	selected_distance_index = bounded
-	lifetime_max_distance_index = maxi(lifetime_max_distance_index, bounded)
-	consecutive_home_runs = 0
-	var distance := get_current_distance()
-	progression_changed.emit(
-		"PITCHING DISTANCE: %s • XP ×%s • threat +%.2f"
-		% [
-			distance.label,
-			BaseballGameState.format_number(float(distance.xp_multiplier)),
-			get_distance_difficulty(),
-		]
-	)
-	check_achievements()
+	selected_distance_index = prescribed
+	lifetime_max_distance_index = maxi(lifetime_max_distance_index, prescribed)
 	return true
+
+func set_distance_index(_index: int) -> bool:
+	# Range is campaign-authored rather than a permanent "move closer for more
+	# income" optimization. Retain this method as a safe compatibility shim for
+	# older callers and imported saves, but always restore the level's range.
+	return _sync_distance_to_current_opponent()
 
 func get_distance_xp_multiplier_for_index(distance_index: int = -1) -> float:
 	var bounded := selected_distance_index if distance_index < 0 else clampi(
@@ -2892,6 +2890,7 @@ func set_current_opponent(index: int) -> bool:
 	if index < 0 or index > highest_unlocked or index == current_opponent:
 		return false
 	current_opponent = index
+	_sync_distance_to_current_opponent()
 	consecutive_home_runs = 0
 	plate_strikes = 0
 	plate_balls = 0
@@ -2935,6 +2934,7 @@ func _check_opponent_unlock() -> String:
 	var message := "UNLOCKED: %s" % opponents[highest_unlocked].name
 	if auto_advance_enabled and has_genetic_upgrade("migratory_instinct"):
 		current_opponent = highest_unlocked
+		_sync_distance_to_current_opponent()
 		plate_strikes = 0
 		plate_balls = 0
 		_reset_batter_identity()
@@ -3134,9 +3134,14 @@ func get_milestone_unmet_requirements(definition: Dictionary) -> Array[String]:
 	if required_strikeouts > 0.0 and current_body_strikeouts + 0.000001 < required_strikeouts:
 		requirements.append("RECORD %s STRIKEOUTS" % BaseballGameState.format_number(required_strikeouts, 0))
 	var required_distance := int(definition.get("required_distance_index", -1))
-	if required_distance >= 0 and selected_distance_index < required_distance:
+	if required_distance >= 0:
 		var bounded := clampi(required_distance, 0, Content.DISTANCE_TIERS.size() - 1)
-		requirements.append("USE THE %s MOUND" % str(Content.DISTANCE_TIERS[bounded].label).to_upper())
+		var range_level := int(Content.DISTANCE_TIERS[bounded].required_level)
+		if highest_unlocked < range_level:
+			requirements.append(
+				"REACH LEVEL %d FOR %s RANGE"
+				% [range_level + 1, str(Content.DISTANCE_TIERS[bounded].label).to_upper()]
+			)
 	return requirements
 
 func is_milestone_unlocked(id: String) -> bool:
@@ -3741,6 +3746,7 @@ func to_save_data() -> Dictionary:
 		"purchased_milestones": purchased_milestones,
 		"unlocked_achievements": unlocked_achievements,
 		"catalog_hide_purchased": catalog_hide_purchased,
+		"achievement_hide_achieved": achievement_hide_achieved,
 		"opponent_mastery": opponent_mastery,
 		"result_totals": result_totals,
 	}
@@ -3801,11 +3807,10 @@ func apply_save_data(data: Dictionary) -> void:
 		batter_cooldown_remaining > 0.0
 	))
 	_refresh_batter_variant()
-	selected_distance_index = clampi(
-		int(data.get("selected_distance_index", 0)),
-		0,
-		get_max_distance_index()
-	)
+	# v0.13.2 assigns the mound from the selected opponent. Old manual choices
+	# remain represented by lifetime_max_distance_index, while any released pitch
+	# restores its own immutable distance snapshot below.
+	selected_distance_index = get_prescribed_distance_index(current_opponent)
 	dna = maxi(int(data.get("dna", data.get("rings", 0))), 0)
 	arcana = maxi(int(data.get("arcana", 0)), 0)
 	genetic_rebirths = maxi(int(data.get("genetic_rebirths", data.get("seasons_completed", 0))), 0)
@@ -3836,6 +3841,7 @@ func apply_save_data(data: Dictionary) -> void:
 	var saved_catalog_filters: Dictionary = data.get("catalog_hide_purchased", {})
 	for catalog_id in catalog_hide_purchased.keys():
 		catalog_hide_purchased[catalog_id] = bool(saved_catalog_filters.get(catalog_id, false))
+	achievement_hide_achieved = bool(data.get("achievement_hide_achieved", false))
 
 	var saved_training: Dictionary = data.get("training_levels", {})
 	if saved_version < 12:
@@ -4206,10 +4212,38 @@ static func format_number(value: float, decimals: int = 2) -> String:
 	return "%s%.3fe%d" % ["-" if value < 0.0 else "", mantissa, exponent]
 
 static func format_xp_total(value: float) -> String:
-	# Fractions matter while the first point is being earned. Once the balance is
-	# spendable, a rounded whole number is quicker to read and matches whole-XP
-	# upgrade prices.
-	return format_number(value, 0) if absf(value) >= 1.0 else format_number(value, 2)
+	# Fractions matter while the first point is being earned and whole XP remains
+	# clearest before suffixes begin. Compact totals keep roughly three useful
+	# digits, so spending 400K from a 2M balance is visibly reflected.
+	var absolute := absf(value)
+	if absolute < 1.0:
+		return format_number(value, 2)
+	if absolute < 1000.0:
+		return "%.0f" % value
+	if absolute >= MAX_NUMBER or is_inf(value):
+		return "1e280+"
+	var suffixes := ["K", "M", "B", "T"]
+	var scaled := absolute
+	var suffix_index := -1
+	while scaled >= 1000.0 and suffix_index < suffixes.size() - 1:
+		scaled /= 1000.0
+		suffix_index += 1
+	if absolute < 1.0e15:
+		var decimal_places := 2 if scaled < 10.0 else (1 if scaled < 100.0 else 0)
+		var rounded_scaled := snappedf(scaled, pow(10.0, -decimal_places))
+		if rounded_scaled >= 1000.0 and suffix_index < suffixes.size() - 1:
+			rounded_scaled /= 1000.0
+			suffix_index += 1
+			decimal_places = 2
+		var rendered := ("%." + str(decimal_places) + "f") % rounded_scaled
+		if "." in rendered:
+			rendered = rendered.trim_suffix("0").trim_suffix("0").trim_suffix(".")
+		return "%s%s%s" % ["-" if value < 0.0 else "", rendered, suffixes[suffix_index]]
+	var exponent := int(floor(log(absolute) / log(10.0)))
+	var mantissa := absolute / pow(10.0, exponent)
+	var rendered_mantissa := "%.2f" % mantissa
+	rendered_mantissa = rendered_mantissa.trim_suffix("0").trim_suffix("0").trim_suffix(".")
+	return "%s%se%d" % ["-" if value < 0.0 else "", rendered_mantissa, exponent]
 
 static func format_speed(feet_per_second: float) -> String:
 	if feet_per_second < 88.0:

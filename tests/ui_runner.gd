@@ -20,6 +20,7 @@ func _run() -> void:
 	main.set_process(false)
 	main.pitch_field.set_process(false)
 	main.game.reset_fresh()
+	main._clear_achievement_toasts()
 	main.offline_progress_dialog.hide()
 	main._refresh_interface()
 	await process_frame
@@ -91,6 +92,10 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("ACHIEVE", false, false) != null, "Achievements should have their own tab")
 	_expect(main.header_title.text == "NO HITTER", "The visible game title should use the new name")
 	_expect(main.achievement_cards.size() == 101, "The achievement tab should render all 101 slots")
+	_expect(main.achievement_hide_achieved_toggle != null, "Achievements should provide their own Hide Achieved filter")
+	var first_achievement_card: Dictionary = main.achievement_cards.first_pitch
+	_expect((first_achievement_card.details_button as Button).text == "DETAILS", "Achievement cards should delimit their only inspection action")
+	_expect((first_achievement_card.panel as PanelContainer).mouse_filter == Control.MOUSE_FILTER_PASS, "Passive achievement cards should pass drag input through for scrolling")
 	_expect(main.achievement_count_label.text == "0 / 101 UNLOCKED", "The fresh achievement summary should disclose the complete catalog count")
 	var hidden_genetic_card: Dictionary = main.achievement_cards.genetic_offer
 	_expect((hidden_genetic_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Future achievements should use anonymous placeholder titles")
@@ -99,6 +104,14 @@ func _run() -> void:
 	_expect((hidden_no_hitter_card.title as Label).text == "HIDDEN ACHIEVEMENT", "The namesake secret achievement must remain anonymous before completion")
 	_expect(not (hidden_no_hitter_card.description as Label).text.contains("Octathulhu"), "The namesake secret achievement must not leak its campaign condition")
 	_expect(not (main.achievement_section_headings.genetic as Label).visible, "A hidden achievement group must not leak its tier heading")
+	main.game.unlocked_achievements.append("first_pitch")
+	main.game.achievement_revision += 1
+	main._toggle_hide_achieved(true)
+	_expect(not (first_achievement_card.panel as Control).visible, "Hide Achieved should remove completed cards without hiding unfinished slots")
+	main._toggle_hide_achieved(false)
+	main.game.unlocked_achievements.erase("first_pitch")
+	main.game.achievement_revision += 1
+	main._refresh_achievement_tab(true)
 	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Every one-time purchase catalog should have its own Hide Purchased toggle")
 	main._toggle_catalog_hide_purchased(true, "pitch")
 	_expect(not (main.pitch_buttons.dead_fish.container as Control).visible, "Hide Purchased should remove learned pitches from only their catalog")

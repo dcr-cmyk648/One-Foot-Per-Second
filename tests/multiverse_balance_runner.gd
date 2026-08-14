@@ -25,9 +25,7 @@ func _initialize() -> void:
 		if _perform_story_or_strategy_reset():
 			continue
 		if game.current_opponent != game.highest_unlocked:
-			game.current_opponent = game.highest_unlocked
-			game._reset_batter_identity()
-		game.selected_distance_index = _best_xp_distance()
+			game.set_current_opponent(game.highest_unlocked)
 		var step := _simulation_step()
 		game.simulate_active_time(step)
 		elapsed += step
@@ -202,19 +200,6 @@ func _purchase_training() -> void:
 			return
 		game.buy_training(cheapest_id)
 		purchase_count += 1
-
-func _best_xp_distance() -> int:
-	var original := game.selected_distance_index
-	var best_index := 0
-	var best_rate := -1.0
-	for index in game.get_max_distance_index() + 1:
-		game.selected_distance_index = index
-		var rate := game.get_estimated_xp_per_second(game.current_opponent)
-		if rate > best_rate:
-			best_rate = rate
-			best_index = index
-	game.selected_distance_index = original
-	return best_index
 
 func _simulation_step() -> float:
 	if elapsed < 6.0 * 60.0 * 60.0:

@@ -99,13 +99,7 @@ func _run() -> void:
 	)
 	var portrait_arm: Dictionary = main.pitch_field._get_throw_arm_geometry(0, 1, 0.0)
 	_expect(Vector2(portrait_arm.end).x > 0.0, "A right-handed phone pitcher should rest the arm on screen-right")
-	var portrait_mound: Vector2 = main.pitch_field.get_pitcher_position()
-	_expect(main.pitch_field.move_closer_arrow.text.is_empty(), "Phone mound controls should use icons instead of unsupported arrow glyphs")
-	_expect(main.pitch_field.move_closer_arrow.icon != null and main.pitch_field.move_farther_arrow.icon != null, "Phone mound controls should provide rasterized up/down icons")
-	_expect(main.pitch_field.move_closer_arrow.size.x >= 44.0 and main.pitch_field.move_closer_arrow.size.y >= 44.0, "Phone mound controls should be touch-sized")
-	_expect(main.pitch_field.move_closer_arrow.position.x > portrait_mound.x, "Both phone mound controls should sit to the pitcher's right")
-	_expect(main.pitch_field.move_farther_arrow.position.x > portrait_mound.x, "The farther-mound control should not cover the cooldown meter")
-	_expect(main.pitch_field.move_closer_arrow.position.y < main.pitch_field.move_farther_arrow.position.y, "Move closer should point up above Move farther")
+	_expect(not main.pitch_field.move_closer_arrow.visible and not main.pitch_field.move_farther_arrow.visible, "Level-assigned phone ranges should not leave obsolete mound arrows on the field")
 	main.is_web_build = true
 	main._set_mobile_layout(false, false)
 	main._set_mobile_layout(true, true)
@@ -205,6 +199,11 @@ func _run() -> void:
 	main._refresh_achievement_tab(true)
 	await process_frame
 	_expect(main.achievement_cards.size() == 101, "The phone achievement browser should expose all 101 slots")
+	_expect(main.achievement_hide_achieved_toggle.get_combined_minimum_size().y >= 44.0, "Phone achievements should provide a touch-sized Hide Achieved filter")
+	var phone_first_card: Dictionary = main.achievement_cards.first_pitch
+	_expect((phone_first_card.panel as PanelContainer).mouse_filter == Control.MOUSE_FILTER_PASS, "Phone achievement copy should remain a passive scrolling surface")
+	_expect((phone_first_card.title as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone achievement labels should never steal a swipe")
+	_expect((phone_first_card.details_button as Button).get_combined_minimum_size().y >= 44.0, "Phone achievement inspection should use a clearly bounded Details button")
 	var phone_hidden_card: Dictionary = main.achievement_cards.genetic_offer
 	_expect((phone_hidden_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Phone hidden achievements should remain anonymous")
 	_expect(not (phone_hidden_card.description as Label).text.contains("Xylophax"), "Phone hidden achievements must not leak future names")

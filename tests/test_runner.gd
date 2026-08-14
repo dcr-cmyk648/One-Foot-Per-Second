@@ -246,10 +246,12 @@ func _test_achievements() -> void:
 	_expect(game.has_achievement("speed_mach_12"), "A completed secret achievement should unlock")
 	_expect(game.is_achievement_information_revealed(Content.achievement_by_id("speed_mach_12")), "Completed secret achievements should reveal their details")
 	game.set_catalog_hide_purchased("pitch", true)
+	game.achievement_hide_achieved = true
 	var restored: BaseballGameState = GameStateScript.new()
 	restored.apply_save_data(game.to_save_data())
 	_expect(restored.unlocked_achievements == game.unlocked_achievements, "Achievements should survive save round-trips")
 	_expect(bool(restored.catalog_hide_purchased.pitch), "Per-tab purchased filters should survive save round-trips")
+	_expect(restored.achievement_hide_achieved, "The Hide Achieved preference should survive save round-trips")
 	_expect_close(restored.lifetime_max_pitch_speed_fps, game.lifetime_max_pitch_speed_fps, "Achievement peak-speed history should survive saves")
 	game.free()
 	restored.free()
@@ -383,9 +385,13 @@ func _test_body_growth() -> void:
 	_expect(game.get_body_velocity_fps() > speed_before, "Growing should increase the body's base throw speed")
 	_expect(game.get_pitch_quality() > quality_before, "Growing should increase command quality")
 	_expect(game.get_recovery_rate() > recovery_before, "Growing should improve recovery")
-	_expect(game.get_body_velocity_fps() >= speed_before * 1.24, "Escaping the toddler body should feel materially stronger than incremental Training")
+	_expect(game.get_body_velocity_fps() >= speed_before * 1.075, "Escaping the toddler body should feel useful without abruptly accelerating the early campaign")
 	_expect(game.get_pitcher_size_multiplier() > size_before, "The rendered pitcher should visibly grow with the body")
 	_expect(not game.buy_body_growth("big_kid"), "Growth stages must still honor their campaign-level requirement")
+	game.body_growth_level = Content.BODY_GROWTH_STAGES.size() - 1
+	_expect_close(game.get_body_growth_effect_multiplier("speed"), 1.3762156, "Full adulthood should keep its retuned cumulative speed gain")
+	_expect_close(game.get_body_growth_effect_multiplier("recovery"), 1.159137, "Full adulthood should keep its retuned cumulative recovery gain")
+	_expect_close(game.get_body_growth_quality_bonus(), 0.15, "Full adulthood should keep its moderate cumulative quality gain")
 	game._reset_body_progress()
 	_expect(game.body_growth_level == 0, "Time travel should restart the player as a toddler")
 	game.free()
@@ -440,10 +446,12 @@ func _test_pitch_phase_state_machine() -> void:
 	game.training_levels.velocity = 20
 	_expect_close(game.pitch_flight_remaining, frozen_remaining, "A speed purchase must not move an already released ball")
 	game.highest_unlocked = 5
-	_expect(game.set_distance_index(2), "The player should be able to move the mound while a pitch is flying")
-	_expect_close(game.pitch_flight_remaining, frozen_remaining, "Moving the mound must not move an already released ball")
+	_expect(game.set_current_opponent(5), "Selecting a higher unlocked level should assign its authored range during flight")
+	_expect(game.selected_distance_index == 2, "Level 6 should automatically use the 12-foot range")
+	_expect_close(game.pitch_flight_remaining, frozen_remaining, "A level-driven range change must not move an already released ball")
 	_expect(game.pending_volley_distance_index == 0 and game.pending_volley_flight_duration == frozen_duration, "A released pitch must retain its original distance and duration")
 	_expect(game.set_current_opponent(1), "The player should be able to select another unlocked batter during flight")
+	_expect(game.selected_distance_index == 0, "Returning to an early opponent should restore that level's close range")
 	_expect(game.pending_volley_pitch_id == frozen_pitch and game.pending_volley_speed_fps == frozen_speed, "Retargeting must preserve the released pitch type and exact speed")
 	_expect(game.pending_volley_opponent_index == 1, "The released pitch should now resolve against the newly selected batter")
 	game.pending_volley_outcome = Content.STRIKE_INDEX
@@ -549,18 +557,20 @@ func _test_field_tapping() -> void:
 
 func _test_distance_risk_and_reward() -> void:
 	var game: BaseballGameState = GameStateScript.new()
-	var near_probabilities: Array[float] = game.get_outcome_probabilities()
-	_expect(game.get_max_distance_index() == 0, "Fresh players should only have the 3-foot mound")
+	var near_probabilities: Array[float] = game.get_outcome_probabilities_for_pitch("dead_fish", 1.0, 5, 0)
+	_expect(game.get_prescribed_distance_index() == 0, "The opening opponent should prescribe the 3-foot range")
 	game.highest_unlocked = 5
-	_expect(game.set_distance_index(2), "An unlocked farther mound should be selectable")
+	_expect(game.set_current_opponent(5), "Selecting level 6 should also select its authored range")
+	_expect(game.selected_distance_index == game.get_prescribed_distance_index(5), "The active range should be derived only from the opponent level")
 	_expect_close(game.get_pitch_distance_feet(), 12.0, "Backyard Challenge should be 12 feet")
 	_expect_close(game.get_distance_xp_multiplier(), 1.6, "Farther ranges should multiply XP")
 	_expect_close(game.get_distance_difficulty(), 0.45, "Farther ranges should add threat")
 	_expect_close(game.get_physical_flight_seconds(), 12.0, "True flight time should be distance divided by speed")
 	var far_probabilities: Array[float] = game.get_outcome_probabilities()
-	_expect(far_probabilities[0] > near_probabilities[0], "Moving farther should make home runs more likely")
-	game.set_distance_index(999)
-	_expect(game.selected_distance_index == game.get_max_distance_index(), "Range selection must clamp to unlocked tiers")
+	_expect(far_probabilities[0] > near_probabilities[0], "A level's farther range should make home runs more likely than the same matchup at three feet")
+	_expect(not game.set_distance_index(999), "Manual range requests should not override the opponent's authored range")
+	_expect(game.selected_distance_index == 2, "A manual range request must leave the level-prescribed distance intact")
+	_expect(game.set_current_opponent(1) and game.selected_distance_index == 0, "Selecting an earlier opponent should restore its prescribed close range")
 	game.free()
 
 func _test_overmastery_farming() -> void:
@@ -621,9 +631,8 @@ func _test_opponent_counters() -> void:
 	game.eldritch_offer_unlocked = true
 	game.eldritch_ascensions = 1
 	game.current_opponent = 24
-	var close_penalty := game.get_opponent_trait_penalty()
-	game.selected_distance_index = 7
-	_expect(game.get_opponent_trait_penalty() < close_penalty, "The Call-Up should reward regulation distance")
+	var close_penalty := game.get_opponent_trait_penalty(24, 0)
+	_expect(game.get_opponent_trait_penalty(24, game.get_prescribed_distance_index(24)) < close_penalty, "The Call-Up should reward its level-assigned long range")
 	game.current_opponent = 30
 	game.genetic_levels.extra_arms = 0
 	_expect_close(game.get_opponent_trait_penalty(), 0.75, "Xylophax should punish one throwing arm")
@@ -1083,9 +1092,10 @@ func _test_projectile_snapshots() -> void:
 	field.configure_from_game(game)
 	_expect(field._get_camera_scale() > 3.5, "The opening should use the extra-close camera")
 	var pitcher_radius := field._get_pitcher_visual_scale() * 10.0
-	var toddler_radius := field._get_batter_intrinsic_size() * field._get_camera_scale() * 10.0
+	var toddler_radius := field._get_batter_intrinsic_size() * field._get_character_camera_scale() * 10.0
 	_expect(pitcher_radius / toddler_radius > 1.45 and pitcher_radius / toddler_radius < 1.65, "The opening pitcher should be roughly fifty percent larger than the toddler")
-	_expect(field.move_closer_arrow.disabled and field.move_farther_arrow.disabled, "Locked mound arrows should be disabled")
+	_expect(pitcher_radius < 26.0 and toddler_radius < 19.0, "The three-foot close-up should keep both character rings clear of home plate")
+	_expect(not field.move_closer_arrow.visible and not field.move_farther_arrow.visible, "Level-assigned ranges should remove manual mound arrows")
 	var untouched_slot := field.next_ball_slot
 	field._process(8.0)
 	_expect(field.next_ball_slot == untouched_slot, "Frame time alone must never manufacture a visual pitch")
@@ -1116,7 +1126,7 @@ func _test_projectile_snapshots() -> void:
 	game.highest_unlocked = 5
 	field.configure_from_game(game)
 	_expect(float(field.snapshot.pitcher_size_multiplier) > 1.0 and float(field.snapshot.pitcher_size_multiplier) < 2.0, "Pitcher size should grow smoothly with strength without reaching an uncapped scale")
-	_expect(not field.move_farther_arrow.disabled, "The farther arrow should activate after a range unlock")
+	_expect(not field.move_closer_arrow.visible and not field.move_farther_arrow.visible, "Range arrows should stay hidden after later ranges unlock")
 	var unchanged_data: Dictionary = field.get_launch_snapshot(0)
 	_expect_close(float(unchanged_data.duration), float(original_data.duration), "An in-flight ball must keep its release-time duration")
 	_expect_close(float(unchanged_data.signed_curve), float(original_data.signed_curve), "An in-flight ball must keep its release-time arc")
@@ -1401,9 +1411,10 @@ func _test_progression_and_purchases() -> void:
 	_expect(BaseballGameState.format_xp_total(0.18) == "0.18", "Sub-one XP balances should retain useful fractional precision")
 	_expect(BaseballGameState.format_xp_total(1.4) == "1", "Spendable XP balances should round to a whole number")
 	_expect(BaseballGameState.format_xp_total(12.6) == "13", "Whole-XP display should use ordinary rounding")
-	_expect(BaseballGameState.format_xp_total(1234.0) == "1K", "Large XP balances should not reintroduce suffix decimals")
+	_expect(BaseballGameState.format_xp_total(1234.0) == "1.23K", "Compact XP should retain useful spend-visible precision")
+	_expect(BaseballGameState.format_xp_total(1600000.0) == "1.6M", "Million-scale XP should visibly change between adjacent whole millions")
 	_expect(BaseballGameState.format_xp_total(999500.0) == "1M", "Rounded XP suffixes should normalize at unit boundaries")
-	_expect(BaseballGameState.format_xp_total(9.95e15) == "1e16", "Rounded scientific XP should normalize its exponent")
+	_expect(BaseballGameState.format_xp_total(9.95e15) == "9.95e15", "Scientific XP should retain three useful digits")
 	_expect(game.buy_pitch("four_seam"), "The four-seam should purchase")
 	game.highest_unlocked = maxi(game.highest_unlocked, 11)
 	game.training_levels.offline_efficiency = 0
@@ -1427,10 +1438,10 @@ func _test_progression_and_purchases() -> void:
 	_expect(not radar_requirements.is_empty() and str(radar_requirements[0]).contains("THROW AT"), "A speed-gated facility should name only its unmet throwing challenge")
 	gate_game.training_levels.velocity = 10
 	_expect(gate_game.can_buy_milestone("backyard_radar_target"), "Meeting a facility's level, speed, and cost gates should unlock it")
+	gate_game.highest_unlocked = 10
+	_expect(not gate_game.is_milestone_unlocked("borrowed_high_speed_camera"), "A range-gated facility should remain locked before its authored level")
 	gate_game.highest_unlocked = 14
-	_expect(not gate_game.is_milestone_unlocked("borrowed_high_speed_camera"), "A distance-gated facility should remain locked at the near mound")
-	gate_game.set_distance_index(4)
-	_expect(gate_game.is_milestone_unlocked("borrowed_high_speed_camera"), "Using the required mound should satisfy a distance challenge")
+	_expect(gate_game.is_milestone_unlocked("borrowed_high_speed_camera"), "Reaching a level that assigns the required range should satisfy the range challenge")
 	gate_game.free()
 
 	game.genetic_offer_unlocked = true
@@ -1565,7 +1576,7 @@ func _test_save_round_trip_and_migration() -> void:
 	original.lifetime_xp = 987654.0
 	original.highest_unlocked = 42
 	original.current_opponent = 37
-	original.selected_distance_index = 12
+	original.selected_distance_index = original.get_prescribed_distance_index(37)
 	original.dna = 123
 	original.arcana = 17
 	original.genetic_rebirths = 2
@@ -1601,7 +1612,7 @@ func _test_save_round_trip_and_migration() -> void:
 	restored.apply_save_data(original.to_save_data())
 	_expect_close(restored.xp, original.xp, "XP should survive a save round-trip")
 	_expect(restored.current_opponent == 37 and restored.highest_unlocked == 42, "Opponent access should survive a save round-trip")
-	_expect(restored.selected_distance_index == 12, "Pitching distance should survive a save round-trip")
+	_expect(restored.selected_distance_index == restored.get_prescribed_distance_index(37), "Loading should restore the selected level's authored pitching distance")
 	_expect(restored.dna == 123 and restored.arcana == 17, "Prestige currencies should survive a save round-trip")
 	_expect(restored.lifetime_genetic_rebirths == 8 and restored.lifetime_eldritch_ascensions == 3, "Lifetime reset stats should survive saves")
 	_expect(restored.get_strikes_per_batter() == 4, "Genetic count compression should survive saves")

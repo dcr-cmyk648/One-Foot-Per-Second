@@ -308,6 +308,8 @@ func _setup_range_arrows() -> void:
 	move_farther_arrow.z_index = 20
 	move_farther_arrow.add_theme_font_size_override("font_size", 20)
 	move_farther_arrow.pressed.connect(_request_move_farther)
+	move_farther_arrow.visible = false
+	move_farther_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(move_farther_arrow)
 
 	move_closer_arrow = Button.new()
@@ -319,6 +321,8 @@ func _setup_range_arrows() -> void:
 	move_closer_arrow.z_index = 20
 	move_closer_arrow.add_theme_font_size_override("font_size", 20)
 	move_closer_arrow.pressed.connect(_request_move_closer)
+	move_closer_arrow.visible = false
+	move_closer_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(move_closer_arrow)
 	_update_range_arrows()
 
@@ -504,8 +508,8 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 		"pitch_colors": colors,
 		"gear_colors": gear_colors,
 		"clone_gear_linked": game.has_eldritch_upgrade("clone_dress_code"),
-		"can_move_closer": game.selected_distance_index > 0,
-		"can_move_farther": game.selected_distance_index < game.get_max_distance_index(),
+		"can_move_closer": false,
+		"can_move_farther": false,
 		"representative_pitch_speed": game.get_representative_pitch_speed(),
 	}
 	if game.is_pitch_in_flight():
@@ -752,76 +756,13 @@ func _on_resized() -> void:
 func _update_range_arrows() -> void:
 	if move_closer_arrow == null or move_farther_arrow == null:
 		return
-	var mound := _get_mound_position(float(snapshot.distance_feet))
-	if portrait_layout:
-		var body_radius := 10.0 * _get_pitcher_visual_scale()
-		var arrow_x := clampf(
-			mound.x + body_radius + 18.0,
-			4.0,
-			maxf(size.x - RANGE_CONTROL_TOUCH_SIZE - 4.0, 4.0)
-		)
-		move_closer_arrow.custom_minimum_size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
-		move_farther_arrow.custom_minimum_size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
-		move_closer_arrow.size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
-		move_farther_arrow.size = Vector2.ONE * RANGE_CONTROL_TOUCH_SIZE
-		move_closer_arrow.position = Vector2(
-			arrow_x,
-			clampf(mound.y - RANGE_CONTROL_TOUCH_SIZE - 4.0, 4.0, maxf(size.y - 96.0, 4.0))
-		)
-		move_farther_arrow.position = Vector2(
-			arrow_x,
-			clampf(mound.y + 4.0, 52.0, maxf(size.y - RANGE_CONTROL_TOUCH_SIZE - 4.0, 52.0))
-		)
-		move_closer_arrow.text = ""
-		move_farther_arrow.text = ""
-		move_closer_arrow.icon = portrait_up_icon
-		move_farther_arrow.icon = portrait_down_icon
-		move_closer_arrow.expand_icon = true
-		move_farther_arrow.expand_icon = true
-	else:
-		var arrow_y := mound.y + maxf(44.0, 20.0 * _get_camera_scale())
-		move_closer_arrow.custom_minimum_size = Vector2(38.0, 32.0)
-		move_farther_arrow.custom_minimum_size = Vector2(38.0, 32.0)
-		move_closer_arrow.size = Vector2(38.0, 32.0)
-		move_farther_arrow.size = Vector2(38.0, 32.0)
-		move_farther_arrow.position = Vector2(mound.x - 44.0, arrow_y)
-		move_closer_arrow.position = Vector2(mound.x + 6.0, arrow_y)
-		move_farther_arrow.text = ""
-		move_closer_arrow.text = ""
-		move_farther_arrow.icon = landscape_left_icon
-		move_closer_arrow.icon = landscape_right_icon
-		move_farther_arrow.expand_icon = true
-		move_closer_arrow.expand_icon = true
-	move_closer_arrow.disabled = not bool(snapshot.can_move_closer)
-	move_farther_arrow.disabled = not bool(snapshot.can_move_farther)
-	var distance_index := int(snapshot.get("distance_index", 0))
-	var max_distance_index := int(snapshot.get("max_distance_index", 0))
-	move_closer_arrow.tooltip_text = _get_range_arrow_tooltip(distance_index - 1, "Move closer")
-	move_farther_arrow.tooltip_text = _get_range_arrow_tooltip(distance_index + 1, "Move farther")
-	if distance_index >= max_distance_index:
-		if max_distance_index + 1 < Content.DISTANCE_TIERS.size():
-			var next_tier: Dictionary = Content.DISTANCE_TIERS[max_distance_index + 1]
-			move_farther_arrow.tooltip_text = "Farther range locked • Reach level %d" % (int(next_tier.required_level) + 1)
-		else:
-			move_farther_arrow.tooltip_text = "Already at the farthest possible mound"
-	if distance_index <= 0:
-		move_closer_arrow.tooltip_text = "Already at the closest possible mound"
-
-func _get_range_arrow_tooltip(target_index: int, action: String) -> String:
-	if target_index < 0 or target_index >= Content.DISTANCE_TIERS.size():
-		return action
-	var current: Dictionary = Content.DISTANCE_TIERS[clampi(int(snapshot.get("distance_index", 0)), 0, Content.DISTANCE_TIERS.size() - 1)]
-	var target: Dictionary = Content.DISTANCE_TIERS[target_index]
-	var gear_multiplier := float(snapshot.get("distance_gear_multiplier", 1.0))
-	var penalty_multiplier := float(snapshot.get("distance_penalty_multiplier", 1.0))
-	var threat_change := (float(target.difficulty) - float(current.difficulty)) * penalty_multiplier
-	return "%s to %s (%s) • XP ×%.2f • threat %+.2f • released balls stay unchanged" % [
-		action,
-		str(target.name),
-		str(target.label),
-		float(target.xp_multiplier) * gear_multiplier,
-		threat_change,
-	]
+	# Opponent level now assigns the thematic range. Keep these nodes as inert
+	# compatibility anchors for old scenes/tests, but never expose a fake manual
+	# optimization choice on desktop or phone.
+	move_closer_arrow.visible = false
+	move_farther_arrow.visible = false
+	move_closer_arrow.disabled = true
+	move_farther_arrow.disabled = true
 
 func notify_batch(summary: Dictionary) -> int:
 	var pitch_count := maxf(float(summary.get("pitches", 0.0)), 0.0)
@@ -1470,6 +1411,12 @@ func _get_distance_progress(distance_feet: float = -1.0) -> float:
 func _get_camera_scale() -> float:
 	return lerpf(3.60, 0.55, pow(_get_distance_progress(), 0.68))
 
+func _get_character_camera_scale() -> float:
+	# The three-foot view remains a dramatic environmental close-up, but rings
+	# have their own ceiling so neither player swallows home plate. Perspective
+	# rejoins the ordinary camera curve as soon as the field begins zooming out.
+	return minf(_get_camera_scale(), 2.25)
+
 func _get_ball_visual_scale() -> float:
 	return clampf(_get_camera_scale() * 0.75, 1.0, 2.80)
 
@@ -1478,7 +1425,7 @@ func _get_pitcher_visual_scale() -> float:
 	# fresh 1.08 pitcher is about 50% larger than a 0.72 toddler, then strength
 	# smoothly approaches twice that original intrinsic size.
 	return (
-		_get_camera_scale()
+		_get_character_camera_scale()
 		* BASE_PITCHER_INTRINSIC_SIZE
 		* clampf(float(snapshot.get("pitcher_size_multiplier", 1.0)), 1.0, 2.0)
 	)
@@ -1698,7 +1645,7 @@ func _draw_strike_icons(origin: Vector2) -> void:
 	var spacing := 10.0 * readable_scale
 	var icon_radius := 3.2 * readable_scale
 	var total_width := float(display_slots - 1) * spacing
-	var intrinsic_scale := _get_batter_intrinsic_size() * _get_camera_scale()
+	var intrinsic_scale := _get_batter_intrinsic_size() * _get_character_camera_scale()
 	var visual_radius := 10.0 * intrinsic_scale
 	if int(snapshot.opponent_index) == 44:
 		visual_radius = 29.0 * maxf(intrinsic_scale * 0.72, 1.0)
@@ -1738,7 +1685,7 @@ func _draw_ball_icons(origin: Vector2) -> void:
 	var spacing := 9.0 * readable_scale
 	var radius := 2.8 * readable_scale
 	var total_width := float(display_slots - 1) * spacing
-	var intrinsic_scale := _get_batter_intrinsic_size() * _get_camera_scale()
+	var intrinsic_scale := _get_batter_intrinsic_size() * _get_character_camera_scale()
 	var visual_radius := 10.0 * intrinsic_scale
 	if int(snapshot.opponent_index) == 44:
 		visual_radius = 29.0 * maxf(intrinsic_scale * 0.72, 1.0)
@@ -2087,7 +2034,7 @@ func _draw_pitcher_arm_rectangles(
 		draw_line(start, finish, Color(color, alpha), half_width * 2.0, false)
 
 func _draw_home_plate(origin: Vector2) -> void:
-	var plate_scale := clampf(_get_camera_scale(), 0.72, 2.25)
+	var plate_scale := clampf(_get_camera_scale(), 0.72, 1.85)
 	var local_points := [
 		Vector2(-9.0, -10.0),
 		Vector2(5.0, -10.0),
@@ -2107,7 +2054,7 @@ func _draw_batter(origin: Vector2) -> void:
 	var within_era := opponent_index % 5
 	var intrinsic_size := _get_batter_intrinsic_size()
 	var variant_seed := maxi(batter_generation, 0) * 7 + opponent_index * 11
-	var scale_factor := intrinsic_size * _get_camera_scale()
+	var scale_factor := intrinsic_size * _get_character_camera_scale()
 	var body_color := Color(snapshot.get("opponent_body_color", Color("f28a62")))
 	var bat_color := Color(snapshot.get("opponent_bat_color", Color("a9b6c5")))
 	var swing_phase := sin((1.0 - bat_swing_animation) * PI) * (
