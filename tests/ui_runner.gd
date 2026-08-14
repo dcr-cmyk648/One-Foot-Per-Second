@@ -30,6 +30,10 @@ func _run() -> void:
 	_expect(main.title_subtitle_label.text == "A baseball game about a regular ol’ toddler", "The fresh title should remain spoiler-free")
 	_expect(main.title_art._visible_era() == 0, "Fresh title art must not reveal alien or cosmic imagery")
 	_expect(main.title_menu_stack.get_child_count() == 3, "The title should expose Resume, New Game, and Import Save")
+	main._configure_title_layout(Vector2(1600.0, 900.0))
+	await process_frame
+	_expect(main.title_layout_grid.columns == 2 and main.title_panel.size.x >= 900.0, "A desktop title should use a wide two-column composition instead of a stretched phone card")
+	_expect(main.title_action_panel.position.x > main.title_art_frame.position.x, "Desktop title actions should sit beside the matchup art")
 	main._open_title_resume_picker()
 	_expect(main.title_resume_stack.visible and not main.title_menu_stack.visible, "Resume should open the save-slot picker")
 	_expect(main.title_manual_slot_entries.size() == 3, "The title picker should expose all three manual save slots")
@@ -91,12 +95,12 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
 	_expect(main.upgrade_tabs.find_child("ACHIEVE", false, false) != null, "Achievements should have their own tab")
 	_expect(main.header_title.text == "NO HITTER", "The visible game title should use the new name")
-	_expect(main.achievement_cards.size() == 101, "The achievement tab should render all 101 slots")
+	_expect(main.achievement_cards.size() == Content.ACHIEVEMENTS.size(), "The achievement tab should render every catalog slot")
 	_expect(main.achievement_hide_achieved_toggle != null, "Achievements should provide their own Hide Achieved filter")
 	var first_achievement_card: Dictionary = main.achievement_cards.first_pitch
 	_expect((first_achievement_card.details_button as Button).text == "DETAILS", "Achievement cards should delimit their only inspection action")
 	_expect((first_achievement_card.panel as PanelContainer).mouse_filter == Control.MOUSE_FILTER_PASS, "Passive achievement cards should pass drag input through for scrolling")
-	_expect(main.achievement_count_label.text == "0 / 101 UNLOCKED", "The fresh achievement summary should disclose the complete catalog count")
+	_expect(main.achievement_count_label.text == "0 / %d UNLOCKED" % Content.ACHIEVEMENTS.size(), "The fresh achievement summary should disclose the complete catalog count")
 	var hidden_genetic_card: Dictionary = main.achievement_cards.genetic_offer
 	_expect((hidden_genetic_card.title as Label).text == "HIDDEN ACHIEVEMENT", "Future achievements should use anonymous placeholder titles")
 	_expect(not (hidden_genetic_card.description as Label).text.contains("Commissioner"), "A hidden achievement must not leak its true condition")
@@ -119,12 +123,15 @@ func _run() -> void:
 	main._toggle_catalog_hide_purchased(false, "pitch")
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
-	_expect(main.field_stat_labels.size() == 9, "The default field should expose every base trained stat in a compact overlay")
-	_expect(str(main.field_stat_labels.speed.text).contains("1.00 ft/s"), "The field overlay should begin with the game's literal one-foot-per-second speed")
-	_expect(main.field_stat_labels.offline.text == "1%", "The fresh field should make its deliberately weak offline reward rate visible")
-	_expect(main.field_stat_labels.tap.text == "1.7%", "The field should expose the reduced starting active-tap advance")
+	_expect(main.field_stat_labels.size() == 7, "The live throw profile should contain only facts about the current or next pitch")
+	_expect(str(main.field_stat_labels.release.text).contains("1.00 ft/s"), "The field overlay should begin with the game's literal one-foot-per-second release speed")
+	_expect(str(main.field_stat_labels.plate.text).contains("1.00 ft/s"), "The untouched Wiffle Ball should arrive at the same one-foot-per-second speed")
+	_expect(main.field_stat_labels.drag.text.ends_with("NONE"), "The untouched opening Wiffle Ball should disclose that it has no air-drag model")
+	_expect(main.field_stat_labels.distance.text.contains("3 ft"), "The live profile should show the immutable release distance")
 	for stat_id in main.field_stat_labels:
 		_expect(not (main.field_stat_labels[stat_id] as Label).tooltip_text.is_empty(), "Field stat %s needs a hover explanation" % stat_id)
+		_expect((main.field_stat_labels[stat_id] as Label).size.x >= 58.0, "Field stat %s needs actual rendered width inside the field profile" % stat_id)
+		_expect((main.field_stat_labels[stat_id] as Label).text.contains("  "), "Field stat %s should paint its name and value in one browser-safe label" % stat_id)
 	var field_click := InputEventMouseButton.new()
 	field_click.button_index = MOUSE_BUTTON_LEFT
 	field_click.pressed = true
@@ -136,7 +143,7 @@ func _run() -> void:
 	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast (got %s)" % main.achievement_toast_name.text)
 	_expect(main.achievement_toast_description.text == "Hurry an active timer with a field tap.", "An achievement toast should state the completed condition (got %s)" % main.achievement_toast_description.text)
 	_expect(main.achievement_toast_description.get_theme_font_size("font_size") < main.achievement_toast_name.get_theme_font_size("font_size"), "The completed condition should use deliberately smaller toast text")
-	_expect(main.achievement_count_label.text == "1 / 101 UNLOCKED", "The achievement summary should update immediately after an unlock")
+	_expect(main.achievement_count_label.text == "1 / %d UNLOCKED" % Content.ACHIEVEMENTS.size(), "The achievement summary should update immediately after an unlock")
 	main.game._clear_pitch_cycle()
 	main.pitch_field.field_tap_effects.clear()
 	main.game.batter_cooldown_remaining = 3.0
@@ -190,8 +197,15 @@ func _run() -> void:
 	_expect(main.frustration_label.tooltip_text.contains("Grand Slam +12") and not main.frustration_label.tooltip_text.contains("since the last"), "Frustration inspection should explain severity rather than elapsed time")
 	_expect(main.hard_reset_button != null and main.hard_reset_button.text == "RESET PROGRESS", "A visible progress-reset control should exist")
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
-	_expect(main.load_save_button != null and main.load_save_button.text == "LOAD", "A visible portable-save load control should exist")
+	_expect(main.load_save_button != null and main.load_save_button.text == "IMPORT", "A visible portable-save import control should exist")
 	_expect(main.browser_save_slot_entries.size() == 3, "The shared interface should build three phone manual-save slots")
+	main._open_saves_menu()
+	await process_frame
+	_expect(main.mobile_overlay_panel.visible and main.browser_save_slots_panel.visible, "Desktop and browser SAVES should open the same complete save-slot overlay as mobile")
+	_expect(main.mobile_overlay_title.text == "SAVES & TRANSFER", "The shared save overlay should identify manual slots and transfer tools")
+	main._close_mobile_overlay()
+	await process_frame
+	_expect(not main.mobile_overlay_panel.visible and main.save_stack.visible, "Closing desktop SAVES should restore its header controls")
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE", "Browser updates should require an explicit backup-aware confirmation")
 	_expect(main._browser_save_has_more_progress({"lifetime_pitches": 100.0}, {"lifetime_pitches": 1.0}), "Browser recovery should recognize a demonstrably more advanced mirror")
 	var normal_elapsed: Dictionary = main._split_browser_elapsed(0.20, 0.20)
@@ -318,24 +332,28 @@ func _run() -> void:
 	for row_index in main.locker_dialog_items.get_child_count():
 		var item_panel := main.locker_dialog_items.get_child(row_index) as PanelContainer
 		var item_stack := item_panel.get_child(0) as VBoxContainer
-		var item_label := item_stack.get_child(0) as Label
+		var info_stack := item_stack.get_child(0) as VBoxContainer
+		var identity_row := info_stack.get_child(0) as HBoxContainer
+		var item_label := identity_row.get_child(0) as Label
+		var power_label := identity_row.get_child(1) as Label
 		var action_row := item_stack.get_child(1) as HBoxContainer
 		var compare_button := action_row.get_child(1) as Button
 		if row_index == 0:
 			first_action_row = action_row
 			first_star_button = action_row.get_child(2) as Button
+		_expect(power_label.text.begins_with("POWER "), "Every equipment row should expose its Power before interaction")
 		if item_label.text.contains("EQUIPPED"):
 			equipped_item_label = item_label
 		else:
 			comparison_item_label = item_label
 			comparison_item_panel = item_panel
-			comparison_item_stack = item_stack
+			comparison_item_stack = info_stack
 			comparison_item_button = compare_button
-	_expect(equipped_item_label != null and equipped_item_label.text.contains("POWER"), "Locker rows should expose Power and make the equipped item unmistakable")
+	_expect(equipped_item_label != null, "Locker rows should make the equipped item unmistakable")
 	_expect(comparison_item_button != null and comparison_item_button.text == "COMPARE", "Each item should expose an explicit Compare action")
 	_expect(comparison_item_panel != null and comparison_item_stack.tooltip_text.contains("Compared with Golden Test Cap"), "Desktop browser item hover should expose the complete equipped-item comparison")
 	_expect(comparison_item_stack.tooltip_text.contains("(+0.010)"), "Desktop browser item hover should include signed stat deltas")
-	_expect(comparison_item_label.text.contains("THIS ITEM:"), "Each row should explicitly distinguish its own bonuses from the aggregate loadout")
+	_expect(not (comparison_item_stack.get_child(2) as Label).text.is_empty(), "Each row should show its own stat summary without requiring a click")
 	_expect(comparison_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Passive item text should leave touch drags available for scrolling")
 	_expect(not equipped_item_label.text.contains("✓") and first_star_button.text.is_empty() and first_star_button.icon != null, "Equipment controls should use browser-safe drawn icons instead of unsupported font glyphs")
 	_expect(first_star_button.position.x + first_star_button.size.x <= first_action_row.size.x + 1.0, "The favorite star must remain inside the item row")
@@ -409,6 +427,17 @@ func _run() -> void:
 	_expect(main.era_label.text.begins_with("LEVEL 41") and not main.era_label.text.contains("/"), "Eldritch contact should retain the current-level-only header")
 	_expect(main.guide_label.text.contains("Arcana"), "Eldritch reveal did not expand the Guide")
 	_expect(not main.guide_label.text.contains("God restore"), "Eldritch Guide prematurely reveals the divine offer")
+	main.game.genetic_levels.migratory_instinct = 2
+	main.game.genetic_levels.autonomic_coach = 1
+	main.game.eldritch_levels.interstellar_itinerary = 1
+	main.game.eldritch_levels.front_office_outside_time = 1
+	main._refresh_interface()
+	await process_frame
+	var advance_toggle: CheckButton = main.automation_toggles.advance.button
+	_expect(advance_toggle.text.contains("Human 2/29") and advance_toggle.text.contains("Alien 1/10"), "Auto-advance should expose separate per-level human and alien license capacities")
+	_expect(main.automation_training_heading.text.contains("0 / 1 SELECTED"), "A genetic coaching rank should expose exactly one selectable Training automation license")
+	var catalog_toggle: CheckButton = main.automation_toggles.catalog_pitch.button
+	_expect(not catalog_toggle.disabled and catalog_toggle.text.contains("READY"), "The eldritch front office should expose independent one-time catalog automation")
 	_audit_catalog_visibility(main, 2, "eldritch")
 	await _audit_tab_geometry(main, "eldritch")
 
@@ -422,6 +451,14 @@ func _run() -> void:
 	_expect(main.divine_section.visible, "Cosmic victory did not reveal divine rewards")
 	_expect(main.stat_rows.completion.visible, "Cosmic victory did not reveal completion stats")
 	_expect(main.guide_label.text.contains("divine blessing"), "Cosmic victory did not expand the Guide")
+	var divine_heading: Label = main.divine_section.get_child(0) as Label
+	_expect(divine_heading.text.contains("GOD PRESTIGE") and divine_heading.text.contains("DO IT ALL AGAIN"), "The final reset should be presented as God Prestige and state its repeat-campaign purpose")
+	var first_blessing: Dictionary = main.divine_buttons[Content.DIVINE_BLESSINGS[0].id]
+	_expect((first_blessing.button as Button).text == "DO IT AGAIN", "Available God Prestige blessings should use the final-loop action label")
+	main._request_divine_ascension(str(Content.DIVINE_BLESSINGS[0].id))
+	await process_frame
+	_expect(main.divine_confirmation.visible and main.divine_confirmation.dialog_text.contains("Thanks for saving the universe") and main.divine_confirmation.dialog_text.contains("best reward") and main.divine_confirmation.dialog_text.contains("doing it all again"), "God Prestige confirmation should deliver the promised final-boss epilogue")
+	main.divine_confirmation.hide()
 	await _audit_tab_geometry(main, "divine")
 
 	main.free()
@@ -477,6 +514,7 @@ func _audit_upgrade_order(main) -> void:
 func _audit_tab_geometry(main, stage: String) -> void:
 	var expected_size: Vector2 = main.upgrade_tabs.size
 	var tab_bar: TabBar = main.upgrade_tabs.get_tab_bar()
+	_expect(not tab_bar.visible and main.mobile_tab_navigation.visible, "%s should use the readable explicit tab navigator instead of native tiny overflow arrows" % stage)
 	for index in main.upgrade_tabs.get_tab_count():
 		if main.upgrade_tabs.is_tab_hidden(index):
 			continue
@@ -484,13 +522,12 @@ func _audit_tab_geometry(main, stage: String) -> void:
 		await process_frame
 		await process_frame
 		_expect(main.upgrade_tabs.size.is_equal_approx(expected_size), "%s tab %d changed the panel size from %s to %s" % [stage, index, str(expected_size), str(main.upgrade_tabs.size)])
-		var tab_rect := tab_bar.get_tab_rect(index)
-		_expect(tab_rect.end.x <= tab_bar.size.x + 1.0, "%s tab labels overflow the visible tab bar" % stage)
 		var tab_control: Control = main.upgrade_tabs.get_tab_control(index)
 		if tab_control is ScrollContainer and tab_control.get_child_count() > 0:
-			var content: Control = tab_control.get_child(0)
+			var gutter: MarginContainer = tab_control.get_child(0) as MarginContainer
+			var content: Control = gutter.get_child(0)
 			_expect(
-				content.size.x <= tab_control.size.x + 1.0,
+				gutter.size.x <= tab_control.size.x + 1.0 and content.size.x <= gutter.size.x + 1.0,
 				"%s tab %s content is %.1f px wider than its %.1f px viewport"
 				% [stage, main.upgrade_tabs.get_tab_title(index), content.size.x, tab_control.size.x]
 			)

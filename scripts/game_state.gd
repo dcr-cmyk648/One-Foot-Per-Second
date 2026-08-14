@@ -11,7 +11,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 18
+const SAVE_VERSION := 21
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -27,8 +27,11 @@ const DNA_XP_THRESHOLD := 1.0e10
 const STRIKEOUT_POINTS_PER_REQUIRED_STRIKE := 5.0
 const OPENING_STRIKEOUT_BASE_POINTS := 5.0
 const BASE_VELOCITY_FPS := 1.0
-const VELOCITY_PER_RANK_FPS := 0.15
-const QUALITY_PER_RANK := 0.08
+# Speed is the inexpensive backbone of ordinary progression. Its built-in
+# logarithmic quality contribution is strongest while the arm is slow, then
+# naturally gives way to Command as velocity becomes respectable.
+const VELOCITY_PER_RANK_FPS := 0.50
+const QUALITY_PER_RANK := 0.04
 const BASE_RECOVERY_RATE := 0.25
 const RECOVERY_PER_RANK := 0.035
 const RECOVERY_MAX_RANK := 26
@@ -91,6 +94,18 @@ const EQUIPMENT_CAPS := {
 	"mastery_bonus": 0.20,
 	"distance_bonus": 0.15,
 }
+const AUTO_TRAINING_STAT_IDS := [
+	"velocity",
+	"command",
+	"field_hustle",
+	"recovery",
+	"offline_efficiency",
+	"distance_control",
+	"turnover",
+	"hit_recovery",
+	"pitch_calling",
+]
+const AUTO_CATALOG_IDS := ["pitch", "ball", "facility", "growth"]
 
 var opponents: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
@@ -172,6 +187,8 @@ var eldritch_levels := {
 	"mercy_is_euclidean": 0,
 	"reverse_terminator": 0,
 	"clone_dress_code": 0,
+	"front_office_outside_time": 0,
+	"interstellar_itinerary": 0,
 }
 var divine_blessings: Array[String] = []
 var unlocked_pitches: Array[String] = ["dead_fish"]
@@ -240,6 +257,8 @@ var pending_volley_outcome := Content.STRIKE_INDEX
 var pending_volley_saved := false
 var pending_volley_pitch_id := "dead_fish"
 var pending_volley_speed_fps := 1.0
+var pending_volley_plate_speed_fps := 1.0
+var pending_volley_drag_per_foot := 0.0
 var pending_volley_distance_index := 0
 var pending_volley_opponent_index := 0
 var foreground_timer_serial := 0
@@ -250,8 +269,27 @@ var simulation_accumulator := 0.0
 var last_batch: Dictionary = {}
 var last_offline_seconds := 0.0
 var auto_advance_enabled := false
+# Kept as a compact compatibility flag for v18 saves. In v19 it mirrors whether
+# at least one individually licensed Training stat is selected.
 var auto_train_enabled := false
 var auto_farm_enabled := false
+var auto_training_stats := {
+	"velocity": false,
+	"command": false,
+	"field_hustle": false,
+	"recovery": false,
+	"offline_efficiency": false,
+	"distance_control": false,
+	"turnover": false,
+	"hit_recovery": false,
+	"pitch_calling": false,
+}
+var auto_catalog_settings := {
+	"pitch": false,
+	"ball": false,
+	"facility": false,
+	"growth": false,
+}
 var automation_accumulator := 0.0
 var last_load_succeeded := false
 var last_load_had_error := false
@@ -425,7 +463,84 @@ func _reset_eldritch_levels() -> void:
 		"mercy_is_euclidean": 0,
 		"reverse_terminator": 0,
 		"clone_dress_code": 0,
+		"front_office_outside_time": 0,
+		"interstellar_itinerary": 0,
 	}
+
+func _empty_auto_training_stats() -> Dictionary:
+	var result := {}
+	for id in AUTO_TRAINING_STAT_IDS:
+		result[str(id)] = false
+	return result
+
+func _empty_auto_catalog_settings() -> Dictionary:
+	var result := {}
+	for id in AUTO_CATALOG_IDS:
+		result[str(id)] = false
+	return result
+
+func _reset_auto_training_stats() -> void:
+	auto_training_stats = _empty_auto_training_stats()
+	auto_train_enabled = false
+
+func _reset_auto_catalog_settings() -> void:
+	auto_catalog_settings = _empty_auto_catalog_settings()
+
+func get_auto_training_license_count() -> int:
+	return clampi(
+		int(genetic_levels.get("autonomic_coach", 0)),
+		0,
+		AUTO_TRAINING_STAT_IDS.size()
+	)
+
+func get_auto_training_selection_count() -> int:
+	var count := 0
+	for id in AUTO_TRAINING_STAT_IDS:
+		if bool(auto_training_stats.get(str(id), false)):
+			count += 1
+	return count
+
+func is_auto_training_stat_selected(id: String) -> bool:
+	return id in AUTO_TRAINING_STAT_IDS and bool(auto_training_stats.get(id, false))
+
+func set_auto_training_stat(id: String, enabled: bool) -> bool:
+	if id not in AUTO_TRAINING_STAT_IDS:
+		return false
+	var was_enabled := bool(auto_training_stats.get(id, false))
+	if enabled and not was_enabled:
+		if get_auto_training_selection_count() >= get_auto_training_license_count():
+			return false
+	auto_training_stats[id] = enabled
+	auto_train_enabled = get_auto_training_selection_count() > 0
+	return true
+
+func is_auto_catalog_selected(id: String) -> bool:
+	return id in AUTO_CATALOG_IDS and bool(auto_catalog_settings.get(id, false))
+
+func set_auto_catalog_setting(id: String, enabled: bool) -> bool:
+	if id not in AUTO_CATALOG_IDS:
+		return false
+	if enabled and not has_eldritch_upgrade("front_office_outside_time"):
+		return false
+	auto_catalog_settings[id] = enabled
+	return true
+
+func _sanitize_automation_settings() -> void:
+	var sanitized_training := _empty_auto_training_stats()
+	var remaining_licenses := get_auto_training_license_count()
+	for id in AUTO_TRAINING_STAT_IDS:
+		var selected := bool(auto_training_stats.get(str(id), false)) and remaining_licenses > 0
+		sanitized_training[str(id)] = selected
+		if selected:
+			remaining_licenses -= 1
+	auto_training_stats = sanitized_training
+	auto_train_enabled = get_auto_training_selection_count() > 0
+
+	var sanitized_catalogs := _empty_auto_catalog_settings()
+	if has_eldritch_upgrade("front_office_outside_time"):
+		for id in AUTO_CATALOG_IDS:
+			sanitized_catalogs[str(id)] = bool(auto_catalog_settings.get(str(id), false))
+	auto_catalog_settings = sanitized_catalogs
 
 func is_alien_exhibition_blocked() -> bool:
 	return current_opponent == Content.ALIEN_EXHIBITION_INDEX and genetic_rebirths <= 0
@@ -602,8 +717,9 @@ func reset_fresh() -> void:
 	last_batch.clear()
 	last_offline_seconds = 0.0
 	auto_advance_enabled = false
-	auto_train_enabled = false
 	auto_farm_enabled = false
+	_reset_auto_training_stats()
+	_reset_auto_catalog_settings()
 	automation_accumulator = 0.0
 	_reset_mastery()
 
@@ -616,6 +732,8 @@ func _clear_pitch_cycle() -> void:
 	pending_volley_saved = false
 	pending_volley_pitch_id = "dead_fish"
 	pending_volley_speed_fps = 1.0
+	pending_volley_plate_speed_fps = 1.0
+	pending_volley_drag_per_foot = 0.0
 	pending_volley_distance_index = selected_distance_index
 	pending_volley_opponent_index = current_opponent
 	_start_new_foreground_timer_phase()
@@ -739,23 +857,52 @@ func _run_automation(elapsed: float) -> void:
 	if automation_accumulator < 0.50:
 		return
 	automation_accumulator = 0.0
-	if auto_train_enabled and has_genetic_upgrade("autonomic_coach"):
+	_sanitize_automation_settings()
+	if auto_train_enabled and get_auto_training_license_count() > 0:
 		var purchases := 0
 		for _purchase in 20:
 			var cheapest_id := ""
 			var cheapest_cost := MAX_NUMBER
-			for id in training_levels:
+			for id_value in AUTO_TRAINING_STAT_IDS:
+				var id := str(id_value)
+				if not is_auto_training_stat_selected(id):
+					continue
 				var cost := get_training_cost(str(id))
 				if cost < cheapest_cost:
 					cheapest_cost = cost
 					cheapest_id = str(id)
-			if cheapest_id.is_empty() or cheapest_cost > xp:
+			if cheapest_id.is_empty() or cheapest_cost >= MAX_NUMBER or cheapest_cost > xp:
 				break
 			xp -= cheapest_cost
 			training_levels[cheapest_id] = int(training_levels[cheapest_id]) + 1
 			purchases += 1
 		if purchases > 0:
-			progression_changed.emit("Auto-coach purchased %d training ranks." % purchases)
+			progression_changed.emit("Licensed auto-coach purchased %d Training ranks." % purchases)
+			check_achievements()
+	if has_eldritch_upgrade("front_office_outside_time"):
+		var catalog_purchases := 0
+		for _purchase in 20:
+			var candidate := _get_auto_catalog_candidate()
+			if candidate.is_empty():
+				break
+			var purchased := false
+			match str(candidate.kind):
+				"pitch":
+					purchased = buy_pitch(str(candidate.id))
+				"ball":
+					purchased = buy_ball_upgrade(str(candidate.id))
+				"facility":
+					purchased = buy_milestone(str(candidate.id))
+				"growth":
+					purchased = buy_body_growth(str(candidate.id))
+			if not purchased:
+				break
+			catalog_purchases += 1
+		if catalog_purchases > 0:
+			progression_changed.emit(
+				"The front office purchased %d one-time upgrades outside normal time."
+				% catalog_purchases
+			)
 	var story_countdown_active := (
 		(is_alien_exhibition_blocked() and not genetic_offer_unlocked)
 		or (is_eldritch_exhibition_blocked() and not eldritch_offer_unlocked)
@@ -793,6 +940,43 @@ func _run_automation(elapsed: float) -> void:
 				"Auto-scout moved to %s at %s."
 				% [opponents[best_opponent].name, get_current_distance().label]
 			)
+
+func _get_auto_catalog_candidate() -> Dictionary:
+	var result := {}
+	var cheapest_cost := MAX_NUMBER
+	if is_auto_catalog_selected("pitch"):
+		for definition_value in Content.PITCHES:
+			var definition: Dictionary = definition_value
+			var id := str(definition.id)
+			var cost := get_pitch_cost(id)
+			if can_buy_pitch(id) and cost < cheapest_cost:
+				cheapest_cost = cost
+				result = {"kind": "pitch", "id": id, "cost": cost}
+	if is_auto_catalog_selected("ball"):
+		for definition_value in Content.BALL_UPGRADES:
+			var definition: Dictionary = definition_value
+			var id := str(definition.id)
+			var cost := get_ball_upgrade_cost(id)
+			if can_buy_ball_upgrade(id) and cost < cheapest_cost:
+				cheapest_cost = cost
+				result = {"kind": "ball", "id": id, "cost": cost}
+	if is_auto_catalog_selected("facility"):
+		for definition_value in Content.MILESTONES:
+			var definition: Dictionary = definition_value
+			var id := str(definition.id)
+			var cost := get_milestone_cost(id)
+			if can_buy_milestone(id) and cost < cheapest_cost:
+				cheapest_cost = cost
+				result = {"kind": "facility", "id": id, "cost": cost}
+	if is_auto_catalog_selected("growth"):
+		for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
+			var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
+			var id := str(definition.id)
+			var cost := get_body_growth_cost(id)
+			if can_buy_body_growth(id) and cost < cheapest_cost:
+				cheapest_cost = cost
+				result = {"kind": "growth", "id": id, "cost": cost}
+	return result
 
 func simulate_offline(seconds: float) -> Dictionary:
 	var bounded_seconds := clampf(seconds, 0.0, MAX_OFFLINE_SECONDS)
@@ -981,6 +1165,12 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	pending_volley_pitch_id = _sample_pitch_id()
 	pending_volley_speed_fps = _sample_pitch_speed(pending_volley_pitch_id)
 	pending_volley_distance_index = selected_distance_index
+	pending_volley_drag_per_foot = get_ball_drag_per_foot(current_opponent)
+	pending_volley_plate_speed_fps = get_plate_speed_for_release(
+		pending_volley_speed_fps,
+		pending_volley_distance_index,
+		pending_volley_drag_per_foot
+	)
 	lifetime_max_pitch_speed_fps = maxf(lifetime_max_pitch_speed_fps, pending_volley_speed_fps)
 	lifetime_max_distance_index = maxi(lifetime_max_distance_index, pending_volley_distance_index)
 	pending_volley_opponent_index = current_opponent
@@ -996,7 +1186,8 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	)
 	pending_volley_flight_duration = get_resolved_flight_seconds_for_speed(
 		pending_volley_speed_fps,
-		pending_volley_distance_index
+		pending_volley_distance_index,
+		pending_volley_drag_per_foot
 	)
 	pitch_flight_remaining = pending_volley_flight_duration
 	summary.released_pitches = float(summary.released_pitches) + float(pending_volley_size)
@@ -1010,6 +1201,8 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 		"pitch_id": pending_volley_pitch_id,
 		"pitch_name": str(Content.pitch_by_id(pending_volley_pitch_id).name),
 		"pitch_speed_fps": pending_volley_speed_fps,
+		"plate_speed_fps": pending_volley_plate_speed_fps,
+		"drag_per_foot": pending_volley_drag_per_foot,
 		"distance_index": pending_volley_distance_index,
 		"opponent_index": pending_volley_opponent_index,
 	})
@@ -1030,6 +1223,8 @@ func _resolve_pending_volley(summary: Dictionary, elapsed_offset: float) -> void
 	pending_volley_saved = false
 	pending_volley_pitch_id = "dead_fish"
 	pending_volley_speed_fps = get_representative_pitch_speed("dead_fish")
+	pending_volley_plate_speed_fps = pending_volley_speed_fps
+	pending_volley_drag_per_foot = 0.0
 	_start_new_foreground_timer_phase()
 	_apply_pitch_outcome(
 		summary,
@@ -2641,6 +2836,8 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			return lifetime_max_pitch_speed_fps
 		"training":
 			return float(training_levels.get(str(key), 0))
+		"body_growth":
+			return float(body_growth_level)
 		"pitches_owned":
 			return float(unlocked_pitches.size())
 		"ball_upgrades_owned":
@@ -2727,7 +2924,7 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			]
 		"level":
 			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
-		"training", "genetic_upgrade", "eldritch_upgrade":
+		"training", "body_growth", "genetic_upgrade", "eldritch_upgrade":
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
 		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos", "human_champion_toddler", "no_hitter":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
@@ -2762,7 +2959,14 @@ func set_catalog_hide_purchased(catalog_id: String, hidden: bool) -> bool:
 	return true
 
 func _get_quality_without_pitch(pitch_speed_fps: float) -> float:
-	var velocity_score := log(maxf(pitch_speed_fps, 0.0) + 1.0) / log(2.0) * 0.70
+	# Keep the literal 1 ft/s opening at its established 0.70 velocity score, then
+	# reward every doubling above it. This makes a believable fastball a real
+	# alternative to pumping Command forever without making the first toddler an
+	# automatic strikeout or letting repeatable Speed scale linearly into space.
+	var velocity_score := 0.70 + maxf(
+		log(maxf(pitch_speed_fps, 1.0)) / log(2.0),
+		0.0
+	) * 0.90
 	var command_score := float(training_levels.command) * QUALITY_PER_RANK
 	var diversity_bonus := maxf(float(unlocked_pitches.size() - 1) * 0.08, 0.0)
 	var trained_quality := (
@@ -2871,17 +3075,84 @@ func get_pitch_distance_feet_for_index(distance_index: int = -1) -> float:
 func get_pitch_distance_feet() -> float:
 	return get_pitch_distance_feet_for_index(selected_distance_index)
 
+func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
+	# Human baseball happens in air. The untouched opening Wiffle Ball stays at
+	# the title's literal 1 ft/s for 3 ft; purchased lightweight shells visibly
+	# bleed speed, while regulation leather approaches real-baseball retention.
+	# Alien and eldritch fields are effectively vacuum, so drag becomes zero there.
+	if opponent_index > Content.HUMAN_FINAL_INDEX:
+		return 0.0
+	var shell_count := purchased_ball_upgrades.size()
+	if shell_count <= 0:
+		return 0.0
+	if shell_count == 1:
+		return 0.012
+	if shell_count == 2:
+		return 0.009
+	if shell_count == 3:
+		return 0.005
+	var leather_progress := clampf(float(shell_count - 4) / 12.0, 0.0, 1.0)
+	return lerpf(0.0019, 0.00075, leather_progress)
+
+func get_plate_speed_for_release(
+	release_speed_fps: float,
+	distance_index: int = -1,
+	drag_per_foot: float = -1.0
+) -> float:
+	var drag := get_ball_drag_per_foot() if drag_per_foot < 0.0 else maxf(drag_per_foot, 0.0)
+	var distance := get_pitch_distance_feet_for_index(distance_index)
+	return maxf(release_speed_fps, 0.000001) * exp(-drag * distance)
+
+func get_representative_plate_speed() -> float:
+	return get_plate_speed_for_release(
+		get_representative_pitch_speed(),
+		selected_distance_index,
+		get_ball_drag_per_foot()
+	)
+
+func get_pitch_drag_loss_fraction() -> float:
+	var release_speed := maxf(get_representative_pitch_speed(), 0.000001)
+	return clampf(1.0 - get_representative_plate_speed() / release_speed, 0.0, 1.0)
+
 func get_physical_flight_seconds() -> float:
-	return get_pitch_distance_feet() / maxf(get_representative_pitch_speed(), 0.000001)
+	return get_physical_flight_seconds_for_speed(
+		get_representative_pitch_speed(),
+		selected_distance_index,
+		get_ball_drag_per_foot()
+	)
+
+func get_physical_flight_seconds_for_speed(
+	release_speed_fps: float,
+	distance_index: int = -1,
+	drag_per_foot: float = -1.0
+) -> float:
+	var speed := maxf(release_speed_fps, 0.000001)
+	var distance := get_pitch_distance_feet_for_index(distance_index)
+	var drag := get_ball_drag_per_foot() if drag_per_foot < 0.0 else maxf(drag_per_foot, 0.0)
+	if drag <= 0.000000001:
+		return distance / speed
+	# With v(x)=v0*e^(-kx), integrating dx/v(x) gives this exact travel time.
+	# Clamp the exponent for numerical safety; non-human astronomical play has
+	# zero drag and therefore never enters this branch.
+	var exponent := minf(drag * distance, 40.0)
+	return (exp(exponent) - 1.0) / (drag * speed)
 
 func get_resolved_flight_seconds() -> float:
 	return get_resolved_flight_seconds_for_speed(get_representative_pitch_speed(), selected_distance_index)
 
-func get_resolved_flight_seconds_for_speed(pitch_speed_fps: float, distance_index: int = -1) -> float:
+func get_resolved_flight_seconds_for_speed(
+	pitch_speed_fps: float,
+	distance_index: int = -1,
+	drag_per_foot: float = -1.0
+) -> float:
 	# Opening physics are literal: three feet at one foot/second takes three
 	# seconds. Astronomical distances compress logarithmically so galaxy baseball
 	# remains playable, while every released volley still owns a real flight phase.
-	var physical_seconds := get_pitch_distance_feet_for_index(distance_index) / maxf(pitch_speed_fps, 0.000001)
+	var physical_seconds := get_physical_flight_seconds_for_speed(
+		pitch_speed_fps,
+		distance_index,
+		drag_per_foot
+	)
 	if physical_seconds <= 3.0:
 		return clampf(physical_seconds, 0.16, 3.0)
 	return minf(3.0 + log(physical_seconds / 3.0) * 0.35, 5.0)
@@ -2932,7 +3203,7 @@ func _check_opponent_unlock() -> String:
 		human_league_completed_as_toddler = true
 	highest_unlocked += 1
 	var message := "UNLOCKED: %s" % opponents[highest_unlocked].name
-	if auto_advance_enabled and has_genetic_upgrade("migratory_instinct"):
+	if auto_advance_enabled and can_auto_advance_to(highest_unlocked):
 		current_opponent = highest_unlocked
 		_sync_distance_to_current_opponent()
 		plate_strikes = 0
@@ -3210,6 +3481,40 @@ func has_genetic_upgrade(id: String) -> bool:
 func has_eldritch_upgrade(id: String) -> bool:
 	return int(eldritch_levels.get(id, 0)) > 0
 
+func get_human_auto_advance_capacity() -> int:
+	return clampi(int(genetic_levels.get("migratory_instinct", 0)), 0, Content.HUMAN_FINAL_INDEX)
+
+func get_alien_auto_advance_capacity() -> int:
+	return clampi(
+		int(eldritch_levels.get("interstellar_itinerary", 0)),
+		0,
+		Content.ALIEN_FINAL_INDEX - Content.ALIEN_EXHIBITION_INDEX + 1
+	)
+
+func has_auto_advance_capacity() -> bool:
+	return get_human_auto_advance_capacity() > 0 or get_alien_auto_advance_capacity() > 0
+
+func can_auto_advance_to(opponent_index: int) -> bool:
+	# Genetic rank N covers destination human opponent N. Eldritch rank one
+	# starts with the alien exhibition, allowing a repeat universe to cross the
+	# human/alien boundary only after that second prestige layer is earned.
+	if opponent_index >= 1 and opponent_index <= Content.HUMAN_FINAL_INDEX:
+		return opponent_index <= get_human_auto_advance_capacity()
+	if opponent_index >= Content.ALIEN_EXHIBITION_INDEX and opponent_index <= Content.ALIEN_FINAL_INDEX:
+		return (
+			opponent_index - Content.ALIEN_EXHIBITION_INDEX + 1
+			<= get_alien_auto_advance_capacity()
+		)
+	return false
+
+func get_auto_advance_capacity_text() -> String:
+	return "Human %d/%d  •  Alien %d/%d" % [
+		get_human_auto_advance_capacity(),
+		Content.HUMAN_FINAL_INDEX,
+		get_alien_auto_advance_capacity(),
+		Content.ALIEN_FINAL_INDEX - Content.ALIEN_EXHIBITION_INDEX + 1,
+	]
+
 func has_divine_blessing(id: String) -> bool:
 	return id in divine_blessings
 
@@ -3387,9 +3692,9 @@ func _reset_body_progress() -> void:
 	consecutive_home_runs = 0
 	simulation_accumulator = 0.0
 	cosmos_conquered = false
-	auto_advance_enabled = auto_advance_enabled and has_genetic_upgrade("migratory_instinct")
-	auto_train_enabled = auto_train_enabled and has_genetic_upgrade("autonomic_coach")
+	auto_advance_enabled = auto_advance_enabled and has_auto_advance_capacity()
 	auto_farm_enabled = auto_farm_enabled and has_genetic_upgrade("predator_scouting")
+	_sanitize_automation_settings()
 	_reset_mastery()
 
 func perform_genetic_rebirth() -> int:
@@ -3427,12 +3732,11 @@ func perform_eldritch_ascension() -> int:
 	reality_dna_earned = 0.0
 	genetic_rebirths = 0
 	_reset_genetic_levels()
+	_reset_auto_training_stats()
 	genetic_offer_unlocked = true
 	alien_exhibition_seconds = EXHIBITION_SECONDS
 	eldritch_offer_unlocked = true
 	eldritch_exhibition_seconds = EXHIBITION_SECONDS
-	auto_advance_enabled = false
-	auto_train_enabled = false
 	auto_farm_enabled = false
 	_clear_all_loot_for_reset()
 	_reset_body_progress()
@@ -3464,6 +3768,8 @@ func perform_divine_ascension(id: String) -> bool:
 	eldritch_ascensions = 0
 	_reset_genetic_levels()
 	_reset_eldritch_levels()
+	_reset_auto_training_stats()
+	_reset_auto_catalog_settings()
 	# God resets the universe, not the pitcher's memory of the two mandatory
 	# prestige offers. Repeat campaigns therefore pause at each known exhibition
 	# instead of forcing another minute of scripted Grand Slams.
@@ -3472,14 +3778,13 @@ func perform_divine_ascension(id: String) -> bool:
 	alien_exhibition_seconds = EXHIBITION_SECONDS
 	eldritch_exhibition_seconds = EXHIBITION_SECONDS
 	auto_advance_enabled = false
-	auto_train_enabled = false
 	auto_farm_enabled = false
 	_clear_all_loot_for_reset()
 	_reset_body_progress()
 	no_hitter_attempt_valid = true
 	var reward_name := "Another Halo" if id == "halo" else str(Content.divine_by_id(id).name)
 	progression_changed.emit(
-		"DIVINE GRAND SLAM: God restored the universe and granted %s." % reward_name
+		"GOD PRESTIGE: Thanks for saving the universe. God restored it so you can do it all again, and granted %s." % reward_name
 	)
 	check_achievements()
 	return true
@@ -3709,6 +4014,8 @@ func to_save_data() -> Dictionary:
 		"pending_volley_saved": pending_volley_saved,
 		"pending_volley_pitch_id": pending_volley_pitch_id,
 		"pending_volley_speed_fps": pending_volley_speed_fps,
+		"pending_volley_plate_speed_fps": pending_volley_plate_speed_fps,
+		"pending_volley_drag_per_foot": pending_volley_drag_per_foot,
 		"pending_volley_distance_index": pending_volley_distance_index,
 		"pending_volley_opponent_index": pending_volley_opponent_index,
 		"current_opponent": current_opponent,
@@ -3736,6 +4043,8 @@ func to_save_data() -> Dictionary:
 		"auto_advance_enabled": auto_advance_enabled,
 		"auto_train_enabled": auto_train_enabled,
 		"auto_farm_enabled": auto_farm_enabled,
+		"auto_training_stats": auto_training_stats,
+		"auto_catalog_settings": auto_catalog_settings,
 		"training_levels": training_levels,
 		"scale_levels": scale_levels,
 		"genetic_levels": genetic_levels,
@@ -3838,6 +4147,8 @@ func apply_save_data(data: Dictionary) -> void:
 	var saved_auto_advance := bool(data.get("auto_advance_enabled", false))
 	var saved_auto_train := bool(data.get("auto_train_enabled", false))
 	var saved_auto_farm := bool(data.get("auto_farm_enabled", false))
+	var saved_auto_training_stats: Dictionary = data.get("auto_training_stats", {})
+	var saved_auto_catalog_settings: Dictionary = data.get("auto_catalog_settings", {})
 	var saved_catalog_filters: Dictionary = data.get("catalog_hide_purchased", {})
 	for catalog_id in catalog_hide_purchased.keys():
 		catalog_hide_purchased[catalog_id] = bool(saved_catalog_filters.get(catalog_id, false))
@@ -3893,6 +4204,10 @@ func apply_save_data(data: Dictionary) -> void:
 	if saved_version == 6:
 		genetic_levels.compressed_strike_genome = clampi(int(saved_genetic.get("expanded_strike_genome", 0)), 0, 3)
 		eldritch_levels.portal_outfield = clampi(int(saved_eldritch.get("impossible_count", 0)), 0, 4)
+	# Auto-advance was one all-human purchase through save v20. Convert that
+	# purchase into every human license so updating never removes its old value.
+	if saved_version < 21 and int(genetic_levels.get("migratory_instinct", 0)) > 0:
+		genetic_levels.migratory_instinct = Content.HUMAN_FINAL_INDEX
 	divine_blessings.clear()
 	for id in data.get("divine_blessings", []):
 		if not Content.divine_by_id(str(id)).is_empty() and str(id) not in divine_blessings:
@@ -3948,13 +4263,38 @@ func apply_save_data(data: Dictionary) -> void:
 				pending_volley_pitch_id = "dead_fish"
 			pending_volley_speed_fps = maxf(float(data.get("pending_volley_speed_fps", get_representative_pitch_speed(pending_volley_pitch_id))), 0.000001)
 			pending_volley_distance_index = clampi(int(data.get("pending_volley_distance_index", selected_distance_index)), 0, Content.DISTANCE_TIERS.size() - 1)
+			pending_volley_drag_per_foot = maxf(float(data.get(
+				"pending_volley_drag_per_foot",
+				get_ball_drag_per_foot(current_opponent)
+			)), 0.0)
+			pending_volley_plate_speed_fps = maxf(float(data.get(
+				"pending_volley_plate_speed_fps",
+				get_plate_speed_for_release(
+					pending_volley_speed_fps,
+					pending_volley_distance_index,
+					pending_volley_drag_per_foot
+				)
+			)), 0.000001)
 			pending_volley_opponent_index = clampi(int(data.get("pending_volley_opponent_index", current_opponent)), 0, highest_unlocked)
 		else:
 			pitch_credit = clampf(float(data.get("pitch_credit", 0.0)), 0.0, 0.999999)
 
-	auto_advance_enabled = saved_auto_advance and has_genetic_upgrade("migratory_instinct")
-	auto_train_enabled = saved_auto_train and has_genetic_upgrade("autonomic_coach")
+	auto_advance_enabled = saved_auto_advance and has_auto_advance_capacity()
 	auto_farm_enabled = saved_auto_farm and has_genetic_upgrade("predator_scouting")
+	_reset_auto_training_stats()
+	if saved_version >= 19:
+		for id in AUTO_TRAINING_STAT_IDS:
+			auto_training_stats[str(id)] = bool(saved_auto_training_stats.get(str(id), false))
+	elif saved_auto_train and get_auto_training_license_count() > 0:
+		# The old all-stat Auto-coach becomes one explicit Speed Training license.
+		# Existing players keep useful automation without silently receiving eight
+		# additional licenses that the new prestige economy expects them to earn.
+		auto_training_stats.velocity = true
+	auto_catalog_settings = _empty_auto_catalog_settings()
+	if saved_version >= 19:
+		for id in AUTO_CATALOG_IDS:
+			auto_catalog_settings[str(id)] = bool(saved_auto_catalog_settings.get(str(id), false))
+	_sanitize_automation_settings()
 
 	unlocked_pitches.clear()
 	for id in data.get("unlocked_pitches", ["dead_fish"]):

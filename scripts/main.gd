@@ -16,6 +16,8 @@ const COLOR_GOOD := Color("6ee7a8")
 const COLOR_BAD := Color("ff667d")
 const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
+const WEB_UPDATE_SAVE_FLUSH_SECONDS := 1.50
+const WEB_UPDATE_RELOAD_WATCHDOG_SECONDS := 6.0
 const BROWSER_SAVE_MIRROR_KEY := "no_hitter_portable_save_mirror_v1"
 const BROWSER_SAVE_ROLLBACK_KEY := "no_hitter_portable_save_rollback_v1"
 const BROWSER_MANUAL_SAVE_SLOT_COUNT := 3
@@ -31,6 +33,7 @@ const LOCKER_ITEM_DRAG_CANCEL_DISTANCE := 8.0
 var game: BaseballGameState
 var pitch_field
 var ui_elapsed := 0.0
+var expensive_ui_elapsed := 0.0
 var autosave_elapsed := 0.0
 var development_session := false
 
@@ -81,6 +84,8 @@ var genetic_buttons := {}
 var eldritch_buttons := {}
 var divine_buttons := {}
 var automation_toggles := {}
+var automation_training_heading: Label
+var automation_catalog_heading: Label
 var stat_labels := {}
 var stat_rows := {}
 var upgrade_tabs: TabContainer
@@ -187,6 +192,8 @@ var web_update_check_elapsed := WEB_UPDATE_CHECK_INTERVAL - 5.0
 var web_update_status_elapsed := 0.0
 var web_update_ready := false
 var web_update_snoozed_until := 0.0
+var web_update_installing := false
+var web_update_attempt_serial := 0
 var browser_save_recovered := false
 var browser_save_regression_allowed := false
 var update_banner: PanelContainer
@@ -233,6 +240,8 @@ var opponent_row: HBoxContainer
 var opponent_stack: VBoxContainer
 var play_row: HBoxContainer
 var equipment_sidebar: ScrollContainer
+var equipment_sidebar_heading: Label
+var equipment_stats_section: VBoxContainer
 var field_stack: VBoxContainer
 var field_footer: HBoxContainer
 var outcomes_grid: GridContainer
@@ -245,6 +254,12 @@ var header_metric_headings: Array[Label] = []
 var return_to_title_button: Button
 var title_screen: ColorRect
 var title_panel: PanelContainer
+var title_root_stack: VBoxContainer
+var title_heading_label: Label
+var title_layout_grid: GridContainer
+var title_hero_stack: VBoxContainer
+var title_action_panel: PanelContainer
+var title_action_heading: Label
 var title_art
 var title_art_frame: PanelContainer
 var title_subtitle_label: Label
@@ -325,10 +340,14 @@ func _process(delta: float) -> void:
 	)
 	game.advance(simulation_delta)
 	ui_elapsed += delta
+	expensive_ui_elapsed += delta
 	autosave_elapsed += delta
 	if ui_elapsed >= 0.20:
 		ui_elapsed = 0.0
-		_refresh_interface()
+		var refresh_expensive := expensive_ui_elapsed >= 1.0
+		if refresh_expensive:
+			expensive_ui_elapsed = 0.0
+		_refresh_interface(refresh_expensive)
 	if autosave_elapsed >= 10.0 and not development_session and not game.save_writes_locked:
 		autosave_elapsed = 0.0
 		game.save_game()
@@ -559,7 +578,7 @@ func _configure_platform_ui() -> void:
 	)
 	save_button.tooltip_text = storage_note
 	export_save_button.tooltip_text = "Download a portable JSON backup of this run."
-	load_save_button.tooltip_text = "Choose a portable JSON backup to replace the current run."
+	load_save_button.tooltip_text = "Choose a portable JSON backup to replace the current run. On mobile, use Browse / Locations to select an enabled Google Drive provider directly."
 	save_label.tooltip_text = storage_note
 	_refresh_mobile_install_offer()
 
@@ -642,7 +661,7 @@ func _configure_mobile_install_dialog(platform: String) -> void:
 			"1. Tap Safari's SHARE button (the square with an up arrow).\n\n"
 			+ "2. Scroll down and tap ADD TO HOME SCREEN.\n\n"
 			+ "3. Tap ADD, then launch the game from its new Home Screen icon.\n\n"
-			+ "EXPORT a backup first. If iOS starts the installed game with a fresh save, use LOAD to bring your run across. If Add to Home Screen is missing, open this page in Safari."
+			+ "EXPORT a backup first. If iOS starts the installed game with a fresh save, use IMPORT to bring your run across. IMPORT can browse Google Drive when Drive is enabled under Files > Browse > Locations. If Add to Home Screen is missing, open this page in Safari."
 		)
 
 func _show_mobile_install() -> void:
@@ -708,6 +727,8 @@ func _update_browser_release_status(delta: float) -> void:
 		elif web_update_ready:
 			web_update_ready = false
 			update_banner.visible = false
+			if title_screen_active:
+				_refresh_title_layout()
 	if web_update_check_elapsed >= WEB_UPDATE_CHECK_INTERVAL:
 		web_update_check_elapsed = 0.0
 		# Browsers eventually check service workers themselves, but an idle game can
@@ -731,15 +752,37 @@ func _on_browser_update_available() -> void:
 	if Time.get_unix_time_from_system() >= web_update_snoozed_until:
 		update_banner.visible = true
 		update_banner.move_to_front()
+		if title_screen_active:
+			_refresh_title_layout()
 
 func _snooze_browser_update() -> void:
+	# LATER also cancels the short pre-activation save window. Once the worker is
+	# activating this button is disabled so it never promises to cancel a reload
+	# that the browser has already accepted.
+	web_update_attempt_serial += 1
+	_reset_browser_update_attempt()
 	web_update_snoozed_until = Time.get_unix_time_from_system() + WEB_UPDATE_SNOOZE_SECONDS
 	update_banner.visible = false
+	if title_screen_active:
+		_refresh_title_layout()
 
 func _request_browser_update() -> void:
-	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
+	if web_update_installing or not is_web_build or not JavaScriptBridge.pwa_needs_update():
 		return
 	_show_browser_update_confirmation()
+
+func _reset_browser_update_attempt(message := "") -> void:
+	web_update_installing = false
+	if update_now_button == null or update_later_button == null:
+		return
+	update_now_button.disabled = false
+	update_later_button.disabled = false
+	update_now_button.text = "REVIEW" if mobile_layout else "REVIEW UPDATE"
+	update_banner_label.text = (
+		message
+		if not message.is_empty()
+		else ("UPDATE • BACK UP FIRST" if mobile_layout else "UPDATE READY • EXPORT BACKUP FIRST")
+	)
 
 func _show_browser_update_confirmation() -> void:
 	# Restore any reparented mobile menu before opening a Window. In particular,
@@ -779,28 +822,60 @@ func _handle_browser_update_custom_action(action: StringName) -> void:
 	call_deferred("_request_export_save")
 
 func _install_browser_update() -> void:
-	if not is_web_build or not JavaScriptBridge.pwa_needs_update():
+	if web_update_installing or not is_web_build or not JavaScriptBridge.pwa_needs_update():
 		return
 	if game != null and game.save_writes_locked:
 		_show_save_recovery_required()
 		return
+	web_update_installing = true
+	web_update_attempt_serial += 1
+	var attempt_serial := web_update_attempt_serial
 	update_now_button.disabled = true
+	update_later_button.disabled = false
 	update_banner_label.text = "SAVING YOUR RUN…"
 	if game != null and not development_session:
-		game.save_game()
+		if not game.save_game():
+			_reset_browser_update_attempt("SAVE FAILED • EXPORT OR RETRY")
+			_show_save_transfer_error(
+				"The update was not installed because the automatic save could not be verified. Export a backup or try again."
+			)
+			return
 		_write_browser_save_mirror()
 	# Web saves live in IndexedDB. Flush them before asking the service worker to
 	# activate the new release and reload every open game tab.
 	JavaScriptBridge.force_fs_sync()
-	# Godot's Web filesystem flush is asynchronous. Leave a conservative window
-	# after also writing the synchronous localStorage mirror before the service
-	# worker reloads every open tab.
-	await get_tree().create_timer(1.50).timeout
-	var update_error := JavaScriptBridge.pwa_update()
+	# Godot's Web filesystem flush is asynchronous. The synchronous localStorage
+	# mirror is already complete; this window gives IndexedDB time to catch up.
+	await get_tree().create_timer(WEB_UPDATE_SAVE_FLUSH_SECONDS, true, false, true).timeout
+	if attempt_serial != web_update_attempt_serial or not web_update_installing:
+		return
+	update_banner_label.text = "INSTALLING UPDATE…"
+	update_later_button.disabled = true
+	# The stock Godot worker uses Client.navigate(), which iOS Home Screen apps can
+	# silently ignore after activation. The page bridge listens for controllerchange
+	# and guarantees a bounded location.reload() fallback instead.
+	var bridge_started = JavaScriptBridge.eval(
+		"Boolean(window.OFPS_PWA && window.OFPS_PWA.activateWaitingUpdate && window.OFPS_PWA.activateWaitingUpdate())",
+		true
+	)
+	var update_error := OK if bool(bridge_started) else JavaScriptBridge.pwa_update()
 	if update_error != OK:
-		update_now_button.disabled = false
-		update_banner_label.text = "UPDATE READY — RELOAD THIS PAGE"
-		_log_event("The browser could not activate the update automatically. Reload this page to try again.")
+		_reset_browser_update_attempt("UPDATE READY • RELOAD OR RETRY")
+		_log_event("The browser could not activate the update automatically. Reload this page or tap Review to try again.")
+		return
+	await get_tree().create_timer(WEB_UPDATE_RELOAD_WATCHDOG_SECONDS, true, false, true).timeout
+	if attempt_serial != web_update_attempt_serial or not web_update_installing:
+		return
+	# This normally never returns because navigation destroys the old page. Keep a
+	# second independent reload request in case an older cached bridge was partial.
+	JavaScriptBridge.eval(
+		"Boolean(window.OFPS_PWA && window.OFPS_PWA.forceUpdateReload ? window.OFPS_PWA.forceUpdateReload() : (window.location.reload(), true))",
+		true
+	)
+	await get_tree().create_timer(1.50, true, false, true).timeout
+	if attempt_serial == web_update_attempt_serial and web_update_installing:
+		_reset_browser_update_attempt("UPDATE READY • CLOSE AND REOPEN")
+		_log_event("The update was saved, but this browser declined the automatic reload. Close and reopen the app to finish.")
 
 func _poll_browser_lifecycle(delta: float) -> void:
 	if not is_web_build or game == null:
@@ -1088,6 +1163,17 @@ func _compact_panel_style(horizontal_margin: float, vertical_margin: float, radi
 	style.content_margin_bottom = vertical_margin
 	return style
 
+func _scroll_content_gutter(scroll: ScrollContainer, right_margin := 14) -> MarginContainer:
+	# Godot places the vertical bar over the ScrollContainer's content width. A
+	# real layout gutter keeps text, stars, and BUY buttons clear at every scale.
+	var gutter := MarginContainer.new()
+	gutter.name = "ScrollContentGutter"
+	gutter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gutter.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	gutter.add_theme_constant_override("margin_right", right_margin)
+	scroll.add_child(gutter)
+	return gutter
+
 func _create_navigation_icon(direction: String) -> ImageTexture:
 	var image := Image.create(28, 28, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
@@ -1149,14 +1235,20 @@ func _ensure_favorite_icons() -> void:
 func _configure_tab_overflow_controls(for_mobile: bool) -> void:
 	if upgrade_tabs == null or mobile_tab_navigation == null:
 		return
-	mobile_tab_navigation.visible = for_mobile
+	# The native TabBar grows a tiny, scrollbar-adjacent overflow pair as soon as
+	# the catalog no longer fits. Those controls are hard to read on desktop and
+	# nearly impossible to tap on a phone, so every layout uses one explicit
+	# previous/current/next navigator instead.
+	mobile_tab_navigation.visible = true
 	var tab_bar := upgrade_tabs.get_tab_bar()
-	# clip_tabs always draws its own tiny overflow pair whenever the titles do not
-	# fit; scrolling_enabled only controls wheel input. Phones therefore hide the
-	# native bar completely and use the explicit 44-pixel controls plus a current-
-	# tab label. Desktop keeps the ordinary clickable tab strip.
-	tab_bar.visible = not for_mobile
-	tab_bar.scrolling_enabled = not for_mobile
+	tab_bar.visible = false
+	tab_bar.scrolling_enabled = false
+	var arrow_size := float(MOBILE_TAB_ARROW_TOUCH_SIZE if for_mobile else 38)
+	mobile_tab_previous_button.custom_minimum_size = Vector2(arrow_size, arrow_size)
+	mobile_tab_next_button.custom_minimum_size = Vector2(arrow_size, arrow_size)
+	mobile_tab_label_card.custom_minimum_size.y = 48.0 if for_mobile else 38.0
+	mobile_tab_label.add_theme_font_size_override("font_size", 18 if for_mobile else 14)
+	mobile_tab_navigation.add_theme_constant_override("separation", 8 if for_mobile else 6)
 	_refresh_mobile_tab_navigation()
 
 func _visible_upgrade_tab_indices() -> Array[int]:
@@ -1259,46 +1351,101 @@ func _build_title_screen() -> void:
 	title_screen.add_child(center)
 	title_panel = PanelContainer.new()
 	title_panel.name = "TitlePanel"
-	title_panel.add_theme_stylebox_override("panel", _compact_panel_style(18.0, 14.0, 12))
+	var title_surface := _compact_panel_style(22.0, 18.0, 14)
+	title_surface.bg_color = Color("0d1727")
+	title_surface.border_color = Color("2a4260")
+	title_surface.set_border_width_all(2)
+	title_panel.add_theme_stylebox_override("panel", title_surface)
 	center.add_child(title_panel)
 
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 9)
-	title_panel.add_child(stack)
-	var heading := Label.new()
-	heading.text = "NO HITTER"
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", 38)
-	heading.add_theme_color_override("font_color", COLOR_ACCENT)
-	stack.add_child(heading)
+	title_root_stack = VBoxContainer.new()
+	title_root_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_root_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	title_root_stack.add_theme_constant_override("separation", 12)
+	title_panel.add_child(title_root_stack)
+
+	title_heading_label = Label.new()
+	title_heading_label.text = "NO HITTER"
+	title_heading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_heading_label.add_theme_font_size_override("font_size", 46)
+	title_heading_label.add_theme_color_override("font_color", COLOR_ACCENT)
+	title_root_stack.add_child(title_heading_label)
 	title_subtitle_label = Label.new()
 	title_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_subtitle_label.add_theme_font_size_override("font_size", 14)
+	title_subtitle_label.add_theme_font_size_override("font_size", 15)
 	title_subtitle_label.add_theme_color_override("font_color", COLOR_MUTED)
-	stack.add_child(title_subtitle_label)
+	title_root_stack.add_child(title_subtitle_label)
+
+	title_layout_grid = GridContainer.new()
+	title_layout_grid.name = "TitleLayout"
+	title_layout_grid.columns = 2
+	title_layout_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_layout_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	title_layout_grid.add_theme_constant_override("h_separation", 18)
+	title_layout_grid.add_theme_constant_override("v_separation", 12)
+	title_root_stack.add_child(title_layout_grid)
+
+	title_hero_stack = VBoxContainer.new()
+	title_hero_stack.name = "TitleHero"
+	title_hero_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_hero_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	title_hero_stack.size_flags_stretch_ratio = 1.7
+	title_hero_stack.add_theme_constant_override("separation", 7)
+	title_layout_grid.add_child(title_hero_stack)
 
 	title_art_frame = PanelContainer.new()
+	title_art_frame.name = "TitleArtFrame"
+	title_art_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_art_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	title_art_frame.add_theme_stylebox_override("panel", _compact_panel_style(3.0, 3.0, 9))
-	stack.add_child(title_art_frame)
+	var art_frame_style := _compact_panel_style(4.0, 4.0, 10)
+	art_frame_style.bg_color = Color("07101b")
+	art_frame_style.border_color = Color("355371")
+	art_frame_style.set_border_width_all(2)
+	title_art_frame.add_theme_stylebox_override("panel", art_frame_style)
+	title_hero_stack.add_child(title_art_frame)
 	title_art = TitleArtScript.new()
 	title_art.name = "ProgressiveTitleArt"
 	title_art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_art.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	title_art.custom_minimum_size.y = 300.0
+	title_art.custom_minimum_size.y = 320.0
 	title_art_frame.add_child(title_art)
 
 	title_progress_label = Label.new()
 	title_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_progress_label.add_theme_font_size_override("font_size", 11)
+	title_progress_label.add_theme_font_size_override("font_size", 12)
 	title_progress_label.add_theme_color_override("font_color", COLOR_GOLD)
-	stack.add_child(title_progress_label)
+	title_hero_stack.add_child(title_progress_label)
+
+	title_action_panel = PanelContainer.new()
+	title_action_panel.name = "TitleActions"
+	title_action_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_action_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	title_action_panel.size_flags_stretch_ratio = 0.9
+	var action_style := _compact_panel_style(15.0, 14.0, 10)
+	action_style.bg_color = Color("111e31")
+	action_style.border_color = Color("2b4462")
+	title_action_panel.add_theme_stylebox_override("panel", action_style)
+	title_layout_grid.add_child(title_action_panel)
+	var action_stack := VBoxContainer.new()
+	action_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_stack.add_theme_constant_override("separation", 10)
+	title_action_panel.add_child(action_stack)
+	title_action_heading = Label.new()
+	title_action_heading.text = "YOUR RUN AWAITS"
+	title_action_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_action_heading.add_theme_font_size_override("font_size", 13)
+	title_action_heading.add_theme_color_override("font_color", COLOR_GOLD)
+	action_stack.add_child(title_action_heading)
+	var action_spacer := Control.new()
+	action_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_stack.add_child(action_spacer)
 
 	title_menu_stack = VBoxContainer.new()
-	title_menu_stack.add_theme_constant_override("separation", 7)
-	stack.add_child(title_menu_stack)
-	var resume_button := _title_menu_button("RESUME GAME")
+	title_menu_stack.add_theme_constant_override("separation", 9)
+	action_stack.add_child(title_menu_stack)
+	var resume_button := _title_menu_button("RESUME GAME", true)
 	resume_button.pressed.connect(_open_title_resume_picker)
 	title_menu_stack.add_child(resume_button)
 	var new_game_button := _title_menu_button("START NEW GAME")
@@ -1306,14 +1453,14 @@ func _build_title_screen() -> void:
 	new_game_button.pressed.connect(_request_new_game_from_title)
 	title_menu_stack.add_child(new_game_button)
 	var import_button := _title_menu_button("IMPORT SAVE")
-	import_button.tooltip_text = "Choose a portable No Hitter JSON backup."
+	import_button.tooltip_text = "Choose a portable No Hitter JSON backup. Mobile system pickers can browse Files and an enabled Google Drive provider directly."
 	import_button.pressed.connect(_request_load_save)
 	title_menu_stack.add_child(import_button)
 
 	title_resume_stack = VBoxContainer.new()
 	title_resume_stack.visible = false
 	title_resume_stack.add_theme_constant_override("separation", 6)
-	stack.add_child(title_resume_stack)
+	action_stack.add_child(title_resume_stack)
 	var resume_heading := Label.new()
 	resume_heading.text = "CHOOSE A SAVE"
 	resume_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1333,13 +1480,36 @@ func _build_title_screen() -> void:
 	var back_button := _title_menu_button("BACK")
 	back_button.pressed.connect(_close_title_resume_picker)
 	title_resume_stack.add_child(back_button)
+	var action_bottom_spacer := Control.new()
+	action_bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_stack.add_child(action_bottom_spacer)
+	var transfer_hint := Label.new()
+	transfer_hint.text = "AUTOSAVE ON  •  BACKUPS ARE PORTABLE JSON"
+	transfer_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	transfer_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	transfer_hint.add_theme_font_size_override("font_size", 10)
+	transfer_hint.add_theme_color_override("font_color", COLOR_MUTED)
+	action_stack.add_child(transfer_hint)
 
-func _title_menu_button(text_value: String) -> Button:
+func _title_menu_button(text_value: String, primary := false) -> Button:
 	var button := Button.new()
 	button.text = text_value
-	button.custom_minimum_size.y = 48.0
+	button.custom_minimum_size.y = 52.0
 	button.focus_mode = Control.FOCUS_ALL
 	button.add_theme_font_size_override("font_size", 16)
+	if primary:
+		var normal := _compact_panel_style(12.0, 8.0, 8)
+		normal.bg_color = Color("1f617b")
+		normal.border_color = COLOR_ACCENT
+		normal.set_border_width_all(2)
+		var hover := normal.duplicate() as StyleBoxFlat
+		hover.bg_color = Color("287c9d")
+		var pressed := normal.duplicate() as StyleBoxFlat
+		pressed.bg_color = Color("174a60")
+		button.add_theme_stylebox_override("normal", normal)
+		button.add_theme_stylebox_override("hover", hover)
+		button.add_theme_stylebox_override("pressed", pressed)
+		button.add_theme_color_override("font_color", Color.WHITE)
 	return button
 
 func _title_save_row(default_text: String) -> Dictionary:
@@ -1373,8 +1543,7 @@ func _show_title_screen(save_current := true) -> void:
 	title_screen_active = true
 	title_menu_stack.visible = true
 	title_resume_stack.visible = false
-	title_art_frame.visible = true
-	title_progress_label.visible = true
+	title_action_heading.text = "YOUR RUN AWAITS"
 	_refresh_title_screen()
 	_refresh_title_layout()
 	title_screen.visible = true
@@ -1390,8 +1559,7 @@ func _leave_title_screen(show_pending_offline := true) -> void:
 	title_screen.visible = false
 	title_menu_stack.visible = true
 	title_resume_stack.visible = false
-	title_art_frame.visible = true
-	title_progress_label.visible = true
+	title_action_heading.text = "YOUR RUN AWAITS"
 	if show_pending_offline and not pending_title_offline_summary.is_empty():
 		var summary := pending_title_offline_summary.duplicate(true)
 		var prefix := pending_title_offline_prefix
@@ -1429,29 +1597,62 @@ func _configure_title_layout(viewport_size: Vector2) -> void:
 	if title_panel == null:
 		return
 	var portrait := _is_portrait_viewport(viewport_size)
-	var panel_width := clampf(viewport_size.x - 24.0, 300.0, 620.0)
-	var maximum_height := 600.0 if title_resume_stack != null and title_resume_stack.visible else 780.0
-	var panel_height := clampf(viewport_size.y - 24.0, 460.0, maximum_height)
+	var compact_title := portrait or viewport_size.x < 760.0
+	var choosing_save := title_resume_stack != null and title_resume_stack.visible
+	var panel_width := (
+		clampf(viewport_size.x - 24.0, 300.0, 620.0)
+		if compact_title
+		else clampf(viewport_size.x - 64.0, 760.0, 1120.0)
+	)
+	var panel_height := (
+		clampf(viewport_size.y - 24.0, 460.0, 820.0)
+		if compact_title
+		else clampf(viewport_size.y - 64.0, 520.0, 680.0)
+	)
 	title_panel.custom_minimum_size = Vector2(panel_width, panel_height)
-	title_art.custom_minimum_size.y = clampf(
-		panel_height - (320.0 if portrait else 330.0),
-		170.0,
-		300.0
+	title_layout_grid.columns = 1 if compact_title else 2
+	title_layout_grid.add_theme_constant_override("h_separation", 12 if compact_title else 18)
+	title_layout_grid.add_theme_constant_override("v_separation", 10 if compact_title else 12)
+	title_heading_label.add_theme_font_size_override("font_size", 38 if compact_title else 52)
+	title_heading_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	var reserve_update_banner := (
+		is_web_build and update_banner != null and update_banner.visible
+	)
+	title_heading_label.custom_minimum_size.y = (
+		(66.0 if compact_title else 86.0) if reserve_update_banner else 0.0
+	)
+	title_subtitle_label.add_theme_font_size_override("font_size", 14 if compact_title else 16)
+	title_subtitle_label.autowrap_mode = (
+		TextServer.AUTOWRAP_WORD_SMART if compact_title else TextServer.AUTOWRAP_OFF
+	)
+	title_root_stack.add_theme_constant_override("separation", 9 if compact_title else 12)
+	title_action_panel.custom_minimum_size.x = 0.0 if compact_title else 330.0
+	title_action_panel.size_flags_vertical = (
+		Control.SIZE_EXPAND_FILL if choosing_save or not compact_title else Control.SIZE_FILL
+	)
+	# The art gives way to the save list only on a narrow portrait screen. A wide
+	# title keeps its matchup tableau visible, so desktop no longer looks like a
+	# stretched phone menu.
+	title_hero_stack.visible = not (compact_title and choosing_save)
+	title_art_frame.visible = title_hero_stack.visible
+	title_progress_label.visible = title_hero_stack.visible
+	title_art.custom_minimum_size.y = (
+		clampf(panel_height - 420.0, 180.0, 360.0)
+		if compact_title
+		else clampf(panel_height - 150.0, 360.0, 520.0)
 	)
 
 func _open_title_resume_picker() -> void:
 	_refresh_title_save_picker()
 	title_menu_stack.visible = false
 	title_resume_stack.visible = true
-	title_art_frame.visible = false
-	title_progress_label.visible = false
+	title_action_heading.text = "CHOOSE A SAVE"
 	_refresh_title_layout()
 
 func _close_title_resume_picker() -> void:
 	title_resume_stack.visible = false
 	title_menu_stack.visible = true
-	title_art_frame.visible = true
-	title_progress_label.visible = true
+	title_action_heading.text = "YOUR RUN AWAITS"
 	_refresh_title_layout()
 
 func _refresh_title_save_picker() -> void:
@@ -1632,10 +1833,11 @@ func _build_header(parent: Control) -> void:
 	save_action_row.add_theme_constant_override("separation", 3)
 	save_stack.add_child(save_action_row)
 	save_button = Button.new()
-	save_button.text = "SAVE"
+	save_button.text = "SAVES"
 	save_button.custom_minimum_size = Vector2(54.0, 32.0)
 	save_button.add_theme_font_size_override("font_size", 11)
-	save_button.pressed.connect(_save_now)
+	save_button.tooltip_text = "Open autosave, manual save slots, export, import, and title-screen controls."
+	save_button.pressed.connect(_open_saves_menu)
 	save_action_row.add_child(save_button)
 	export_save_button = Button.new()
 	export_save_button.text = "EXPORT"
@@ -1645,10 +1847,10 @@ func _build_header(parent: Control) -> void:
 	export_save_button.pressed.connect(_request_export_save)
 	save_action_row.add_child(export_save_button)
 	load_save_button = Button.new()
-	load_save_button.text = "LOAD"
-	load_save_button.custom_minimum_size = Vector2(48.0, 32.0)
+	load_save_button.text = "IMPORT"
+	load_save_button.custom_minimum_size = Vector2(60.0, 32.0)
 	load_save_button.add_theme_font_size_override("font_size", 10)
-	load_save_button.tooltip_text = "Load a portable JSON backup after confirmation."
+	load_save_button.tooltip_text = "Import a portable JSON backup after confirmation. Mobile file pickers can browse an enabled Google Drive provider directly."
 	load_save_button.pressed.connect(_request_load_save)
 	save_action_row.add_child(load_save_button)
 	hard_reset_button = Button.new()
@@ -1689,7 +1891,7 @@ func _build_browser_save_slots(parent: Control) -> void:
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	browser_save_slots_panel.add_child(heading)
 	var note := Label.new()
-	note.text = "Stored on this device. EXPORT is the portable cross-device backup."
+	note.text = "Stored on this device. EXPORT is portable; IMPORT can browse Files, iCloud, or an enabled Drive provider."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.add_theme_font_size_override("font_size", 10)
 	note.add_theme_color_override("font_color", COLOR_MUTED)
@@ -1839,7 +2041,7 @@ func _build_mobile_overlay() -> void:
 	stack.add_child(mobile_overlay_content)
 
 func _show_mobile_overlay(control: Control, title: String) -> void:
-	if not mobile_layout or control == null:
+	if control == null or (not mobile_layout and control != save_stack):
 		return
 	if mobile_overlay_control != null:
 		_close_mobile_overlay()
@@ -1856,11 +2058,30 @@ func _show_mobile_overlay(control: Control, title: String) -> void:
 		equipment_sidebar.custom_minimum_size.x = 0.0
 	if control == save_stack:
 		_refresh_browser_save_slots()
+		browser_save_slots_panel.visible = true
+		save_button.text = "SAVE AUTOSAVE NOW"
 	mobile_overlay_title.text = title
 	mobile_overlay_xp_label.visible = control == upgrade_panel
 	mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_xp_total(game.xp)
 	mobile_overlay_panel.visible = true
 	mobile_overlay_panel.move_to_front()
+	_configure_menu_overlay_geometry()
+
+func _configure_menu_overlay_geometry() -> void:
+	if mobile_overlay_surface == null:
+		return
+	if mobile_layout:
+		mobile_overlay_surface.set_anchors_preset(Control.PRESET_FULL_RECT)
+		mobile_overlay_surface.offset_left = 5.0
+		mobile_overlay_surface.offset_top = 5.0
+		mobile_overlay_surface.offset_right = -5.0
+		mobile_overlay_surface.offset_bottom = -5.0
+	else:
+		mobile_overlay_surface.set_anchors_preset(Control.PRESET_CENTER)
+		mobile_overlay_surface.offset_left = -360.0
+		mobile_overlay_surface.offset_top = -310.0
+		mobile_overlay_surface.offset_right = 360.0
+		mobile_overlay_surface.offset_bottom = 310.0
 
 func _close_mobile_overlay() -> void:
 	if mobile_overlay_control != null and is_instance_valid(mobile_overlay_control):
@@ -1880,6 +2101,8 @@ func _close_mobile_overlay() -> void:
 		elif control == save_stack:
 			control.size_flags_horizontal = Control.SIZE_FILL
 			control.size_flags_vertical = Control.SIZE_FILL
+			browser_save_slots_panel.visible = mobile_layout
+			save_button.text = "SAVES"
 		control.visible = not mobile_layout
 	mobile_overlay_control = null
 	mobile_overlay_home = null
@@ -2001,23 +2224,26 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	page_container.add_theme_constant_override("separation", 4 if mobile_layout else (6 if dense_wide else 10))
 	body_container.add_theme_constant_override("separation", 0 if mobile_layout else (8 if dense_wide else 10))
 	header_row.add_theme_constant_override("separation", 7 if mobile_layout else (12 if dense_wide else 20))
-	header_title.add_theme_font_size_override("font_size", 17 if mobile_layout else (23 if dense_wide else 27))
+	header_title.add_theme_font_size_override("font_size", 18 if mobile_layout else (21 if dense_wide else 24))
 	header_title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL if mobile_layout else Control.SIZE_FILL
+	header_title_stack.custom_minimum_size.x = 175.0 if mobile_layout else (280.0 if dense_wide else 360.0)
 	header_spacer.visible = not mobile_layout
 	header_subtitle.visible = true
 	header_subtitle.custom_minimum_size.x = 175.0 if mobile_layout else 0.0
-	header_subtitle.add_theme_font_size_override("font_size", 9 if mobile_layout else (11 if dense_wide else 13))
+	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if mobile_layout else TextServer.AUTOWRAP_OFF
+	header_subtitle.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	header_subtitle.add_theme_font_size_override("font_size", 10 if mobile_layout else (11 if dense_wide else 12))
 	for index in header_metric_stacks.size():
-		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else (96.0 if dense_wide else 126.0)
-		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else (10 if dense_wide else 12))
+		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else (84.0 if dense_wide else 108.0)
+		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else (10 if dense_wide else 11))
 		var value_label := header_metric_stacks[index].get_child(1) as Label
-		value_label.add_theme_font_size_override("font_size", 15 if mobile_layout else (18 if dense_wide else 21))
+		value_label.add_theme_font_size_override("font_size", 16 if mobile_layout else (18 if dense_wide else 20))
 	if header_metric_headings.size() >= 3:
 		header_metric_headings[1].text = "XP / S" if mobile_layout else "XP / SECOND"
 		header_metric_headings[2].text = "DNA • ARCANA"
 	prestige_header_stack.visible = _has_genetic_reveal() and not mobile_layout
 	save_stack.visible = not mobile_layout
-	browser_save_slots_panel.visible = mobile_layout
+	browser_save_slots_panel.visible = mobile_layout or mobile_overlay_control == save_stack
 	return_to_title_button.text = "RETURN TO TITLE" if mobile_layout else "TITLE"
 	return_to_title_button.custom_minimum_size = (
 		Vector2(132.0, 44.0) if mobile_layout else Vector2(48.0, 24.0)
@@ -2027,14 +2253,11 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	upgrade_panel.visible = not mobile_layout
 	equipment_sidebar.visible = not mobile_layout
 	event_log_panel.visible = not mobile_layout
-	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (330.0 if dense_wide else 360.0)
-	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (190.0 if dense_wide else 215.0)
-	upgrade_tabs.get_tab_bar().add_theme_font_size_override("font_size", 11 if mobile_layout else 8)
+	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (350.0 if dense_wide else 370.0)
+	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (220.0 if dense_wide else 250.0)
+	equipment_sidebar_heading.text = "STATUS & LOADOUT" if mobile_layout else "LOADOUT"
+	equipment_stats_section.visible = mobile_layout
 	mobile_upgrade_stats_panel.visible = mobile_layout
-	if mobile_tab_label != null:
-		mobile_tab_label.add_theme_font_size_override("font_size", 18 if mobile_layout else 14)
-	if mobile_tab_label_card != null:
-		mobile_tab_label_card.custom_minimum_size.y = 48.0 if mobile_layout else 40.0
 	for catalog_toggle in catalog_hide_purchased_toggles.values():
 		(catalog_toggle as CheckButton).custom_minimum_size.y = 44.0 if mobile_layout else 0.0
 	if achievement_hide_achieved_toggle != null:
@@ -2093,8 +2316,8 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	mastery_label.add_theme_font_size_override("font_size", 11 if mobile_layout or dense_wide else 13)
 	outcomes_grid.columns = 4 if mobile_layout and mobile_portrait_layout else Content.OUTCOME_NAMES.size()
 	for index in outcome_panels.size():
-		outcome_name_labels[index].add_theme_font_size_override("font_size", 8 if mobile_layout and mobile_portrait_layout else (9 if web_dense_layout else 11))
-		outcome_probability_labels[index].add_theme_font_size_override("font_size", 12 if mobile_layout else (14 if dense_wide else 16))
+		outcome_name_labels[index].add_theme_font_size_override("font_size", 9 if mobile_layout and mobile_portrait_layout else (10 if web_dense_layout else 11))
+		outcome_probability_labels[index].add_theme_font_size_override("font_size", 12 if mobile_layout else (15 if dense_wide else 16))
 		outcome_delay_labels[index].add_theme_font_size_override("font_size", 8 if mobile_layout else (9 if dense_wide else 10))
 	frustration_label.add_theme_font_size_override("font_size", 8 if mobile_layout else (9 if dense_wide else 10))
 	frustration_bar.custom_minimum_size = Vector2(55.0 if mobile_layout else 90.0, 6.0 if mobile_layout else 7.0)
@@ -2108,8 +2331,11 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	field_stat_panel.offset_top = 6.0 if mobile_layout else 10.0
 	# The phone readout only needs enough room for a short label and value. Keeping
 	# it clear of the centered pitcher matters more than preserving desktop width.
-	field_stat_panel.offset_right = 138.0 if mobile_layout else 252.0
-	field_stat_panel.offset_bottom = 164.0 if mobile_layout else 192.0
+	field_stat_panel.offset_right = 138.0 if mobile_layout else 210.0
+	field_stat_panel.offset_bottom = 154.0 if mobile_layout else 172.0
+	for field_value_value in field_stat_labels.values():
+		var field_value := field_value_value as Label
+		field_value.custom_minimum_size.x = 0.0
 	inventory_dock.offset_left = -248.0 if mobile_layout else -310.0
 	inventory_dock.offset_top = -40.0 if mobile_layout else -48.0
 	for slot_button_value in inventory_slot_buttons.values():
@@ -2120,6 +2346,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	opponent_loadout_dock.offset_top = 44.0 if mobile_layout else 54.0
 	opponent_loadout_dock.offset_bottom = 300.0 if mobile_layout else 354.0
 	locker_slot_grid.columns = 4 if mobile_layout else Content.LOOT_SLOTS.size()
+	_configure_menu_overlay_geometry()
 	root_margin.queue_sort()
 	_refresh_interface()
 
@@ -2313,26 +2540,32 @@ func _build_distance_status(parent: Control) -> void:
 
 func _build_equipment_sidebar(parent: Control) -> void:
 	equipment_sidebar = ScrollContainer.new()
-	equipment_sidebar.custom_minimum_size.x = 215.0
+	equipment_sidebar.custom_minimum_size.x = 250.0
 	equipment_sidebar.size_flags_horizontal = Control.SIZE_FILL
 	equipment_sidebar.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	equipment_sidebar.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	parent.add_child(equipment_sidebar)
+	var sidebar_gutter := _scroll_content_gutter(equipment_sidebar, 12)
 	var sidebar := VBoxContainer.new()
 	sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sidebar.add_theme_constant_override("separation", 6)
-	equipment_sidebar.add_child(sidebar)
-	var heading := Label.new()
-	heading.text = "STATUS"
-	heading.add_theme_font_size_override("font_size", 12)
-	heading.add_theme_color_override("font_color", COLOR_ACCENT)
-	sidebar.add_child(heading)
+	sidebar_gutter.add_child(sidebar)
+	equipment_sidebar_heading = Label.new()
+	equipment_sidebar_heading.text = "LOADOUT"
+	equipment_sidebar_heading.add_theme_font_size_override("font_size", 13)
+	equipment_sidebar_heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	sidebar.add_child(equipment_sidebar_heading)
+	equipment_stats_section = VBoxContainer.new()
+	equipment_stats_section.name = "StatusStatSection"
+	equipment_stats_section.visible = false
+	equipment_stats_section.add_theme_constant_override("separation", 2)
+	sidebar.add_child(equipment_stats_section)
 	var stats_heading := Label.new()
 	stats_heading.text = "CURRENT STATS"
 	stats_heading.add_theme_font_size_override("font_size", 11)
 	stats_heading.add_theme_color_override("font_color", COLOR_ACCENT)
-	sidebar.add_child(stats_heading)
-	_build_status_stat_list(sidebar)
+	equipment_stats_section.add_child(stats_heading)
+	_build_status_stat_list(equipment_stats_section)
 	_equipment_card(sidebar, "ball", "CURRENT BALL")
 	_equipment_card(sidebar, "pitch", "PITCH ARSENAL")
 	_equipment_card(sidebar, "body", "BODY")
@@ -2375,13 +2608,14 @@ func _build_status_stat_list(parent: Control) -> void:
 		var name_label := Label.new()
 		name_label.text = str(row_definition[1])
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_label.add_theme_font_size_override("font_size", 10)
+		name_label.add_theme_font_size_override("font_size", 11)
 		name_label.add_theme_color_override("font_color", COLOR_MUTED)
 		name_label.tooltip_text = row.tooltip_text
 		row.add_child(name_label)
 		var value_label := Label.new()
+		value_label.custom_minimum_size.x = 82.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		value_label.add_theme_font_size_override("font_size", 11)
+		value_label.add_theme_font_size_override("font_size", 12)
 		value_label.add_theme_color_override("font_color", COLOR_TEXT)
 		value_label.tooltip_text = row.tooltip_text
 		row.add_child(value_label)
@@ -2452,8 +2686,8 @@ func _build_field_stat_overlay(parent: Control) -> void:
 	field_stat_panel.set_anchor(SIDE_BOTTOM, 0.0)
 	field_stat_panel.offset_left = 10.0
 	field_stat_panel.offset_top = 10.0
-	field_stat_panel.offset_right = 252.0
-	field_stat_panel.offset_bottom = 190.0
+	field_stat_panel.offset_right = 210.0
+	field_stat_panel.offset_bottom = 170.0
 	field_stat_panel.modulate = Color(1.0, 1.0, 1.0, 0.88)
 	parent.add_child(field_stat_panel)
 	var stack := VBoxContainer.new()
@@ -2465,36 +2699,29 @@ func _build_field_stat_overlay(parent: Control) -> void:
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	stack.add_child(heading)
 	var rows := [
-		["speed", "SPEED"],
-		["quality", "QUALITY"],
-		["recovery", "RECOVERY"],
-		["lineup", "LINEUP"],
-		["hit_delay", "HIT DELAY"],
-		["calling", "CALLING"],
-		["distance", "DISTANCE"],
-		["tap", "FIELD TAP"],
-		["offline", "OFFLINE"],
+		["pitch", "PITCH", "The pitch type selected for this immutable throw."],
+		["release", "RELEASE", "Ball speed at the instant it leaves the hand."],
+		["plate", "AT PLATE", "Ball speed when it reaches the plate after air drag."],
+		["drag", "AIR DRAG", "Percentage of release speed lost before the plate. Space leagues play in vacuum."],
+		["travel", "TRAVEL", "The throw's complete release-to-plate flight time."],
+		["quality", "QUALITY", str(Content.STAT_HELP.quality)],
+		["distance", "RANGE", "The level-assigned release distance captured when this throw began."],
 	]
 	for row_definition in rows:
 		var stat_id := str(row_definition[0])
-		var row := HBoxContainer.new()
-		row.tooltip_text = str(Content.STAT_HELP.get(stat_id, ""))
-		row.mouse_default_cursor_shape = Control.CURSOR_HELP
-		_enable_mobile_inspection(row, str(row_definition[1]))
-		stack.add_child(row)
-		var name_label := Label.new()
-		name_label.text = str(row_definition[1])
-		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_label.add_theme_font_size_override("font_size", 10)
-		name_label.add_theme_color_override("font_color", COLOR_MUTED)
-		name_label.tooltip_text = row.tooltip_text
-		row.add_child(name_label)
 		var value_label := Label.new()
-		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		value_label.add_theme_font_size_override("font_size", 11)
+		value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		value_label.clip_text = true
+		value_label.custom_minimum_size.x = 0.0
+		value_label.add_theme_font_size_override("font_size", 10)
 		value_label.add_theme_color_override("font_color", COLOR_TEXT)
-		value_label.tooltip_text = row.tooltip_text
-		row.add_child(value_label)
+		value_label.tooltip_text = str(row_definition[2])
+		value_label.mouse_default_cursor_shape = Control.CURSOR_HELP
+		_enable_mobile_inspection(value_label, str(row_definition[1]))
+		value_label.set_meta("stat_prefix", str(row_definition[1]))
+		stack.add_child(value_label)
 		field_stat_labels[stat_id] = value_label
 
 func _build_opponent_loadout_dock(parent: Control) -> void:
@@ -2614,10 +2841,11 @@ func _build_locker_dialog() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stack.add_child(scroll)
+	var locker_gutter := _scroll_content_gutter(scroll, 14)
 	locker_dialog_items = VBoxContainer.new()
 	locker_dialog_items.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	locker_dialog_items.add_theme_constant_override("separation", 5)
-	scroll.add_child(locker_dialog_items)
+	locker_gutter.add_child(locker_dialog_items)
 
 func _build_loot_item_dialog() -> void:
 	loot_item_dialog = Window.new()
@@ -2680,10 +2908,11 @@ func _build_loot_item_dialog() -> void:
 	stats_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	stats_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stack.add_child(stats_scroll)
+	var stats_gutter := _scroll_content_gutter(stats_scroll, 14)
 	loot_item_stats = VBoxContainer.new()
 	loot_item_stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	loot_item_stats.add_theme_constant_override("separation", 5)
-	stats_scroll.add_child(loot_item_stats)
+	stats_gutter.add_child(loot_item_stats)
 
 	loot_item_status_label = Label.new()
 	loot_item_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2809,7 +3038,7 @@ func _rebuild_locker_dialog() -> void:
 		var rarity := Content.loot_rarity(int(item.rarity))
 		var is_equipped := str(game.equipped_loot.get(selected_loot_slot, "")) == str(item.id)
 		var row_panel := PanelContainer.new()
-		row_panel.custom_minimum_size.y = 130.0 if mobile_layout else 112.0
+		row_panel.custom_minimum_size.y = 142.0 if mobile_layout else 132.0
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		row_panel.add_theme_stylebox_override("panel", _loot_item_row_style(Color(rarity.color), is_equipped))
@@ -2819,33 +3048,54 @@ func _rebuild_locker_dialog() -> void:
 		row_stack.add_theme_constant_override("separation", 4)
 		row_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row_stack.mouse_filter = Control.MOUSE_FILTER_PASS
-		# S-Pen hover on the portrait UI must never recreate the unreadable native
-		# tooltip; phones use hold-to-inspect. Pointer-oriented layouts get the
-		# requested complete mouseover comparison.
-		row_stack.tooltip_text = "" if mobile_layout else _get_loot_item_inspection_text(item)
 		row_panel.add_child(row_stack)
-		var item_label := Label.new()
-		item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		item_label.custom_minimum_size.y = 62.0 if mobile_layout else 0.0
-		item_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		item_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		var item_heading := "%s%s" % ["EQUIPPED  •  " if is_equipped else "", str(item.name)]
-		var item_meta := "POWER %d  •  %s  •  ILVL %d" % [
-			game.get_loot_item_power(item), str(rarity.name), int(item.item_level),
-		]
-		item_label.text = (
-			"%s\n%s" % [item_heading, item_meta]
-			if mobile_layout
-			else "%s\n%s\nTHIS ITEM: %s" % [item_heading, item_meta, game.get_loot_item_description(item)]
-		)
-		item_label.add_theme_font_size_override("font_size", 15 if mobile_layout else 13)
-		item_label.add_theme_constant_override("outline_size", 2 if mobile_layout else 0)
-		item_label.add_theme_color_override("font_outline_color", Color("050810"))
-		item_label.add_theme_color_override("font_color", Color(rarity.color))
-		row_stack.add_child(item_label)
-		locker_item_hold_targets.append({"control": item_label, "item_id": str(item.id)})
+		var inspection_text := _get_loot_item_inspection_text(item)
+		# Both pointer and touch layouts show the essential identity before any
+		# interaction. Desktop hover and mobile hold expose the same full comparison.
+		var info_stack := VBoxContainer.new()
+		info_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info_stack.add_theme_constant_override("separation", 1)
+		info_stack.mouse_filter = Control.MOUSE_FILTER_PASS
+		info_stack.tooltip_text = "" if mobile_layout else inspection_text
+		row_stack.add_child(info_stack)
+		var identity_row := HBoxContainer.new()
+		identity_row.add_theme_constant_override("separation", 8)
+		identity_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		info_stack.add_child(identity_row)
+		var item_name_label := Label.new()
+		item_name_label.text = "%s%s" % ["EQUIPPED  •  " if is_equipped else "", str(item.name)]
+		item_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		item_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		item_name_label.max_lines_visible = 2
+		item_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item_name_label.add_theme_font_size_override("font_size", 15 if mobile_layout else 14)
+		item_name_label.add_theme_color_override("font_color", Color(rarity.color))
+		identity_row.add_child(item_name_label)
+		var power_label := Label.new()
+		power_label.text = "POWER %d" % game.get_loot_item_power(item)
+		power_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		power_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		power_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		power_label.add_theme_font_size_override("font_size", 14 if mobile_layout else 13)
+		power_label.add_theme_color_override("font_color", COLOR_GOLD)
+		identity_row.add_child(power_label)
+		var item_meta_label := Label.new()
+		item_meta_label.text = "%s  •  ITEM LEVEL %d" % [str(rarity.name).to_upper(), int(item.item_level)]
+		item_meta_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item_meta_label.add_theme_font_size_override("font_size", 10 if mobile_layout else 11)
+		item_meta_label.add_theme_color_override("font_color", COLOR_MUTED)
+		info_stack.add_child(item_meta_label)
+		var item_effect_label := Label.new()
+		item_effect_label.text = game.get_loot_item_description(item)
+		item_effect_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		item_effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		item_effect_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		item_effect_label.max_lines_visible = 1 if mobile_layout else 2
+		item_effect_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 12)
+		item_effect_label.add_theme_color_override("font_color", COLOR_TEXT)
+		info_stack.add_child(item_effect_label)
+		locker_item_hold_targets.append({"control": info_stack, "item_id": str(item.id)})
 		var actions := HBoxContainer.new()
 		actions.add_theme_constant_override("separation", 6)
 		row_stack.add_child(actions)
@@ -3189,6 +3439,9 @@ func _build_upgrade_area(parent: Control) -> void:
 	mobile_tab_next_button.focus_mode = Control.FOCUS_NONE
 	mobile_tab_next_button.pressed.connect(_move_mobile_upgrade_tab.bind(1))
 	mobile_tab_navigation.add_child(mobile_tab_next_button)
+	# Previous • current section • next is easier to scan than parking both arrows
+	# at the far edge of the strip.
+	mobile_tab_navigation.move_child(mobile_tab_previous_button, 0)
 	upgrade_tabs = TabContainer.new()
 	upgrade_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	upgrade_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -3205,6 +3458,7 @@ func _build_upgrade_area(parent: Control) -> void:
 	_build_achievement_tab(upgrade_tabs)
 	_build_stats_tab(upgrade_tabs)
 	_build_guide_tab(upgrade_tabs)
+	_configure_tab_overflow_controls(false)
 
 func _build_mobile_upgrade_stats(parent: Control) -> void:
 	mobile_upgrade_stats_panel = PanelContainer.new()
@@ -3267,10 +3521,12 @@ func _create_scroll_tab(tabs: TabContainer, title: String) -> VBoxContainer:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tabs.add_child(scroll)
+	var gutter := _scroll_content_gutter(scroll, 14)
 	var content := VBoxContainer.new()
+	content.name = "Content"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 7)
-	scroll.add_child(content)
+	gutter.add_child(content)
 	return content
 
 func _section_label(parent: Control, text: String) -> void:
@@ -3351,13 +3607,7 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 			"id": "advance",
 			"name": "Auto-advance",
 			"upgrade": "migratory_instinct",
-			"description": "Move to a newly unlocked opponent immediately.",
-		},
-		{
-			"id": "train",
-			"name": "Auto-coach",
-			"upgrade": "autonomic_coach",
-			"description": "Buy the cheapest available fundamental training automatically.",
+			"description": "Move immediately only when that destination level has a prestige license.",
 		},
 		{
 			"id": "farm",
@@ -3375,9 +3625,64 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 		automation_section.add_child(toggle)
 		automation_toggles[definition.id] = {"button": toggle, "definition": definition}
 
+	automation_training_heading = Label.new()
+	automation_training_heading.text = "LICENSED AUTOMATIC TRAINING"
+	automation_training_heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	automation_training_heading.add_theme_font_size_override("font_size", 12)
+	automation_training_heading.add_theme_color_override("font_color", COLOR_GOLD)
+	automation_section.add_child(automation_training_heading)
+	for training_value in Content.TRAINING:
+		var training: Dictionary = training_value
+		var id := "training_%s" % str(training.id)
+		var definition := {
+			"id": id,
+			"kind": "training",
+			"stat_id": str(training.id),
+			"name": "Auto-buy %s" % str(training.name),
+			"upgrade": "autonomic_coach",
+			"description": "Automatically buy this one additive Training stat when affordable.",
+		}
+		var toggle := CheckButton.new()
+		toggle.clip_text = true
+		toggle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		toggle.tooltip_text = str(definition.description)
+		toggle.toggled.connect(_toggle_automation.bind(id))
+		automation_section.add_child(toggle)
+		automation_toggles[id] = {"button": toggle, "definition": definition}
+
+	automation_catalog_heading = Label.new()
+	automation_catalog_heading.text = "ONE-TIME CATALOG AUTOMATION"
+	automation_catalog_heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	automation_catalog_heading.add_theme_font_size_override("font_size", 12)
+	automation_catalog_heading.add_theme_color_override("font_color", COLOR_GOLD)
+	automation_section.add_child(automation_catalog_heading)
+	var catalog_automation_definitions := [
+		{"id": "catalog_pitch", "catalog_id": "pitch", "name": "Auto-learn Pitches"},
+		{"id": "catalog_ball", "catalog_id": "ball", "name": "Auto-install Balls"},
+		{"id": "catalog_facility", "catalog_id": "facility", "name": "Auto-buy Facilities"},
+		{"id": "catalog_growth", "catalog_id": "growth", "name": "Auto-buy Grow Up"},
+	]
+	for catalog_value in catalog_automation_definitions:
+		var catalog: Dictionary = catalog_value
+		var definition := {
+			"id": str(catalog.id),
+			"kind": "catalog",
+			"catalog_id": str(catalog.catalog_id),
+			"name": str(catalog.name),
+			"upgrade": "front_office_outside_time",
+			"description": "Automatically buy affordable unlocked one-time upgrades in this catalog.",
+		}
+		var toggle := CheckButton.new()
+		toggle.clip_text = true
+		toggle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		toggle.tooltip_text = str(definition.description)
+		toggle.toggled.connect(_toggle_automation.bind(str(catalog.id)))
+		automation_section.add_child(toggle)
+		automation_toggles[str(catalog.id)] = {"button": toggle, "definition": definition}
+
 func _build_rebirth_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "GROW UP")
-	rebirth_tab = content.get_parent() as Control
+	rebirth_tab = content.get_parent().get_parent() as Control
 	rebirth_story_label = Label.new()
 	rebirth_story_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rebirth_story_label.add_theme_color_override("font_color", COLOR_GOLD)
@@ -3433,7 +3738,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	divine_section = VBoxContainer.new()
 	divine_section.add_theme_constant_override("separation", 7)
 	content.add_child(divine_section)
-	_section_label(divine_section, "IV • DIVINE GRAND SLAM — ONE BLESSING PER SAVED UNIVERSE")
+	_section_label(divine_section, "IV • GOD PRESTIGE — SAVE IT, THEN DO IT ALL AGAIN")
 	for definition in Content.DIVINE_BLESSINGS:
 		var entry := _upgrade_row(str(definition.description))
 		(entry.button as Button).pressed.connect(_request_divine_ascension.bind(str(definition.id)))
@@ -3445,7 +3750,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 
 func _build_achievement_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "ACHIEVE")
-	achievement_tab = content.get_parent() as Control
+	achievement_tab = content.get_parent().get_parent() as Control
 	_section_label(content, "ACHIEVEMENTS")
 	achievement_count_label = Label.new()
 	achievement_count_label.add_theme_font_size_override("font_size", 18)
@@ -3664,9 +3969,10 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 
 func _build_guide_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "HELP")
-	_section_label(content, "HOW TO BE LESS TERRIBLE")
+	_section_label(content, "HOW NO HITTER WORKS")
 	guide_label = Label.new()
 	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	guide_label.add_theme_font_size_override("font_size", 13)
 	guide_label.add_theme_color_override("font_color", COLOR_TEXT)
 	content.add_child(guide_label)
 
@@ -3719,6 +4025,15 @@ func _set_upgrade_row(
 	var container := entry.container as PanelContainer
 	var label := entry.label as Label
 	var button := entry.button as Button
+	var signature := "%s\u001f%s\u001f%s\u001f%s" % [
+		text,
+		str(disabled),
+		tooltip,
+		action_text,
+	]
+	if str(container.get_meta("upgrade_row_signature", "")) == signature:
+		return
+	container.set_meta("upgrade_row_signature", signature)
 	label.text = text
 	label.tooltip_text = tooltip
 	container.tooltip_text = tooltip
@@ -3727,7 +4042,9 @@ func _set_upgrade_row(
 	button.tooltip_text = tooltip
 
 func _set_upgrade_row_visible(entry: Dictionary, visible: bool) -> void:
-	(entry.container as Control).visible = visible
+	var container := entry.container as Control
+	if container.visible != visible:
+		container.visible = visible
 
 func _upgrade_row_is_visible(entry: Dictionary) -> bool:
 	return (entry.container as Control).visible
@@ -3778,7 +4095,7 @@ func _build_confirmation_dialog() -> void:
 	eldritch_confirmation.confirmed.connect(_confirm_eldritch_ascension)
 	add_child(eldritch_confirmation)
 	divine_confirmation = ConfirmationDialog.new()
-	divine_confirmation.title = "Let God restore the universe?"
+	divine_confirmation.title = "Do it all again?"
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
 
@@ -4083,75 +4400,61 @@ func _refresh_guide_text(
 ) -> void:
 	var sections: Array[String] = [
 		(
-			"Only a complete strikeout awards XP. Every called Strike banks a small share of mastery "
-			+ "against that exact batter, while every hit awards neither XP nor mastery. An unprotected "
-			+ "hit sends the batter away, clears every accumulated strike, and "
-			+ "leaves the plate empty: Singles are annoying, Home Runs are long, and Grand Slams impose "
-			+ "the full twelve-second humiliation. Even a clean strikeout takes three seconds for the next batter."
+			"SCORING\n"
+			+ "• Only a completed strikeout awards XP. Every Strike also adds a little mastery against that opponent.\n"
+			+ "• Hits award nothing, clear the count, and replace the batter. Bigger hits mean a longer wait. A Grand Slam cannot be saved.\n"
+			+ "• Human baseball uses three Strikes for an out and four Balls for a walk; a walk behaves like a Single."
 		),
 		(
-			"The three diamonds beside a human batter are the remaining strikes. Each opponent level "
-			+ "sets its own distance, XP multiplier, and added range threat. At the opening 3-foot range, "
-			+ "the 1 ft/s lob genuinely takes three seconds to arrive; extreme travel times compress only "
-			+ "on screen, while Stats keeps the true physical time."
+			"PROGRESSION\n"
+			+ "• Mastery unlocks the next level and permanently improves your odds against that opponent. Extra mastery adds small logarithmic XP and loot bonuses.\n"
+			+ "• Each level sets its own opponent, range, threat, and XP multiplier. PREVIOUS and NEXT choose the level; distance is automatic."
 		),
 		(
-			"Earn opponent mastery to unlock the next batter. Every point also improves the odds against "
-			+ "that batter on an uncapped logarithmic curve. Frustration rises only when something goes wrong: "
-			+ "Grand Slams add the most, lesser hits add progressively less, and Balls or Fouls barely nudge it. "
-			+ "Its logarithmic quality bonus resets when a strikeout finally lands; a nearly full bar means diminishing "
-			+ "returns, not a hard cap. Move backward whenever an easier opponent produces more XP per second. "
-			+ "The circle beside the pitcher fills toward the next release. While "
-			+ "the plate is empty, pitching stops and the circle beside home plate fills until the next batter "
-			+ "arrives. Tap open field space to advance whichever of recovery, flight, or lineup is active by the displayed Field Tap percentage; "
-			+ "taps can supply only half of one timer, and Field Hustle raises each tap without changing that cap. "
-			+ "On-Deck Hurry-Up multiplies every replacement delay by 0.930 per rank. After an opponent's "
-			+ "mastery target is passed, staying there adds a small logarithmic XP and loot-quality farming bonus."
+			"PITCH FLOW\n"
+			+ "• During human play, one pitch must resolve before recovery begins. The pitcher dial shows recovery; the plate dial shows the next batter.\n"
+			+ "• Tap open field to advance the active recovery, flight, or lineup timer by Field Tap %. Tapping can provide at most half of one timer.\n"
+			+ "• Bad outcomes add Frustration: Grand Slams add most; Balls and Fouls barely add any. Its uncapped logarithmic quality bonus resets on a strikeout."
 		),
 		(
-			"Closing the game or suspending its browser tab simulates up to seven days, but a fresh body "
-			+ "deposits only 1% of normal strikeout XP. Scorebook Study unlocks during early human baseball "
-			+ "and adds one percentage point per rank, up to 25%. The Offline field stat shows the current "
-			+ "rate, and the return popup reports exactly what was deposited."
+			"GETTING STRONGER\n"
+			+ "• TRAIN is an incremental additive XP sink. PITCH, BALL, FACILITY, and GROW UP contain the larger, expensive one-time power jumps. Locked cards reveal only their requirement.\n"
+			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in STATUS. Hover on desktop or tap on phone for definitions."
 		),
 		(
-			"Completed strikeouts can leave random clothing. The first career strikeout guarantees a hat; "
-			+ "later eligible strikeouts have a 12% chance, with pity by the tenth roll and a five-second parcel "
-			+ "cadence at extreme production. Common, Magic, Rare, Legendary, and Unique gear gains progressively "
-			+ "more affixes. The colored letter squares at the field's lower-right open equipment; the star button protects an "
-			+ "item from auto-scrap. Bonuses are capped sidegrades, and each slot keeps up to 10 items."
+			"GEAR & ACHIEVEMENTS\n"
+			+ "• Strikeouts can drop minor sidegrade gear. Power is a quick comparison; hover on desktop or hold on phone for every stat. Stars protect items from auto-scrap. Each slot keeps 10.\n"
+			+ "• All %d achievement slots are visible. Each completed achievement permanently adds 1%% XP; unrevealed secret entries stay anonymous."
+			% Content.ACHIEVEMENTS.size()
 		),
 		(
-			"The Achievements tab always shows the full 101-slot catalog. Each completed achievement "
-			+ "permanently adds exactly 1% XP, stacking additively; achievements survive every prestige "
-			+ "reset. Future and secret entries remain completely anonymous until their subject is encountered."
+			"AWAY PLAY & SAVES\n"
+			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. Your return popup shows the exact deposit.\n"
+			+ "• Autosave runs every 10 seconds. SAVES opens the same manual slots on every platform, plus EXPORT, IMPORT, and title return. Mobile file pickers can use an enabled Drive provider. Export before browser updates."
 		),
 		(
-			"A released ball keeps the speed, path, color, source, and travel time it had at release. New "
-			+ "upgrades affect only future throws. Every visible low-rate ball is one exact simulated pitch; "
-			+ "only after more than %s would overlap on this device does a labeled dot represent several pitches."
+			"VISUALS\n"
+			+ "• A released ball keeps its pitch, release speed, drag, path, color, source, target, and travel time. New upgrades affect only later throws.\n"
+			+ "• Every low-rate ball is exact. Only after more than %s would overlap does one labeled dot represent several pitches."
 			% BaseballGameState.format_number(float(pitch_field.get_visual_capacity()), 0)
 		),
 	]
 	if genetic_revealed:
 		sections.append(
-			"The portal stranger unlocks prenatal genetic editing and the Time Machine. Genetic rebirth "
-			+ "resets the baseball climb and Locker for DNA: floor((body XP / 10B)^(1/3)), before multipliers. "
-			+ "Mutations survive later genetic rebirths. Alien batters require four through nine strikes; new "
-			+ "arms, count compression, fielding reflexes, and automation provide new ways to handle them."
+			"TIME TRAVEL\n"
+			+ "• The portal stranger unlocks genetic rebirth. It resets XP, levels, and gear for DNA based on total body XP; mutations persist.\n"
+			+ "• Each Autonomic Coaching Lobe rank licenses one chosen Training auto-buy. Alien counts can require more Strikes; extra arms, hit protection, and count compression make those at-bats possible."
 		)
 	if eldritch_revealed:
 		sections.append(
-			"N'Kthra's revelation unlocks eldritch ascension. Destroying the current reality resets XP, DNA, "
-			+ "genetics, levels, and the Locker for Arcana: floor((DNA earned in this reality)^0.60), before "
-			+ "multipliers. Mirror bullpens, time compression, portals, and other magic survive future destroyed "
-			+ "realities. Reverse Terminator Wardrobe is the exception that can carry equipped clothing through "
-			+ "ordinary genetic time travel."
+			"REALITY ASCENSION\n"
+			+ "• Abandoning a reality resets XP, levels, gear, DNA, and genetics for Arcana based on DNA earned in that reality. Eldritch upgrades persist.\n"
+			+ "• Front Office Outside Time can automate one-time catalogs. Clones, portals, time compression, and wardrobe preservation turn later campaigns into multi-ball baseball."
 		)
 	if divine_revealed:
 		sections.append(
-			"After Octathulhu is defeated, choose one permanent divine blessing and let God restore the "
-			+ "universe. Every named blessing can be earned on later victories; further wins award Halos."
+			"THE END, AGAIN\n"
+			+ "• After the final victory, choose one permanent divine blessing and restore the universe. Later wins can earn every blessing, then Halos."
 		)
 	guide_label.text = "\n\n".join(sections)
 
@@ -4251,7 +4554,7 @@ func _refresh_achievement_tab(force := false) -> void:
 		]
 		details_button.tooltip_text = panel.tooltip_text
 
-func _refresh_interface() -> void:
+func _refresh_interface(refresh_expensive := true) -> void:
 	if game == null or pitch_field == null:
 		return
 	var opponent := game.get_current_opponent()
@@ -4433,8 +4736,9 @@ func _refresh_interface() -> void:
 		"\n%s" % story_status if not story_status.is_empty() else "",
 		"\n%s" % speed_status if not speed_status.is_empty() else "",
 	]
-	_refresh_equipment()
-	_refresh_locker()
+	if refresh_expensive:
+		_refresh_equipment()
+		_refresh_locker()
 	_refresh_opponent_loadout()
 	var weight: float = float(pitch_field.get_visual_weight())
 	visual_weight_label.text = (
@@ -4444,16 +4748,60 @@ func _refresh_interface() -> void:
 		if weight < 1.01
 		else "EACH DOT ≈ %s PITCHES" % BaseballGameState.format_number(weight)
 	)
-	_refresh_purchase_buttons()
-	_refresh_rebirth_buttons()
-	_refresh_achievement_tab()
-	_refresh_stats(at_bat_metrics, estimated_xp_per_second)
-	if title_screen_active:
-		_refresh_title_screen()
+	if refresh_expensive:
+		_refresh_purchase_buttons()
+		_refresh_rebirth_buttons()
+		_refresh_achievement_tab()
+		_refresh_stats(at_bat_metrics, estimated_xp_per_second)
+		if title_screen_active:
+			_refresh_title_screen()
 
 func _refresh_field_stats() -> void:
-	_refresh_effective_stat_labels(field_stat_labels, pitch_field.last_pitch_speed_fps)
+	if not field_stat_labels.is_empty():
+		var in_flight := game.is_pitch_in_flight()
+		var pitch_id := game.pending_volley_pitch_id if in_flight else ""
+		var pitch_definition := Content.pitch_by_id(pitch_id)
+		var release_speed := (
+			game.pending_volley_speed_fps
+			if in_flight
+			else game.get_representative_pitch_speed()
+		)
+		var plate_speed := (
+			game.pending_volley_plate_speed_fps
+			if in_flight
+			else game.get_representative_plate_speed()
+		)
+		var drag_loss := clampf(1.0 - plate_speed / maxf(release_speed, 0.000001), 0.0, 1.0)
+		var distance_index := game.pending_volley_distance_index if in_flight else game.selected_distance_index
+		var distance: Dictionary = Content.DISTANCE_TIERS[clampi(distance_index, 0, Content.DISTANCE_TIERS.size() - 1)]
+		var quality := (
+			game.get_pitch_quality_for_pitch(pitch_id, release_speed)
+			if in_flight and not pitch_definition.is_empty()
+			else game.get_pitch_quality()
+		)
+		_set_field_stat_text("pitch", (
+			str(pitch_definition.name)
+			if in_flight and not pitch_definition.is_empty()
+			else "AUTOMATIC MIX"
+		))
+		_set_field_stat_text("release", BaseballGameState.format_speed(release_speed))
+		_set_field_stat_text("plate", BaseballGameState.format_speed(plate_speed))
+		_set_field_stat_text(
+			"drag",
+			"NONE" if drag_loss <= 0.00005 else "−%.1f%%" % (drag_loss * 100.0)
+		)
+		_set_field_stat_text("travel", BaseballGameState.format_flight_time(
+			game.pending_volley_flight_duration if in_flight else game.get_resolved_flight_seconds()
+		))
+		_set_field_stat_text("quality", "%.3f" % quality)
+		_set_field_stat_text("distance", str(distance.label))
 	_refresh_mobile_upgrade_stats()
+
+func _set_field_stat_text(stat_id: String, value: String) -> void:
+	var label := field_stat_labels.get(stat_id) as Label
+	if label == null:
+		return
+	label.text = "%s  %s" % [str(label.get_meta("stat_prefix", stat_id.to_upper())), value]
 
 func _refresh_mobile_upgrade_stats() -> void:
 	_refresh_effective_stat_labels(
@@ -4868,32 +5216,83 @@ func _refresh_purchase_buttons() -> void:
 			]
 			button.disabled = not game.can_buy_scale(id)
 
+	var training_license_count := game.get_auto_training_license_count()
+	var training_selection_count := game.get_auto_training_selection_count()
+	if automation_training_heading != null:
+		automation_training_heading.text = "LICENSED AUTOMATIC TRAINING  •  %d / %d SELECTED" % [
+			training_selection_count,
+			training_license_count,
+		]
+	if automation_catalog_heading != null:
+		automation_catalog_heading.visible = _has_eldritch_reveal()
 	for id in automation_toggles:
 		var entry: Dictionary = automation_toggles[id]
 		var toggle: CheckButton = entry.button
 		var definition: Dictionary = entry.definition
+		var kind := str(definition.get("kind", "utility"))
 		var required_upgrade := str(definition.upgrade)
-		var unlocked := game.has_genetic_upgrade(required_upgrade)
-		toggle.text = "%s  •  %s\n%s" % [
-			definition.name,
-			"GENETICALLY UNLOCKED" if unlocked else "REQUIRES %s" % Content.genetic_by_id(required_upgrade).name,
-			definition.description,
-		]
-		toggle.disabled = not unlocked
-		var enabled := false
-		match str(id):
-			"advance":
-				enabled = game.auto_advance_enabled
-			"train":
-				enabled = game.auto_train_enabled
-			"farm":
-				enabled = game.auto_farm_enabled
-		toggle.set_pressed_no_signal(enabled)
+		if kind == "training":
+			var stat_id := str(definition.stat_id)
+			var enabled := game.is_auto_training_stat_selected(stat_id)
+			var has_open_license := training_selection_count < training_license_count
+			toggle.visible = true
+			toggle.text = "%s  •  %s" % [
+				definition.name,
+				"SELECTED" if enabled else (
+					"AVAILABLE" if has_open_license else "NEEDS ANOTHER COACHING LOBE RANK"
+				),
+			]
+			toggle.tooltip_text = "%s\n%d stat license%s available; %d selected." % [
+				definition.description,
+				training_license_count,
+				"" if training_license_count == 1 else "s",
+				training_selection_count,
+			]
+			toggle.disabled = not enabled and not has_open_license
+			toggle.set_pressed_no_signal(enabled)
+		elif kind == "catalog":
+			toggle.visible = _has_eldritch_reveal()
+			var unlocked := game.has_eldritch_upgrade(required_upgrade)
+			var enabled := game.is_auto_catalog_selected(str(definition.catalog_id))
+			toggle.text = "%s  •  %s" % [
+				definition.name,
+				"ACTIVE" if enabled else (
+					"READY" if unlocked else "REQUIRES %s" % Content.eldritch_by_id(required_upgrade).name
+				),
+			]
+			toggle.tooltip_text = str(definition.description)
+			toggle.disabled = not unlocked
+			toggle.set_pressed_no_signal(enabled)
+		elif str(id) == "advance":
+			var unlocked := game.has_auto_advance_capacity()
+			var capacity := game.get_auto_advance_capacity_text()
+			toggle.visible = true
+			toggle.text = "AUTO-ADVANCE  •  %s\n%s" % [
+				"ACTIVE" if game.auto_advance_enabled else ("READY" if unlocked else "NO LICENSES"),
+				capacity,
+			]
+			toggle.tooltip_text = "%s\n%s. Genetic ranks cover human destinations; eldritch ranks cover alien destinations." % [
+				definition.description,
+				capacity,
+			]
+			toggle.disabled = not unlocked
+			toggle.set_pressed_no_signal(game.auto_advance_enabled)
+		else:
+			var unlocked := game.has_genetic_upgrade(required_upgrade)
+			toggle.visible = true
+			toggle.text = "%s  •  %s\n%s" % [
+				definition.name,
+				"GENETICALLY UNLOCKED" if unlocked else "REQUIRES %s" % Content.genetic_by_id(required_upgrade).name,
+				definition.description,
+			]
+			toggle.disabled = not unlocked
+			var enabled := game.auto_advance_enabled if str(id) == "advance" else game.auto_farm_enabled
+			toggle.set_pressed_no_signal(enabled)
 
 func _refresh_rebirth_buttons() -> void:
 	var story := "%s. Growing up is optional; every ordinary age remains within human limits." % game.get_body_growth_name()
 	if game.cosmos_conquered:
-		story = "GOD: ‘You saved the universe with baseball. I admit I did not have that one.’ Choose one blessing; everything else will be restored."
+		story = "GOD: ‘Thanks for saving the universe. Wouldn’t the best reward be doing it all again?’ Choose one blessing, then let God restore everything."
 	elif game.is_eldritch_exhibition_blocked():
 		story = "N'Kthra, Rookie of the Last Aeon hits every pitch out of reality. After one minute it explains how to move your consciousness elsewhere."
 	elif game.eldritch_ascensions > 0:
@@ -5027,7 +5426,7 @@ func _refresh_rebirth_buttons() -> void:
 		if game.has_divine_blessing(id):
 			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, str(definition.description), "OWNED")
 		else:
-			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], not game.cosmos_conquered, str(definition.description), "CHOOSE")
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], not game.cosmos_conquered, str(definition.description), "DO IT AGAIN")
 	divine_halo_button.text = "ANOTHER HALO  •  CURRENT RANK %d\nAll XP and opponent mastery ×1.50; requires every named blessing." % game.divine_halos
 	divine_halo_button.disabled = not game.cosmos_conquered or not game.all_divine_blessings_owned()
 
@@ -5339,14 +5738,19 @@ func _toggle_loot_favorite(item_id: String) -> void:
 	_refresh_interface()
 
 func _toggle_automation(enabled: bool, id: String) -> void:
-	match id:
-		"advance":
-			game.auto_advance_enabled = enabled and game.has_genetic_upgrade("migratory_instinct")
-		"train":
-			game.auto_train_enabled = enabled and game.has_genetic_upgrade("autonomic_coach")
-		"farm":
-			game.auto_farm_enabled = enabled and game.has_genetic_upgrade("predator_scouting")
-	_log_event("%s %s." % [id.capitalize(), "enabled" if enabled else "disabled"])
+	var changed := true
+	if id.begins_with("training_"):
+		changed = game.set_auto_training_stat(id.trim_prefix("training_"), enabled)
+	elif id.begins_with("catalog_"):
+		changed = game.set_auto_catalog_setting(id.trim_prefix("catalog_"), enabled)
+	else:
+		match id:
+			"advance":
+				game.auto_advance_enabled = enabled and game.has_auto_advance_capacity()
+			"farm":
+				game.auto_farm_enabled = enabled and game.has_genetic_upgrade("predator_scouting")
+	if changed:
+		_log_event("%s %s." % [id.replace("_", " ").capitalize(), "enabled" if enabled else "disabled"])
 	_refresh_interface()
 
 func _toggle_catalog_hide_purchased(hidden: bool, catalog_id: String) -> void:
@@ -5397,7 +5801,7 @@ func _request_divine_ascension(id: String) -> void:
 	pending_divine_id = id
 	var reward_name := "Another Halo" if id == "halo" else str(Content.divine_by_id(id).name)
 	divine_confirmation.dialog_text = (
-		"Accept %s? God restores the original universe: XP, levels, DNA, Arcana, genetic enhancements, "
+		"GOD: ‘Thanks for saving the universe. Wouldn’t the best reward be doing it all again?’\n\nAccept %s? God restores the original universe: XP, levels, DNA, Arcana, genetic enhancements, "
 		+ "eldritch magic, story encounters, and all equipment reset. Divine blessings, Halos, and lifetime statistics remain."
 	) % reward_name
 	divine_confirmation.popup_centered()
@@ -5409,6 +5813,13 @@ func _confirm_divine_ascension() -> void:
 	pending_divine_id = ""
 	game.save_game()
 	_refresh_interface()
+
+func _open_saves_menu() -> void:
+	if mobile_overlay_control == save_stack:
+		_save_now()
+		return
+	_save_now()
+	_show_mobile_overlay(save_stack, "SAVES & TRANSFER")
 
 func _save_now() -> void:
 	if development_session:

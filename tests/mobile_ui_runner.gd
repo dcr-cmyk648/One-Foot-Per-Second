@@ -35,6 +35,8 @@ func _run() -> void:
 	_expect(main.title_panel.size.y <= 820.0 and main.title_panel.position.y >= 0.0 and main.title_panel.position.y + main.title_panel.size.y <= main.title_screen.size.y, "The phone title panel should fit vertically: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
 	_expect(main.title_art._visible_era() == 0, "Fresh phone title art must remain spoiler-free")
 	main._open_title_resume_picker()
+	main._configure_title_layout(Vector2(390.0, 844.0))
+	await process_frame
 	_expect(main.title_resume_stack.visible and not main.title_art_frame.visible, "The phone save picker should replace the art instead of overflowing beneath it")
 	main._close_title_resume_picker()
 	main._leave_title_screen(false)
@@ -198,7 +200,7 @@ func _run() -> void:
 	main.upgrade_tabs.current_tab = main.achievement_tab.get_index()
 	main._refresh_achievement_tab(true)
 	await process_frame
-	_expect(main.achievement_cards.size() == 101, "The phone achievement browser should expose all 101 slots")
+	_expect(main.achievement_cards.size() == Content.ACHIEVEMENTS.size(), "The phone achievement browser should expose every catalog slot")
 	_expect(main.achievement_hide_achieved_toggle.get_combined_minimum_size().y >= 44.0, "Phone achievements should provide a touch-sized Hide Achieved filter")
 	var phone_first_card: Dictionary = main.achievement_cards.first_pitch
 	_expect((phone_first_card.panel as PanelContainer).mouse_filter == Control.MOUSE_FILTER_PASS, "Phone achievement copy should remain a passive scrolling surface")
@@ -278,16 +280,20 @@ func _run() -> void:
 	for row_index in main.locker_dialog_items.get_child_count():
 		var phone_item_panel := main.locker_dialog_items.get_child(row_index) as PanelContainer
 		var phone_item_stack := phone_item_panel.get_child(0) as VBoxContainer
-		var phone_item_label := phone_item_stack.get_child(0) as Label
+		var phone_info_stack := phone_item_stack.get_child(0) as VBoxContainer
+		var phone_identity_row := phone_info_stack.get_child(0) as HBoxContainer
+		var phone_item_label := phone_identity_row.get_child(0) as Label
+		var phone_power_label := phone_identity_row.get_child(1) as Label
 		var phone_actions := phone_item_stack.get_child(1) as HBoxContainer
 		if str(phone_item_panel.get_meta("loot_item_id", "")) == "phone_compare_hat":
 			phone_compare_label = phone_item_label
-			phone_compare_stack = phone_item_stack
+			phone_compare_stack = phone_info_stack
 			phone_compare_button = phone_actions.get_child(1) as Button
 			_expect(phone_item_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone item text should not intercept vertical scrolling")
 			_expect(phone_item_label.text.begins_with("Readable Comparison Cap"), "Phone equipment rows should lead with the complete item name")
-			_expect(phone_item_label.text.contains("POWER %d" % main.game.get_loot_item_power(main.game.get_loot_item("phone_compare_hat"))), "Phone equipment rows should show Power without opening Compare")
-			_expect(phone_item_label.custom_minimum_size.y >= 62.0, "Phone equipment summaries should reserve visible height above their action buttons")
+			_expect(phone_power_label.text == "POWER %d" % main.game.get_loot_item_power(main.game.get_loot_item("phone_compare_hat")), "Phone equipment rows should show Power without opening Compare")
+			_expect(not (phone_info_stack.get_child(2) as Label).text.is_empty(), "Phone equipment rows should show their rolled stats before opening Compare")
+			_expect(phone_item_panel.custom_minimum_size.y >= 140.0, "Phone equipment summaries should reserve visible height above their action buttons")
 			_expect((phone_actions.get_child(0) as Button).text == "EQUIP", "Phone rows should expose an explicit Equip action")
 	_expect(phone_compare_button != null, "The phone locker should retain the comparison item")
 	_expect(phone_compare_stack.tooltip_text.is_empty(), "Phone and S-Pen layouts should not create a covering hover tooltip")

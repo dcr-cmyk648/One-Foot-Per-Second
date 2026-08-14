@@ -101,6 +101,7 @@ var snapshot := {
 		"can_move_closer": false,
 		"can_move_farther": false,
 		"representative_pitch_speed": 1.0,
+		"drag_per_foot": 0.0,
 	}
 
 var impact_color := Color.TRANSPARENT
@@ -131,6 +132,8 @@ var volley_flight_duration := 0.0
 var volley_plate_position := Vector2.ZERO
 var last_pitch_name := "DEAD-FISH LOB"
 var last_pitch_speed_fps := 1.0
+var last_pitch_plate_speed_fps := 1.0
+var last_pitch_drag_loss_fraction := 0.0
 var pitch_call_age := 99.0
 var last_pitch_visual_travel_time := 3.0
 var cached_star_lines := PackedVector2Array()
@@ -208,6 +211,8 @@ func reset_visual_state() -> void:
 	removed_strike_icon = -1
 	last_pitch_name = "DEAD-FISH LOB"
 	last_pitch_speed_fps = 1.0
+	last_pitch_plate_speed_fps = 1.0
+	last_pitch_drag_loss_fraction = 0.0
 	pitch_call_age = 99.0
 	last_pitch_visual_travel_time = 3.0
 	queue_redraw()
@@ -261,6 +266,7 @@ render_mode unshaded;
 uniform float stream_time = 0.0;
 uniform float maximum_field_length = 600.0;
 uniform float maximum_arc_height = 120.0;
+uniform float flight_drag_exponent = 0.0;
 varying float pitch_active;
 
 void vertex() {
@@ -273,6 +279,10 @@ void vertex() {
 	float duration = max(stored_duration, 0.001);
 	pitch_active = step(0.001, stored_duration) * (1.0 - step(duration, age));
 	float progress = clamp(age / duration, 0.0, 1.0);
+	float drag_exponent = max(flight_drag_exponent, 0.0);
+	if (drag_exponent > 0.00001) {
+		progress = log(1.0 + progress * (exp(drag_exponent) - 1.0)) / drag_exponent;
+	}
 	float trail_length = max(COLOR.a * 20.0, 1.0);
 	float flight_length = INSTANCE_CUSTOM.w * maximum_field_length;
 	float signed_arc = (INSTANCE_CUSTOM.z * 2.0 - 1.0) * maximum_arc_height;
@@ -511,13 +521,26 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 		"can_move_closer": false,
 		"can_move_farther": false,
 		"representative_pitch_speed": game.get_representative_pitch_speed(),
+		"drag_per_foot": (
+			game.pending_volley_drag_per_foot
+			if game.is_pitch_in_flight()
+			else game.get_ball_drag_per_foot()
+		),
 	}
 	if game.is_pitch_in_flight():
 		var pending_pitch := Content.pitch_by_id(game.pending_volley_pitch_id)
 		last_pitch_name = str(pending_pitch.get("name", "PITCH")).to_upper()
 		last_pitch_speed_fps = game.pending_volley_speed_fps
+		last_pitch_plate_speed_fps = game.pending_volley_plate_speed_fps
+		last_pitch_drag_loss_fraction = clampf(
+			1.0 - last_pitch_plate_speed_fps / maxf(last_pitch_speed_fps, 0.000001),
+			0.0,
+			1.0
+		)
 	elif pitch_serial == 0:
 		last_pitch_speed_fps = game.get_representative_pitch_speed()
+		last_pitch_plate_speed_fps = game.get_representative_plate_speed()
+		last_pitch_drag_loss_fraction = game.get_pitch_drag_loss_fraction()
 	pitch_cycle_sample_time = total_time
 	if configured_opponent_index != incoming_opponent_index:
 		var preserve_released_ball := game.is_pitch_in_flight() and volley_in_flight
@@ -616,10 +639,14 @@ func _spawn_pitch(backdate: float, flight_seconds := -1.0, color_override: Varia
 		"signed_curve": signed_curve,
 		"flight_length": flight_length,
 		"source": source,
+		"source_offset": source - mound,
+		"target": target,
 		"heading": angle,
 		"color": color,
 		"trail_length": trail_length,
 		"projectile_scale": projectile_scale,
+		"drag_per_foot": float(snapshot.get("drag_per_foot", 0.0)),
+		"distance_feet": float(snapshot.get("distance_feet", 3.0)),
 		"transform": instance_transform,
 		"custom_data": custom_data,
 	}
@@ -745,13 +772,70 @@ func _update_shader_parameters() -> void:
 		return
 	ball_material.set_shader_parameter("maximum_field_length", maxf(_get_field_axis_length(), 1.0))
 	ball_material.set_shader_parameter("maximum_arc_height", maxf(_get_field_lateral_length() * 0.34, 20.0))
+	ball_material.set_shader_parameter(
+		"flight_drag_exponent",
+		maxf(float(snapshot.get("drag_per_foot", 0.0)), 0.0)
+		* maxf(float(snapshot.get("distance_feet", 3.0)), 0.0)
+	)
 
 func _on_resized() -> void:
 	if ball_stream != null:
 		ball_stream.position = Vector2.ZERO
 	_update_shader_parameters()
+	_reproject_active_pitch_slots()
 	_update_range_arrows()
 	queue_redraw()
+
+func _reproject_active_pitch_slots() -> void:
+	if ball_multimesh == null or active_pitch_slots.is_empty():
+		return
+	# Browser layouts can change the field rectangle when a side panel opens,
+	# when the address bar collapses, or at the responsive breakpoint. Keep the
+	# immutable pitch's elapsed time, duration, curve, color, and outcome, but
+	# reproject its endpoints into the new field rectangle. Otherwise the shader's
+	# resized axis and the old screen-space launch disagree and the ball appears to
+	# detach from the arm or miss the plate.
+	if volley_in_flight:
+		volley_plate_position = _get_plate_position_unlocked()
+	var target := _get_plate_position()
+	var mound := _get_mound_position(float(snapshot.distance_feet))
+	for slot_value in active_pitch_slots.keys():
+		var slot := int(slot_value)
+		var launch: Dictionary = slot_launch_data[slot]
+		if launch.is_empty():
+			continue
+		var source_offset := Vector2(launch.get("source_offset", Vector2.ZERO))
+		var source := mound + source_offset
+		var flight_vector := target - source
+		var flight_length := maxf(flight_vector.length(), 1.0)
+		var heading := flight_vector.angle()
+		var projectile_scale := maxf(float(launch.get("projectile_scale", 1.0)), 0.001)
+		var signed_curve := float(launch.get("signed_curve", 0.0))
+		var custom_data := Color(
+			float(launch.get("spawn_time", 0.0)) / STREAM_WRAP_SECONDS,
+			float(launch.get("duration", 0.001)) / MAX_VISUAL_TRAVEL_SECONDS,
+			clampf((signed_curve / projectile_scale + 1.0) * 0.5, 0.0, 1.0),
+			clampf(
+				flight_length / maxf(_get_field_axis_length() * projectile_scale, 1.0),
+				0.0,
+				1.0
+			)
+		)
+		var transform := Transform2D(
+			heading,
+			Vector2.ONE * projectile_scale,
+			0.0,
+			source
+		)
+		ball_multimesh.set_instance_transform_2d(slot, transform)
+		ball_multimesh.set_instance_custom_data(slot, custom_data)
+		launch.source = source
+		launch.target = target
+		launch.flight_length = flight_length
+		launch.heading = heading
+		launch.transform = transform
+		launch.custom_data = custom_data
+		slot_launch_data[slot] = launch
 
 func _update_range_arrows() -> void:
 	if move_closer_arrow == null or move_farther_arrow == null:
@@ -798,6 +882,12 @@ func _notify_phase_events(pitch_events: Array, elapsed_seconds: float) -> int:
 				var exact_travel := maxf(float(event.get("flight_seconds", travel_time)), 0.001)
 				last_pitch_name = str(event.get("pitch_name", pitch_definition.get("name", "PITCH"))).to_upper()
 				last_pitch_speed_fps = maxf(float(event.get("pitch_speed_fps", snapshot.get("representative_pitch_speed", 1.0))), 0.000001)
+				last_pitch_plate_speed_fps = maxf(float(event.get("plate_speed_fps", last_pitch_speed_fps)), 0.000001)
+				last_pitch_drag_loss_fraction = clampf(
+					1.0 - last_pitch_plate_speed_fps / maxf(last_pitch_speed_fps, 0.000001),
+					0.0,
+					1.0
+				)
 				pitch_call_age = 0.0
 				volley_plate_position = _get_plate_position_unlocked()
 				volley_in_flight = true
@@ -1412,10 +1502,11 @@ func _get_camera_scale() -> float:
 	return lerpf(3.60, 0.55, pow(_get_distance_progress(), 0.68))
 
 func _get_character_camera_scale() -> float:
-	# The three-foot view remains a dramatic environmental close-up, but rings
-	# have their own ceiling so neither player swallows home plate. Perspective
-	# rejoins the ordinary camera curve as soon as the field begins zooming out.
-	return minf(_get_camera_scale(), 2.25)
+	# Bodies need a smoother perspective curve than the exaggerated environment.
+	# The previous 2.25 ceiling stayed perfectly flat from 3 through roughly 20
+	# feet, making a big kid at 12 feet look several feet wide. This curve keeps the
+	# funny three-foot close-up but visibly shrinks every longer human matchup.
+	return lerpf(1.90, 0.55, pow(_get_distance_progress(), 0.85))
 
 func _get_ball_visual_scale() -> float:
 	return clampf(_get_camera_scale() * 0.75, 1.0, 2.80)
@@ -2034,7 +2125,9 @@ func _draw_pitcher_arm_rectangles(
 		draw_line(start, finish, Color(color, alpha), half_width * 2.0, false)
 
 func _draw_home_plate(origin: Vector2) -> void:
-	var plate_scale := clampf(_get_camera_scale(), 0.72, 1.85)
+	# Plate and people share perspective. Letting the environmental zoom enlarge
+	# only the plate made it compete with the toddler at close ranges.
+	var plate_scale := clampf(_get_character_camera_scale(), 0.72, 1.65)
 	var local_points := [
 		Vector2(-9.0, -10.0),
 		Vector2(5.0, -10.0),

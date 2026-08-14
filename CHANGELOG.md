@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.0 — The front office has breached causality
+
+- Rebalanced the human campaign around visible velocity: Speed Training now adds `0.50 ft/s`, repeatable Command adds only `0.04` quality, speed contributes meaningfully to pitch quality, and ordinary growth/facility multipliers were softened. The audited first lifetime moves from youth-baseball speeds to a 211.6 mph human-body cap near the professional leagues instead of rewarding an all-Command strategy.
+- Expanded the human arsenal to 22 pitch types, the Ball ladder to 26 shells, and Facilities to 86 one-time purchases. A second lane of expensive human projects now supplies meaningful savings targets from neighborhood coaching through a Hall-of-Fame wing, while post-human hardware remains hidden and post-human.
+- Added real human-league air drag. The Live Throw Profile now shows only immutable throw facts—pitch, release speed, plate speed, drag loss, travel time, quality, and range—and each released projectile preserves its exact drag, speed, distance, path, and impact clock through later purchases and layout changes.
+- Added genetic Autonomic Coaching licenses, one rank per independently selected repeatable Training stat. Added the eldritch Front Office Outside Time, with independent auto-buy switches for Pitch, Ball, Facility, and Grow Up catalogs.
+- Reworked Auto-advance as capacity instead of a single switch: each Migratory Baseball Instinct rank licenses one additional human destination, while each Interstellar Road-Trip Itinerary rank licenses one additional alien destination. Legacy all-human Auto-advance saves migrate to all 29 human licenses.
+- Reframed divine restoration as **God Prestige**. After the final boss, God thanks the player for saving the universe and proposes the obvious reward: doing it all again. One permanent blessing is chosen per restored universe, then later victories can stack Halos.
+- Expanded the achievement catalog to 108 additive +1% milestones without removing distinct older goals. New achievements cover the larger arsenal/facility economy, puberty, and fully licensed human and alien Auto-advance; future subjects remain anonymous.
+- Rebuilt the desktop browser composition: wide title screens use a real two-column hero layout, short/wide breakpoints fit without right-edge clipping, text has a deliberate readable hierarchy, all upgrade tabs use a large named navigator, scrollbars receive their own gutters, and equipment exposes item name, Power, stats, and equipped comparison before any click.
+- Brought desktop and phone behavior back to parity. SAVES now opens the same autosave/three-slot manager everywhere; mobile overlays retain visible XP/current stats and bounded close controls; item hold and desktop hover expose the same comparison; all one-time rows keep separate scroll-safe actions.
+- Hardened browser suspension and updates. Lifecycle timestamps survive Safari freezes, resumed wall-clock gaps become offline progress, primary/rollback mirrors are flushed before activation, a watchdog prevents `SAVING YOUR RUN…` from hanging, and the title reserves space for its update notice. Save schema 21 preserves the new automation choices and exact drag snapshots while retaining all earlier migrations.
+- Reduced browser frame work by throttling expensive static UI refreshes, caching catalog row signatures, reprojecting active pitches on resize instead of respawning them, and keeping the single authoritative one-ball human timeline aligned from release through plate response.
+- Redesigned the progressive title art and succinct Help copy, refined close-range character perspective, and retained spoiler gating across human, alien, eldritch, and victorious title variants.
+
 ## 0.13.2 — The mound has a schedule now
 
 - Replaced manual mound optimization with one authored range per opponent level. Selecting a batter now sets the thematic distance automatically, while an already-released pitch retains its exact original distance, speed, and flight time.

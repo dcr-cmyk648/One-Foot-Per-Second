@@ -29,16 +29,10 @@ trap cleanup_ofps_all_platforms EXIT
 # checked-in browser export. The desktop packager recreates the release folder,
 # so hold the browser artifacts across that step and restore them afterward.
 OFPS_SKIP_TESTS=true "${OFPS_ROOT}/scripts/package_web.sh"
-# Keep the human-readable Sites adapter fingerprint synchronized before the
-# Source archive is assembled. This removes an easy packaging-order footgun:
-# gameplay changes alter index.pck, while the adapter itself stays deliberately
-# thin and must identify the exact shared payload it will host.
-OFPS_PCK_SHA="$(/usr/bin/shasum -a 256 "${OFPS_ROOT}/web/index.pck" | /usr/bin/awk '{print $1}')"
-if [[ -f "${OFPS_ROOT}/sites-host/README.md" ]]; then
-  /usr/bin/sed -i '' -E \
-    "s/[0-9a-f]{64}/${OFPS_PCK_SHA}/" \
-    "${OFPS_ROOT}/sites-host/README.md"
-fi
+# Keep the Sites adapter's manifest version and human-readable payload
+# fingerprint synchronized before the Source archive is assembled. The adapter
+# is deliberately thin, but it still needs to identify the exact shared build.
+node "${OFPS_ROOT}/scripts/stamp_sites_release.mjs"
 /bin/cp "${OFPS_RELEASE_DIR}/${OFPS_BROWSER_NAME}" "${OFPS_TEMP_DIR}/${OFPS_BROWSER_NAME}"
 /bin/cp "${OFPS_RELEASE_DIR}/${OFPS_BROWSER_NAME}.sha256.txt" "${OFPS_TEMP_DIR}/${OFPS_BROWSER_NAME}.sha256.txt"
 "${OFPS_ROOT}/scripts/package_all_desktop.sh"
