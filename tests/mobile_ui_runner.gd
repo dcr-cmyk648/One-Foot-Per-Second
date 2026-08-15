@@ -34,6 +34,12 @@ func _run() -> void:
 	_expect(main.title_panel.size.x <= 366.0 and main.title_panel.position.x >= 0.0 and main.title_panel.position.x + main.title_panel.size.x <= main.title_screen.size.x, "The phone title panel should fit horizontally: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
 	_expect(main.title_panel.size.y <= 820.0 and main.title_panel.position.y >= 0.0 and main.title_panel.position.y + main.title_panel.size.y <= main.title_screen.size.y, "The phone title panel should fit vertically: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
 	_expect(main.title_art._visible_era() == 0, "Fresh phone title art must remain spoiler-free")
+	var phone_title_stage: Rect2 = main.title_art._stage_rect(Vector2(340.0, 420.0))
+	_expect(absf(phone_title_stage.size.x / phone_title_stage.size.y - 0.92) < 0.02 and phone_title_stage.size.x > 310.0, "Phone title art should enlarge the icon-style matchup in a portrait frame")
+	if "--capture-title" in OS.get_cmdline_user_args():
+		var title_image := root.get_texture().get_image()
+		var title_error := title_image.save_png("/private/tmp/no-hitter-title-phone.png")
+		_expect(title_error == OK, "Could not capture the phone title screen")
 	main._open_title_resume_picker()
 	main._configure_title_layout(Vector2(390.0, 844.0))
 	await process_frame
@@ -155,7 +161,7 @@ func _run() -> void:
 	_expect(main.xp_label.text == "13", "Phone XP should become a rounded whole number above one")
 	_expect(main.mobile_overlay_xp_label.text == "XP 13", "The phone Upgrades balance should share whole-XP formatting")
 	_expect(main.mobile_upgrade_stats_panel.visible, "The phone upgrade overlay should keep current stats visible")
-	_expect(main.mobile_upgrade_stat_labels.size() == 9, "The phone upgrade overlay should expose every trainable base-stat axis")
+	_expect(main.mobile_upgrade_stat_labels.size() == 15, "The phone upgrade overlay should expose every trainable base-stat axis")
 	_expect(
 		main.mobile_upgrade_stat_labels.speed.text == BaseballGameState.format_speed(main.game.get_representative_pitch_speed()),
 		"The phone upgrade overlay should show the current effective speed"
@@ -164,8 +170,8 @@ func _run() -> void:
 	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7%", "The phone upgrade overlay should show the reduced current field-tap advance")
 	var phone_training_row: Dictionary = main.training_buttons.velocity
 	_expect((phone_training_row.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone upgrade descriptions should remain draggable scroll regions")
-	_expect((phone_training_row.button as Button).text == "BUY", "Phone purchases should use an explicit BUY control")
-	_expect((phone_training_row.button as Button).get_combined_minimum_size().y >= 44.0, "Phone upgrade BUY controls should be touch-sized")
+	_expect((phone_training_row.button as Button).text.ends_with("XP"), "Phone purchases should put the actual XP price on the action control")
+	_expect((phone_training_row.button as Button).get_combined_minimum_size().y >= 44.0, "Phone upgrade price controls should be touch-sized")
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
 		main.mobile_tab_next_button.get_combined_minimum_size().x >= 44.0
@@ -332,7 +338,7 @@ func _run() -> void:
 	main._show_mobile_overlay(main.equipment_sidebar, "STATUS")
 	await process_frame
 	_expect(main.equipment_sidebar.get_parent() == main.mobile_overlay_content, "Status should open in the same phone overlay")
-	_expect(main.status_stat_labels.size() == 9 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Phone Status should show all nine effective progression stats")
+	_expect(main.status_stat_labels.size() == 15 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Phone Status should show every trainable effective progression stat")
 	_expect(main.equipment_progression_heading.text == "OWNED FACILITIES", "Fresh Status should not imply unrevealed prestige systems")
 	main._close_mobile_overlay()
 	root.size = Vector2i(1179, 720)

@@ -91,12 +91,13 @@ func _test_content() -> void:
 	_expect(str(Content.SIGNATURE_BATTER_NAMES[40]).begins_with("N'Kthra"), "The eldritch exhibition needs an explicit elder deity")
 	_expect(Content.SIGNATURE_BATTER_NAMES[43] == "Ball-rog, the Unstrikeable", "Ball-rog should remain the penultimate named batter")
 	_expect(Content.SIGNATURE_BATTER_NAMES[44] == "Octathulhu, God of the Eightfold Swing", "Final named opponent changed unexpectedly")
-	_expect(Content.PITCHES.size() == 22, "Expected twenty-two pitch types")
-	_expect(Content.TRAINING.size() == 9, "Expected nine repeatable training axes")
-	_expect(Content.BODY_GROWTH_STAGES.size() == 6, "Ordinary growth should run from toddler through regular adult")
+	_expect(Content.PITCHES.size() == 31, "Expected the complete human and illegal post-human pitch catalog")
+	_expect(Content.TRAINING.size() == 15, "Every displayed base stat should have one repeatable training axis")
+	_expect(Content.BODY_GROWTH_STAGES.size() == 12, "Ordinary growth should progress granularly from toddler through regular adult")
+	_expect(Content.BODY_MODIFIERS.size() == 12, "BODY should offer optional conditioning and chemistry alongside age")
 	_expect(str(Content.BODY_GROWTH_STAGES[0].id) == "toddler", "Every fresh life should begin as a toddler")
 	_expect(float(Content.BODY_GROWTH_STAGES[1].cost) == 3.0 and int(Content.BODY_GROWTH_STAGES[1].required_level) == 0, "A first strikeout should immediately afford the Little Kid growth option")
-	_expect(str(Content.BODY_GROWTH_STAGES[0].description).contains("penalties"), "The opening body should disclose its substantial toddler penalties")
+	_expect(str(Content.BODY_GROWTH_STAGES[0].description).contains("One foot per second"), "The opening body should preserve the title joke")
 	_expect(str(Content.BODY_GROWTH_STAGES.back().id) == "regular_guy", "The human growth track should end as a regular ol’ guy")
 	var previous_growth_level := -1
 	var previous_growth_cost := -1.0
@@ -109,15 +110,15 @@ func _test_content() -> void:
 	var training_ids: Array[String] = []
 	for definition in Content.TRAINING:
 		training_ids.append(str(definition.id))
-	_expect(training_ids == ["velocity", "command", "field_hustle", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling"], "Training should expose one clear purchase per base stat in unlock order")
+	_expect(training_ids == ["velocity", "command", "field_hustle", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling", "payload_training", "mastery_training", "drag_training", "xp_training", "loot_training", "frustration_training"], "Training should expose one clear purchase per base stat in unlock order")
 	_expect(Content.BALL_UPGRADES.size() == 26, "Expected twenty-six ball evolutions")
-	_expect(Content.MILESTONES.size() == 86, "Expected eighty-six interstitial facilities and interventions")
-	_expect(Content.DISTANCE_TIERS.size() == 15, "Expected the 3-foot-to-galaxy range ladder")
+	_expect(Content.MILESTONES.size() == 84, "BODY-only chemistry should leave eighty-four interstitial facilities and interventions")
+	_expect(Content.DISTANCE_TIERS.size() == 13, "Expected regulation age-group mounds followed by the 3-foot-to-galaxy ladder")
 	_expect(Content.SCALE_UPGRADES.is_empty(), "Physical scale must live in prestige layers, not ordinary XP")
 	_expect(Content.GENETIC_UPGRADES.size() == 15, "Expected fifteen genetic enhancements")
 	_expect(Content.ELDRITCH_UPGRADES.size() == 13, "Expected thirteen eldritch abilities")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
-	_expect(Content.ACHIEVEMENTS.size() == 108, "The achievement catalog should retain every distinct achievement")
+	_expect(Content.ACHIEVEMENTS.size() == 109, "The achievement catalog should retain every distinct achievement")
 	var achievement_ids := {}
 	var achievement_tier_counts := {"human": 0, "genetic": 0, "eldritch": 0, "divine": 0}
 	for definition in Content.ACHIEVEMENTS:
@@ -128,18 +129,20 @@ func _test_content() -> void:
 		_expect(achievement_tier_counts.has(achievement_tier), "Achievement tier should be known: %s" % achievement_tier)
 		if achievement_tier_counts.has(achievement_tier):
 			achievement_tier_counts[achievement_tier] += 1
-	_expect(achievement_tier_counts == {"human": 55, "genetic": 26, "eldritch": 20, "divine": 7}, "Achievements should span the intended four layers")
+	_expect(achievement_tier_counts == {"human": 54, "genetic": 28, "eldritch": 20, "divine": 7}, "Achievements should span the intended four layers")
 	_expect_close(Content.DEFAULT_ACHIEVEMENT_XP_BONUS, 0.01, "Every achievement should use the shared +1% XP reward")
 	_expect(Content.LOOT_SLOTS.size() == 7, "Expected six human equipment slots and one post-human Relic")
 	_expect(str(Content.LOOT_SLOTS[5].id) == "cleats", "Cleats should remain a regular equipment slot")
 	_expect(str(Content.LOOT_SLOTS[6].id) == "relic", "The seventh equipment slot should be the post-human Relic")
-	_expect(Content.LOOT_RARITIES.size() == 5, "Expected five Diablo-style loot tiers")
+	_expect(Content.LOOT_RARITIES.size() == 15, "Human, alien, and eldritch baseball should each add five loot tiers")
 	var rarity_probability := 0.0
 	for rarity_index in Content.LOOT_RARITIES.size():
 		var rarity: Dictionary = Content.LOOT_RARITIES[rarity_index]
 		rarity_probability += float(rarity.probability)
-		_expect(int(rarity.affix_count) == rarity_index, "Loot rarity should add one affix per tier")
-	_expect_close(rarity_probability, 1.0, "Loot rarity probabilities must sum to one")
+		_expect(int(rarity.affix_count) == int(rarity.family_rank), "Each rarity family should add one affix per family rank")
+	_expect_close(rarity_probability, 1.0, "Only the original human rarity weights should define the legacy probability total")
+	_expect(str(Content.LOOT_RARITIES[5].name) == "ALIEN COMMON" and str(Content.LOOT_RARITIES[9].name) == "ALIEN UNIQUE", "Alien baseball should add a complete five-tier rarity family")
+	_expect(str(Content.LOOT_RARITIES[10].name) == "ELDRITCH COMMON" and str(Content.LOOT_RARITIES[14].name) == "ELDRITCH UNIQUE", "Eldritch baseball should add a complete five-tier rarity family")
 	_expect(float(Content.LOOT_RARITIES[3].probability) < 0.005, "Legendary gear should be an actual event, not a routine drop")
 	_expect(float(Content.LOOT_RARITIES[4].probability) <= 0.0003, "Unique gear should be exceptionally rare")
 	_expect(Content.BAT_NAMES.size() == opponents.size(), "Every opponent needs a distinct bat")
@@ -326,10 +329,10 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	game.batter_cooldown_remaining = 0.0
 	game.pitch_credit = 0.0
 	game.training_levels.turnover = 1
-	_expect_close(game.get_base_batter_turnover_seconds(), 2.85, "One Lineup Hustle rank should remove 0.15 seconds")
-	_expect_close(game.get_batter_cooldown_multiplier(), 0.95, "The compatibility cooldown ratio should follow base lineup time")
+	_expect_close(game.get_base_batter_turnover_seconds(), 2.825, "One Lineup Hustle rank should remove ten percent of the remaining improvable gap")
+	_expect_close(game.get_batter_cooldown_multiplier(), 2.825 / 3.0, "The compatibility cooldown ratio should follow base lineup time")
 	game.training_levels.hit_recovery = 1
-	_expect_close(game.get_outcome_turnover_bonus(4), 0.95, "Shake It Off should reduce only a fair hit's extra delay")
+	_expect_close(game.get_outcome_turnover_bonus(4), 0.935, "Shake It Off should reduce ten percent of the remaining fair-hit delay gap")
 	_expect_close(game.get_outcome_turnover_bonus(Content.BALL_INDEX), 1.0, "Shake It Off must not reduce a walk's non-hit delay")
 	game.training_levels.turnover = 0
 	game.training_levels.hit_recovery = 0
@@ -360,11 +363,34 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	_expect(float(trained_calling[1].probability) > float(trained_calling[0].probability), "Pitch Calling should favor the stronger learned pitch without disabling weaker pitches")
 	game.training_levels.pitch_calling = 0
 
+	var midgame: BaseballGameState = GameStateScript.new()
+	midgame.highest_unlocked = 17
+	midgame.current_opponent = 17
+	midgame.body_growth_level = 7
+	midgame.training_levels.velocity = 10000
+	midgame.training_levels.command = 10000
+	_expect(midgame.get_velocity_fps() * 0.681818 <= 94.0001, "A no-prestige level-18 pitcher should remain below the authored 94 mph development anchor")
+	var midgame_strike_rate := float(midgame.get_outcome_probabilities()[Content.STRIKE_INDEX])
+	var midgame_strikeout_rate := midgame.get_strikeout_chance_per_at_bat()
+	_expect(midgame_strike_rate < 0.65, "Repeatable Command alone must not create a 100% called-Strike rate in human baseball")
+	_expect(midgame_strikeout_rate > 0.01 and midgame_strikeout_rate < 0.85, "A no-prestige midgame at-bat should remain plausible without becoming guaranteed or vanishingly rare")
+	midgame.free()
+
 	game.training_levels.velocity = 1000
-	game.purchased_milestones = ["regulation_ball", "weighted_balls", "steroids"]
-	_expect_close(game.get_velocity_fps(), BaseballGameState.HUMAN_SPEED_CAP_FPS, "Unmodified biology must stop at 211.6 mph")
 	game.current_opponent = Content.HUMAN_FINAL_INDEX
 	game.highest_unlocked = Content.HUMAN_FINAL_INDEX
+	game.purchased_milestones = ["regulation_ball", "weighted_balls"]
+	game.purchased_body_modifiers = ["steroids"]
+	_expect_close(game.get_velocity_fps(), BaseballGameState.HUMAN_SPEED_CAP_FPS, "Unmodified biology must stop at the authored 115 mph human limit")
+	game.training_levels.recovery = 10000
+	game.purchased_milestones.clear()
+	for milestone in Content.MILESTONES:
+		if int(milestone.required_level) <= Content.HUMAN_FINAL_INDEX:
+			game.purchased_milestones.append(str(milestone.id))
+	for modifier in Content.BODY_MODIFIERS:
+		if str(modifier.id) not in game.purchased_body_modifiers:
+			game.purchased_body_modifiers.append(str(modifier.id))
+	_expect(game.get_recovery_rate() <= BaseballGameState.HUMAN_BODY_RECOVERY_LIMIT + 0.000001, "Even a complete mortal build should respect the readable human recovery ceiling before equipment")
 	_expect(not game.is_speed_gate_blocked(), "The exact human cap should satisfy Bambino Rex")
 	game.training_levels.velocity = 0
 	_expect(game.is_speed_gate_blocked(), "Bambino Rex should reject a sub-limit first attempt")
@@ -392,18 +418,18 @@ func _test_body_growth() -> void:
 	var recovery_before := game.get_recovery_rate()
 	var size_before := game.get_pitcher_size_multiplier()
 	game.xp = 3.0
-	_expect(game.buy_body_growth("little_kid"), "The first optional growth purchase should be available before leaving level 1")
-	_expect(game.body_growth_level == 1 and game.get_body_growth_noun() == "little kid", "Growth should advance exactly one biological stage")
+	_expect(game.buy_body_growth("preschooler"), "The first optional growth purchase should be available before leaving level 1")
+	_expect(game.body_growth_level == 1 and game.get_body_growth_noun() == "preschooler", "Growth should advance exactly one biological stage")
 	_expect(game.get_body_velocity_fps() > speed_before, "Growing should increase the body's base throw speed")
 	_expect(game.get_pitch_quality() > quality_before, "Growing should increase command quality")
 	_expect(game.get_recovery_rate() > recovery_before, "Growing should improve recovery")
-	_expect(game.get_body_velocity_fps() >= speed_before * 1.075, "Escaping the toddler body should feel useful without abruptly accelerating the early campaign")
+	_expect(game.get_body_velocity_fps() >= speed_before * 1.025, "Escaping the toddler body should feel useful without abruptly accelerating the early campaign")
 	_expect(game.get_pitcher_size_multiplier() > size_before, "The rendered pitcher should visibly grow with the body")
-	_expect(not game.buy_body_growth("big_kid"), "Growth stages must still honor their campaign-level requirement")
+	_expect(not game.buy_body_growth("grade_schooler"), "Growth stages must still honor their campaign-level requirement")
 	game.body_growth_level = Content.BODY_GROWTH_STAGES.size() - 1
-	_expect_close(game.get_body_growth_effect_multiplier("speed"), 1.3762156, "Full adulthood should keep its retuned cumulative speed gain")
-	_expect_close(game.get_body_growth_effect_multiplier("recovery"), 1.159137, "Full adulthood should keep its retuned cumulative recovery gain")
-	_expect_close(game.get_body_growth_quality_bonus(), 0.15, "Full adulthood should keep its moderate cumulative quality gain")
+	_expect_close(game.get_body_growth_effect_multiplier("speed"), 1.45278076687868, "Full adulthood should keep its retuned cumulative speed gain")
+	_expect_close(game.get_body_growth_effect_multiplier("recovery"), 1.14016080059858, "Full adulthood should keep its retuned cumulative recovery gain")
+	_expect_close(game.get_body_growth_quality_bonus(), 0.162, "Full adulthood should keep its moderate cumulative quality gain")
 	game._reset_body_progress()
 	_expect(game.body_growth_level == 0, "Time travel should restart the player as a toddler")
 	game.free()
@@ -535,8 +561,11 @@ func _test_field_tapping() -> void:
 	_expect(not bool(capped_tap.get("applied", false)) and str(capped_tap.get("reason", "")) == "idle_limit", "The idle half of a timer must never be tappable")
 
 	var upgraded: BaseballGameState = GameStateScript.new()
-	upgraded.training_levels.field_hustle = BaseballGameState.FIELD_TAP_MAX_RANK
-	_expect_close(upgraded.get_field_tap_fraction(), 2.0 / 75.0, "Max Field Hustle should reach one third of the former eight-percent value")
+	upgraded.training_levels.field_hustle = 10
+	var upgraded_tap_fraction := BaseballGameState.FIELD_TAP_FRACTION_LIMIT - (
+		BaseballGameState.FIELD_TAP_FRACTION_LIMIT - BaseballGameState.BASE_FIELD_TAP_FRACTION
+	) * pow(BaseballGameState.FIELD_TAP_REMAINING_PER_RANK, 10.0)
+	_expect_close(upgraded.get_field_tap_fraction(), upgraded_tap_fraction, "Field Hustle should approach its modest ceiling asymptotically")
 	var summary := upgraded._empty_resolution_summary()
 	upgraded._begin_pitch_volley(summary, 0.0)
 	var immutable_speed := upgraded.pending_volley_speed_fps
@@ -544,7 +573,7 @@ func _test_field_tapping() -> void:
 	var flight_before := upgraded.pitch_flight_remaining
 	var flight_tap := upgraded.apply_field_tap()
 	_expect(str(flight_tap.get("phase", "")) == "flight", "A tap during travel should advance the immutable flight clock")
-	_expect_close(upgraded.pitch_flight_remaining, flight_before * (73.0 / 75.0), "An upgraded flight tap should remove 2.667 percent of the released duration")
+	_expect_close(upgraded.pitch_flight_remaining, flight_before * (1.0 - upgraded_tap_fraction), "An upgraded flight tap should remove its displayed fraction of the released duration")
 	_expect_close(upgraded.pending_volley_speed_fps, immutable_speed, "Tapping flight time must not mutate the sampled pitch speed")
 	_expect(upgraded.pending_volley_outcome == immutable_outcome, "Tapping flight time must not reroll the hidden outcome")
 
@@ -553,7 +582,13 @@ func _test_field_tapping() -> void:
 	field.apply_field_timer_advance("flight", float(flight_tap.seconds))
 	_expect(field.stream_time > stream_before, "The visible ball should fast-forward with the authoritative flight timer")
 	field.show_field_tap(Vector2(200.0, 140.0), flight_tap)
-	_expect(field.field_tap_effects.size() == 1 and str(field.field_tap_effects[0].label) == "+2.7%", "A successful tap should create the brief reduced-percentage ring")
+	var tap_percent := upgraded_tap_fraction * 100.0
+	var expected_tap_label := (
+		"+%d%%" % int(round(tap_percent))
+		if absf(tap_percent - round(tap_percent)) < 0.05
+		else "+%.1f%%" % tap_percent
+	)
+	_expect(field.field_tap_effects.size() == 1 and str(field.field_tap_effects[0].label) == expected_tap_label, "A successful tap should create the brief reduced-percentage ring")
 	field._update_field_tap_effects(PitchField.FIELD_TAP_EFFECT_DURATION + 0.01)
 	_expect(field.field_tap_effects.is_empty(), "The field tap cue should retire quickly")
 
@@ -562,7 +597,7 @@ func _test_field_tapping() -> void:
 	upgraded.batter_replacement_pending = true
 	var lineup_tap := upgraded.apply_field_tap()
 	_expect(str(lineup_tap.get("phase", "")) == "lineup", "A tap at an empty plate should advance the lineup timer")
-	_expect_close(upgraded.batter_cooldown_remaining, 11.68, "A lineup tap should advance the same 2.667 percent as every other foreground timer")
+	_expect_close(upgraded.batter_cooldown_remaining, 12.0 * (1.0 - upgraded_tap_fraction), "A lineup tap should advance the same displayed percentage as every other foreground timer")
 	field.free()
 	game.free()
 	upgraded.free()
@@ -574,10 +609,10 @@ func _test_distance_risk_and_reward() -> void:
 	game.highest_unlocked = 5
 	_expect(game.set_current_opponent(5), "Selecting level 6 should also select its authored range")
 	_expect(game.selected_distance_index == game.get_prescribed_distance_index(5), "The active range should be derived only from the opponent level")
-	_expect_close(game.get_pitch_distance_feet(), 12.0, "Backyard Challenge should be 12 feet")
-	_expect_close(game.get_distance_xp_multiplier(), 1.6, "Farther ranges should multiply XP")
-	_expect_close(game.get_distance_difficulty(), 0.45, "Farther ranges should add threat")
-	_expect_close(game.get_physical_flight_seconds(), 12.0, "True flight time should be distance divided by speed")
+	_expect_close(game.get_pitch_distance_feet(), 25.0, "Coach-pitch baseball should use its authored 25-foot range")
+	_expect_close(game.get_distance_xp_multiplier(), 1.85, "Farther ranges should multiply XP")
+	_expect_close(game.get_distance_difficulty(), 0.38, "Farther ranges should add threat")
+	_expect_close(game.get_physical_flight_seconds(), 25.0, "True flight time should be distance divided by speed")
 	var far_probabilities: Array[float] = game.get_outcome_probabilities()
 	_expect(far_probabilities[0] > near_probabilities[0], "A level's farther range should make home runs more likely than the same matchup at three feet")
 	_expect(not game.set_distance_index(999), "Manual range requests should not override the opponent's authored range")
@@ -591,6 +626,15 @@ func _test_overmastery_farming() -> void:
 	game.opponent_mastery[0] = requirement
 	_expect_close(game.get_overmastery_doublings(), 0.0, "Mastery at the unlock target should not yet earn a farming bonus")
 	_expect_close(game.get_opponent_farm_xp_multiplier(), 1.0, "The farming XP bonus should begin only past mastery")
+	game.current_batter_variant = {
+		"opponent_index": 0,
+		"loadout": [
+			{"id": "body", "rarity": 0},
+			{"id": "bat", "rarity": 4},
+			{"id": "hat", "name": "Common Cap", "rarity": 0},
+			{"id": "jersey", "name": "Legendary Jersey", "rarity": 3},
+		],
+	}
 	var base_probabilities := game.get_loot_rarity_probabilities()
 	game.opponent_mastery[0] = requirement * 16.0
 	_expect_close(game.get_overmastery_doublings(), 4.0, "Sixteen times the mastery target should equal four excess doublings")
@@ -598,12 +642,13 @@ func _test_overmastery_farming() -> void:
 	_expect_close(game.get_opponent_loot_luck(), 0.20, "Loot luck should follow the same logarithmic mastery track")
 	var farm_probabilities := game.get_loot_rarity_probabilities()
 	_expect_close(farm_probabilities.reduce(func(total, value): return total + value, 0.0), 1.0, "Mastery-adjusted rarity odds must still sum to one")
-	_expect(float(farm_probabilities[0]) < float(base_probabilities[0]), "Overmastery should reduce the Common share")
+	_expect(float(farm_probabilities[0]) < float(base_probabilities[0]), "Overmastery should gently favor the better item the batter is actually wearing")
 	_expect(
 		float(farm_probabilities[3]) + float(farm_probabilities[4])
 		> float(base_probabilities[3]) + float(base_probabilities[4]),
-		"Overmastery should improve the odds of Legendary and Unique loot"
+		"Overmastery should improve the odds of the batter's visible Legendary gear"
 	)
+	_expect(float(farm_probabilities[4]) == 0.0, "Mastery must never invent an unworn Unique drop")
 	var baseline_game: BaseballGameState = GameStateScript.new()
 	baseline_game.rng.seed = 5150
 	baseline_game.opponent_mastery[0] = requirement
@@ -671,8 +716,9 @@ func _test_opponent_variants() -> void:
 	var opening := game.get_current_batter_variant()
 	var opening_loadout: Array = opening.loadout
 	_expect(str(opening.name) == "Little Timmy" and str(opening.class_name) == "Wiffle-Bat Toddler", "The UI should separate an individual's name from the reusable class")
-	_expect(opening_loadout.size() == 2, "The first toddler should expose only body and bat on the opponent side")
-	_expect(str(opening_loadout[0].id) == "body" and str(opening_loadout[1].id) == "bat", "Opponent body and bat should lead the vertical loadout")
+	_expect(opening_loadout.size() == 3, "The first toddler should visibly own the tutorial cap in addition to body and bat")
+	_expect(str(opening_loadout[0].id) == "body" and str(opening_loadout[1].id) == "bat" and str(opening_loadout[2].id) == "hat", "Opponent body and bat should lead the vertical loadout, followed by droppable equipment")
+	_expect(int(opening_loadout[2].rarity) == 0, "Little Timmy's visible cap should match the guaranteed Common tutorial drop")
 	var first_bonus := game.get_opponent_variant_difficulty()
 	game.batter_replacement_pending = true
 	game._complete_batter_replacement()
@@ -682,12 +728,21 @@ func _test_opponent_variants() -> void:
 	game.highest_unlocked = Content.HUMAN_FINAL_INDEX
 	game.current_opponent = Content.HUMAN_FINAL_INDEX
 	game._reset_batter_identity()
-	_expect((game.get_current_batter_variant().loadout as Array).size() == 8, "An MLB champion should carry body, bat, and six mundane equipment slots")
+	var champion_loadout: Array = game.get_current_batter_variant().loadout
+	_expect(champion_loadout.size() == 8, "An MLB champion should carry body, bat, and six mundane equipment slots")
+	for entry_index in range(1, champion_loadout.size()):
+		_expect(int((champion_loadout[entry_index] as Dictionary).rarity) == 4, "Every item worn by the human champion should be top-tier human Unique")
 	game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
 	game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
 	game._reset_batter_identity()
 	var alien_loadout: Array = game.get_current_batter_variant().loadout
 	_expect(alien_loadout.size() == 9 and str(alien_loadout.back().id) == "relic", "Post-human opponents should add the hidden Relic slot")
+	var alien_has_new_tier := false
+	for entry_index in range(1, alien_loadout.size()):
+		var rarity_index := int((alien_loadout[entry_index] as Dictionary).rarity)
+		_expect(rarity_index <= 9, "Alien batters must not reveal eldritch rarity tiers")
+		alien_has_new_tier = alien_has_new_tier or rarity_index >= 5
+	_expect(alien_has_new_tier, "The first alien's wardrobe should demonstrate that Alien rarities now exist")
 	game.free()
 
 func _test_strikeout_only_economy() -> void:
@@ -923,6 +978,24 @@ func _test_strikeout_loot_and_equipment() -> void:
 		_expect(item.stats.size() == int(rarity.affix_count) + 1, "%s gear should have its primary stat plus the advertised affixes" % str(rarity.name))
 		_expect(not str(item.name).is_empty(), "Every generated loot tier needs a readable name")
 
+	var source_game: BaseballGameState = GameStateScript.new()
+	source_game.rng.seed = 407
+	source_game.highest_unlocked = 18
+	source_game.current_opponent = 18
+	source_game._reset_batter_identity()
+	var worn_pairs := {}
+	for source in source_game.get_opponent_drop_sources(18):
+		worn_pairs["%s:%d" % [str(source.id), int(source.rarity)]] = true
+	_expect(not worn_pairs.is_empty(), "A batter should expose at least one player-wearable drop source")
+	for _drop in 80:
+		var sourced_item := source_game._generate_loot_item(18)
+		_expect(worn_pairs.has("%s:%d" % [str(sourced_item.slot), int(sourced_item.rarity)]), "Every generated parcel must copy a visible enemy slot-and-rarity pair")
+		_expect(not str(sourced_item.source_name).is_empty(), "A naturally generated item should retain the name of its visible enemy source")
+	var bulk_summary := source_game._empty_resolution_summary()
+	source_game._generate_bulk_loot(250, 18, bulk_summary)
+	for bulk_item in source_game.loot_items:
+		_expect(worn_pairs.has("%s:%d" % [str(bulk_item.slot), int(bulk_item.rarity)]), "Bulk/offline parcels must obey the same visible-loadout sourcing rule")
+
 	var cap_game: BaseballGameState = GameStateScript.new()
 	cap_game.highest_unlocked = Content.FINAL_BOSS_INDEX
 	cap_game.genetic_offer_unlocked = true
@@ -1068,6 +1141,7 @@ func _test_strikeout_loot_and_equipment() -> void:
 	disabled_game.free()
 	pity_game.free()
 	tier_game.free()
+	source_game.free()
 	cap_game.free()
 	amplified_game.free()
 	capacity_game.free()
@@ -1105,7 +1179,7 @@ func _test_projectile_snapshots() -> void:
 	_expect_close((1.0 - field.get_pitch_cooldown_progress()) / field._get_pitch_cycle_rate(), 2.0, "A half-filled opening dial should show two seconds to release")
 	game.pitch_credit = 0.0
 	field.configure_from_game(game)
-	_expect(field._get_camera_scale() > 3.5, "The opening should use the extra-close camera")
+	_expect(field._get_camera_scale() > 3.0, "The opening should use the extra-close camera")
 	var pitcher_radius := field._get_pitcher_visual_scale() * 10.0
 	var toddler_radius := field._get_batter_intrinsic_size() * field._get_character_camera_scale() * 10.0
 	_expect(pitcher_radius / toddler_radius > 1.45 and pitcher_radius / toddler_radius < 1.65, "The opening pitcher should be roughly fifty percent larger than the toddler")
@@ -1116,14 +1190,14 @@ func _test_projectile_snapshots() -> void:
 	game.body_growth_level = 3
 	game._sync_distance_to_current_opponent()
 	field.configure_from_game(game)
-	var twelve_foot_scale := field._get_character_camera_scale()
-	var twelve_foot_separation := field.get_pitcher_position().distance_to(field.get_batter_position())
-	var twelve_foot_pitcher_width := (
-		2.0 * field._get_pitcher_visual_scale() * 10.0 / twelve_foot_separation * game.get_pitch_distance_feet()
+	var youth_scale := field._get_character_camera_scale()
+	var youth_separation := field.get_pitcher_position().distance_to(field.get_batter_position())
+	var youth_pitcher_width := (
+		2.0 * field._get_pitcher_visual_scale() * 10.0 / youth_separation * game.get_pitch_distance_feet()
 	)
-	_expect_close(game.get_pitch_distance_feet(), 12.0, "The visual perspective regression should audit the youth-baseball 12-foot range")
-	_expect(twelve_foot_scale < opening_character_scale * 0.82, "Character perspective should shrink continuously between 3 and 12 feet")
-	_expect(twelve_foot_pitcher_width < 3.5, "A grown youth pitcher at 12 feet should not read as six feet wide")
+	_expect_close(game.get_pitch_distance_feet(), 25.0, "The visual perspective regression should audit the authored 25-foot coach-pitch range")
+	_expect(youth_scale < opening_character_scale * 0.82, "Character perspective should shrink continuously between 3 and 25 feet")
+	_expect(youth_pitcher_width < 3.5, "A grown youth pitcher at 25 feet should not read as six feet wide")
 	game.reset_fresh()
 	field.configure_from_game(game)
 	_expect(not field.move_closer_arrow.visible and not field.move_farther_arrow.visible, "Level-assigned ranges should remove manual mound arrows")
@@ -1135,7 +1209,7 @@ func _test_projectile_snapshots() -> void:
 	var original_data: Dictionary = field.get_launch_snapshot(0)
 	_expect(absf(float(original_data.signed_curve)) < 0.01, "Opening pitches should be nearly straight")
 	_expect_close(float(original_data.trail_length), 1.0, "A one-arm opening pitch must render as one ball without a fake missile trail")
-	_expect(float(original_data.projectile_scale) > 2.5, "Opening balls should scale with the tighter camera")
+	_expect(float(original_data.projectile_scale) > 2.2, "Opening balls should scale with the tighter camera")
 	var opening_mound := field._get_mound_position(game.get_pitch_distance_feet())
 	var release_offset := Vector2(original_data.source) - opening_mound
 	_expect(release_offset.length() < field._get_pitcher_visual_scale() * 19.0, "The rectangular throwing arm and release should stay compact")
@@ -1156,7 +1230,7 @@ func _test_projectile_snapshots() -> void:
 	game.training_levels.distance_control = 6
 	game.highest_unlocked = 5
 	field.configure_from_game(game)
-	_expect(float(field.snapshot.pitcher_size_multiplier) > 1.0 and float(field.snapshot.pitcher_size_multiplier) < 2.0, "Pitcher size should grow smoothly with strength without reaching an uncapped scale")
+	_expect_close(float(field.snapshot.pitcher_size_multiplier), 1.0, "Human training should not make the top-down body marker swell like a balloon")
 	_expect(not field.move_closer_arrow.visible and not field.move_farther_arrow.visible, "Range arrows should stay hidden after later ranges unlock")
 	var unchanged_data: Dictionary = field.get_launch_snapshot(0)
 	_expect_close(float(unchanged_data.duration), float(original_data.duration), "An in-flight ball must keep its release-time duration")
@@ -1197,6 +1271,14 @@ func _test_projectile_snapshots() -> void:
 	var drag_snapshot := drag_field.get_launch_snapshot(0)
 	_expect(float(drag_snapshot.drag_per_foot) > 0.0, "The projectile renderer should receive the air-drag snapshot")
 	_expect(float(drag_snapshot.duration) > 0.0, "The projectile renderer should receive a finite immutable duration")
+	var remembered_pitch_id := drag_field.last_pitch_id
+	var remembered_release_speed := drag_field.last_pitch_speed_fps
+	drag_field._process(float(drag_snapshot.duration) + 0.5)
+	_expect(drag_field.last_pitch_id == remembered_pitch_id, "The live throw profile should retain the last called pitch after impact")
+	_expect_close(drag_field.last_pitch_speed_fps, remembered_release_speed, "The live throw profile should retain the last pitch's immutable speed after impact")
+	drag_field.show_loot_popup("RARE HAT DROP", "TEST CAP", Color.YELLOW)
+	_expect(drag_field.get_loot_popup_anchor().is_equal_approx(drag_field._get_batter_position()), "Loot notifications should anchor over the enemy batter")
+	_expect(not drag_field.get_loot_popup_anchor().is_equal_approx(drag_field.get_pitcher_position()), "Loot notifications must not appear over the player")
 	drag_field.free()
 	drag_game.free()
 
@@ -1468,7 +1550,7 @@ func _test_progression_and_purchases() -> void:
 	game.xp = 10000.0
 	var initial_speed := game.get_velocity_fps()
 	_expect(game.buy_training("velocity"), "Velocity training should purchase")
-	_expect_close(game.get_velocity_fps(), initial_speed + BaseballGameState.VELOCITY_PER_RANK_FPS, "Velocity training should add 0.50 ft/s to the base")
+	_expect_close(game.get_velocity_fps(), initial_speed + BaseballGameState.VELOCITY_PER_RANK_FPS, "Velocity training should add 0.75 ft/s to the base")
 	_expect(BaseballGameState.format_cost(game.get_training_cost("velocity")).find(".") == -1, "Displayed costs should have no decimals")
 	_expect(BaseballGameState.format_cost(18.0) == "20", "Costs should round upward readably")
 	_expect(BaseballGameState.format_cost(240.0) == "300", "Hundreds should round to one significant digit")
@@ -1484,16 +1566,16 @@ func _test_progression_and_purchases() -> void:
 	game.highest_unlocked = maxi(game.highest_unlocked, 11)
 	game.training_levels.offline_efficiency = 0
 	_expect(game.buy_training("offline_efficiency"), "Scorebook Study should upgrade offline rewards once unlocked")
-	_expect_close(game.get_offline_xp_efficiency(), 0.02, "Each Scorebook Study rank should add one percentage point of offline XP")
-	game.training_levels.offline_efficiency = BaseballGameState.OFFLINE_XP_MAX_RANK
-	_expect_close(game.get_offline_xp_efficiency(), 0.25, "Ordinary offline training should cap at twenty-five percent")
-	_expect(game.get_training_cost("offline_efficiency") == BaseballGameState.MAX_NUMBER, "A maxed offline axis should reject additional ranks")
+	_expect(game.get_offline_xp_efficiency() > 0.01, "Each Scorebook Study rank should improve offline XP")
+	game.training_levels.offline_efficiency = 100
+	_expect(game.get_offline_xp_efficiency() < BaseballGameState.OFFLINE_XP_EFFICIENCY_LIMIT and game.get_offline_xp_efficiency() > 0.70, "Ordinary offline training should approach seventy-five percent without a hard rank cap")
+	_expect(game.get_training_cost("offline_efficiency") < BaseballGameState.MAX_NUMBER, "An asymptotic offline axis should always retain another purchasable rank")
 	var lineup_before := game.get_base_batter_turnover_seconds()
 	_expect(game.buy_training("turnover"), "Lineup Hustle should be a visible repeatable purchase")
-	_expect_close(game.get_base_batter_turnover_seconds(), lineup_before - BaseballGameState.LINEUP_SECONDS_PER_RANK, "Lineup training should reduce the universal replacement delay additively")
+	_expect(game.get_base_batter_turnover_seconds() < lineup_before, "Lineup training should reduce the universal replacement delay asymptotically")
 	var single_bonus_before := game.get_outcome_turnover_bonus(4)
 	_expect(game.buy_training("hit_recovery"), "Shake It Off should be a separate repeatable purchase")
-	_expect_close(game.get_outcome_turnover_bonus(4), single_bonus_before * 0.95, "Hit recovery should reduce the extra fair-hit delay")
+	_expect(game.get_outcome_turnover_bonus(4) < single_bonus_before, "Hit recovery should reduce the extra fair-hit delay")
 	_expect_close(game.get_outcome_turnover_bonus(Content.BALL_INDEX), 1.0, "Hit recovery should not change a walk's extra delay")
 
 	var gate_game: BaseballGameState = GameStateScript.new()
@@ -1513,6 +1595,11 @@ func _test_progression_and_purchases() -> void:
 	game.dna = 100
 	game.highest_unlocked = 34
 	game.current_opponent = 34
+	game.xp = 2.0e9
+	_expect(game.buy_pitch("gazorpian_strudelball"), "The first alien league should offer its illegal signature pitch")
+	_expect(game.has_achievement("illegal_pitch"), "Learning a post-human pitch should immediately unlock Wait… That’s Illegal")
+	var strudel_range := game.get_pitch_speed_range("gazorpian_strudelball")
+	_expect(strudel_range.y < game.get_velocity_fps() * 0.35, "The Gazorpian Strudelball's huge quality bonus should retain its severe speed drawback")
 	var quality_before_gene := game.get_pitch_quality()
 	_expect(game.buy_genetic("compressed_strike_genome"), "Compressed Strike Genome should purchase with DNA")
 	_expect(game.get_strikes_per_batter() == 5, "The first compression rank should remove one of six alien strikes")
@@ -1759,7 +1846,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect_close(restored.opponent_mastery[3], 77.0, "Mastery should survive saves")
 	_expect(int(restored.training_levels.turnover) == 7, "Batter-cooldown training should survive saves")
 	_expect(int(restored.training_levels.field_hustle) == 4, "Field-tap training should survive saves")
-	_expect_close(restored.get_offline_xp_efficiency(), 0.10, "Offline-efficiency training should survive saves")
+	_expect_close(restored.get_offline_xp_efficiency(), original.get_offline_xp_efficiency(), "Offline-efficiency training should survive saves")
 
 	var early_v13: BaseballGameState = GameStateScript.new()
 	early_v13.apply_save_data({
@@ -1785,7 +1872,7 @@ func _test_save_round_trip_and_migration() -> void:
 		"highest_unlocked": 18,
 		"current_opponent": 18,
 	})
-	_expect(version_seventeen.body_growth_level == 4, "Pre-growth saves should infer an age appropriate to their campaign level")
+	_expect(version_seventeen.body_growth_level == 7, "Pre-growth saves should infer an age appropriate to their campaign level")
 	_expect(not version_seventeen.human_league_completed_as_toddler, "Migration must never invent the secret toddler clear")
 
 	var legacy_data := {
@@ -1813,7 +1900,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(int(migrated.genetic_levels.compressed_strike_genome) == 3, "Legacy strike capacity should migrate to count compression")
 	_expect(migrated.get_strikes_per_batter() == 61, "Legacy count investment should remove three strikes from Octathulhu's sixty-four")
 	_expect(migrated.auto_advance_enabled and migrated.auto_train_enabled and migrated.auto_farm_enabled, "Legacy automation should remain unlocked")
-	_expect(int(migrated.training_levels.command) == 84, "Legacy additive Command, Spin, and Deception should preserve their quality under the new +0.04 ranks")
+	_expect(int(migrated.training_levels.command) == 187, "Legacy additive Command, Spin, and Deception should preserve their quality under the smaller modern ranks")
 
 	var version_six_data := {
 		"version": 6,

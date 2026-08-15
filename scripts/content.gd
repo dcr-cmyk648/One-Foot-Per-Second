@@ -80,11 +80,12 @@ const ERA_NAMES := [
 	"ELDRITCH WORLD SERIES",
 ]
 
-# Strikeout loot is intentionally a modest sidegrade channel. Rarity controls
-# how many independently rolled affixes an item receives, while item level
-# controls their strength. The state layer applies hard aggregate caps so even
-# seven perfect Uniques cannot become a hidden fourth prestige system. The
-# seventh slot is not part of human baseball and cannot drop before that tier.
+# Strikeout loot is intentionally a modest sidegrade channel. Each league adds
+# a five-step rarity family without removing the older families: alien batters
+# can still wear human Common-to-Unique gear, and eldritch batters can wear any
+# previously revealed tier. The state layer applies hard aggregate caps so even
+# seven perfect late-game items cannot become a hidden fourth prestige system.
+# The seventh slot is not part of human baseball and cannot drop before that tier.
 const LOOT_SLOTS := [
 	{
 		"id": "hat",
@@ -145,11 +146,21 @@ const LOOT_SLOTS := [
 ]
 
 const LOOT_RARITIES := [
-	{"id": "common", "name": "COMMON", "color": Color("a9b6c5"), "probability": 0.7800, "affix_count": 0, "strength": 0.72},
-	{"id": "magic", "name": "MAGIC", "color": Color("66a6ff"), "probability": 0.1800, "affix_count": 1, "strength": 0.88},
-	{"id": "rare", "name": "RARE", "color": Color("ffd45c"), "probability": 0.0370, "affix_count": 2, "strength": 1.00},
-	{"id": "legendary", "name": "LEGENDARY", "color": Color("ff914d"), "probability": 0.0027, "affix_count": 3, "strength": 1.14},
-	{"id": "unique", "name": "UNIQUE", "color": Color("d68cff"), "probability": 0.0003, "affix_count": 4, "strength": 1.28},
+	{"id": "common", "name": "COMMON", "family": "human", "family_rank": 0, "color": Color("a9b6c5"), "probability": 0.7800, "affix_count": 0, "strength": 0.72},
+	{"id": "magic", "name": "MAGIC", "family": "human", "family_rank": 1, "color": Color("66a6ff"), "probability": 0.1800, "affix_count": 1, "strength": 0.88},
+	{"id": "rare", "name": "RARE", "family": "human", "family_rank": 2, "color": Color("ffd45c"), "probability": 0.0370, "affix_count": 2, "strength": 1.00},
+	{"id": "legendary", "name": "LEGENDARY", "family": "human", "family_rank": 3, "color": Color("ff914d"), "probability": 0.0027, "affix_count": 3, "strength": 1.14},
+	{"id": "unique", "name": "UNIQUE", "family": "human", "family_rank": 4, "color": Color("d68cff"), "probability": 0.0003, "affix_count": 4, "strength": 1.28},
+	{"id": "alien_common", "name": "ALIEN COMMON", "family": "alien", "family_rank": 0, "color": Color("b7dacb"), "probability": 0.0, "affix_count": 0, "strength": 1.05},
+	{"id": "alien_magic", "name": "ALIEN MAGIC", "family": "alien", "family_rank": 1, "color": Color("52e3bf"), "probability": 0.0, "affix_count": 1, "strength": 1.17},
+	{"id": "alien_rare", "name": "ALIEN RARE", "family": "alien", "family_rank": 2, "color": Color("82f266"), "probability": 0.0, "affix_count": 2, "strength": 1.31},
+	{"id": "alien_legendary", "name": "ALIEN LEGENDARY", "family": "alien", "family_rank": 3, "color": Color("1dffd2"), "probability": 0.0, "affix_count": 3, "strength": 1.47},
+	{"id": "alien_unique", "name": "ALIEN UNIQUE", "family": "alien", "family_rank": 4, "color": Color("e8ff63"), "probability": 0.0, "affix_count": 4, "strength": 1.65},
+	{"id": "eldritch_common", "name": "ELDRITCH COMMON", "family": "eldritch", "family_rank": 0, "color": Color("c2b7d6"), "probability": 0.0, "affix_count": 0, "strength": 1.35},
+	{"id": "eldritch_magic", "name": "ELDRITCH MAGIC", "family": "eldritch", "family_rank": 1, "color": Color("9c78ff"), "probability": 0.0, "affix_count": 1, "strength": 1.52},
+	{"id": "eldritch_rare", "name": "ELDRITCH RARE", "family": "eldritch", "family_rank": 2, "color": Color("df67ff"), "probability": 0.0, "affix_count": 2, "strength": 1.72},
+	{"id": "eldritch_legendary", "name": "ELDRITCH LEGENDARY", "family": "eldritch", "family_rank": 3, "color": Color("ff53ba"), "probability": 0.0, "affix_count": 3, "strength": 1.95},
+	{"id": "eldritch_unique", "name": "ELDRITCH UNIQUE", "family": "eldritch", "family_rank": 4, "color": Color("fff0ff"), "probability": 0.0, "affix_count": 4, "strength": 2.20},
 ]
 
 const LOOT_STATS := [
@@ -174,6 +185,10 @@ const STAT_HELP := {
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
 	"frustration": "Bad results build Frustration by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Its uncapped logarithmic quality bonus resets on a completed strikeout.",
+	"drag": "Air drag slows a released ball continuously on its trip to the plate. Lower drag preserves more of its release speed.",
+	"xp": "Strikeout XP multiplies the payout awarded only when the required strike count is completed.",
+	"loot": "Loot chance is the chance that an eligible strikeout copies one player-wearable item from the batter's visible loadout, keeping its slot and rarity. The pity rule still ends long dry streaks.",
+	"power": "Power is a compact comparison of the pitcher’s complete matchup strength and the current batter’s resistance. It does not add a hidden combat stat.",
 }
 
 const LOOT_PREFIXES := [
@@ -182,6 +197,16 @@ const LOOT_PREFIXES := [
 	["Improbable", "All-Star", "Statistically Dubious", "Glorious"],
 	["Legendary", "League-Breaking", "Commissioner-Banned", "Unreasonably Serious"],
 	["Only Existing", "Reality-Original", "Prophecied", "One True"],
+	["Extraterrestrial", "Imported", "Unlicensed", "Off-World"],
+	["Telepathic", "Ionized", "Crop-Circle", "Zero-G"],
+	["Galactic", "Xenological", "Star-League", "Warp-Forged"],
+	["Alien Legendary", "Planet-Breaking", "Senate-Banned", "Nova-Crowned"],
+	["Only in This Galaxy", "Prime-Species", "Prophesied by Moons", "One True Alien"],
+	["Unsettling", "Non-Euclidean", "Whispering", "Damp"],
+	["Dreaming", "Many-Angled", "Unremembered", "Moonless"],
+	["Eldritch", "Abyssal", "Blasphemous", "Starless"],
+	["Outer-God", "Reality-Flaying", "Creation-Banned", "Thousand-Eyed"],
+	["Only Existing Outside Time", "First and Final", "Unnamed by God", "One True Horror"],
 ]
 
 const LOOT_SUFFIXES := {
@@ -197,18 +222,16 @@ const LOOT_SUFFIXES := {
 # reaches at each era boundary. This keeps new classes competitive instead of
 # letting uncapped idle-game income turn the whole ladder into automatic
 # strikes. The final anchor is Octathulhu rather than a tenth era.
-const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 6.0, 11.0, 17.0, 24.0, 28.0, 36.0, 52.0, 72.0, 100.0]
+const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 5.5, 9.5, 13.0, 17.0, 21.0, 28.0, 52.0, 72.0, 100.0]
 
 const DISTANCE_TIERS := [
 	{"name": "PRESCHOOL POINT-BLANK", "label": "3 ft", "feet": 3.0, "required_level": 0, "xp_multiplier": 1.0, "difficulty": 0.0},
-	{"name": "ONE BIG STEP BACK", "label": "6 ft", "feet": 6.0, "required_level": 2, "xp_multiplier": 1.25, "difficulty": 0.20},
-	{"name": "BACKYARD CHALLENGE", "label": "12 ft", "feet": 12.0, "required_level": 5, "xp_multiplier": 1.6, "difficulty": 0.45},
-	{"name": "LITTLE-LEAGUE CLOSE", "label": "20 ft", "feet": 20.0, "required_level": 8, "xp_multiplier": 2.1, "difficulty": 0.75},
-	{"name": "HALF MOUND", "label": "30 ft", "feet": 30.0, "required_level": 11, "xp_multiplier": 2.8, "difficulty": 1.0},
-	{"name": "YOUTH MOUND", "label": "44 ft", "feet": 44.0, "required_level": 14, "xp_multiplier": 4.0, "difficulty": 1.3},
-	{"name": "REGULATION MOUND", "label": "60 ft 6 in", "feet": 60.5, "required_level": 19, "xp_multiplier": 6.0, "difficulty": 1.6},
-	{"name": "BASEPATH BOMBARDMENT", "label": "90 ft", "feet": 90.0, "required_level": 24, "xp_multiplier": 9.0, "difficulty": 2.0},
-	{"name": "OUTFIELD ARTILLERY", "label": "300 ft", "feet": 300.0, "required_level": 29, "xp_multiplier": 15.0, "difficulty": 2.5},
+	{"name": "TEE-BALL COACH DISTANCE", "label": "10 ft", "feet": 10.0, "required_level": 3, "xp_multiplier": 1.35, "difficulty": 0.18},
+	{"name": "COACH-PITCH FRONT LINE", "label": "25 ft", "feet": 25.0, "required_level": 5, "xp_multiplier": 1.85, "difficulty": 0.38},
+	{"name": "LITTLE-LEAGUE MOUND", "label": "46 ft", "feet": 46.0, "required_level": 7, "xp_multiplier": 2.75, "difficulty": 0.68},
+	{"name": "INTERMEDIATE 50/70 MOUND", "label": "50 ft", "feet": 50.0, "required_level": 10, "xp_multiplier": 3.25, "difficulty": 0.82},
+	{"name": "JUNIOR-LEAGUE MOUND", "label": "54 ft", "feet": 54.0, "required_level": 11, "xp_multiplier": 3.80, "difficulty": 0.96},
+	{"name": "REGULATION MOUND", "label": "60 ft 6 in", "feet": 60.5, "required_level": 12, "xp_multiplier": 4.75, "difficulty": 1.15},
 	{"name": "ONE-MILE MOUND", "label": "1 mile", "feet": 5280.0, "required_level": 31, "xp_multiplier": 30.0, "difficulty": 3.1},
 	{"name": "LOW-ORBIT BULLPEN", "label": "250 miles", "feet": 1320000.0, "required_level": 34, "xp_multiplier": 100.0, "difficulty": 4.0},
 	{"name": "LUNAR SERIES", "label": "Earth to Moon", "feet": 1.261e9, "required_level": 36, "xp_multiplier": 500.0, "difficulty": 5.0},
@@ -677,18 +700,18 @@ const ACHIEVEMENTS := [
 	{"id": "reach_level_25", "tier": "human", "name": "The Long Bus Ride", "metric": "level", "threshold": 24.0, "description": "Reach Level 25."},
 	{"id": "human_champion_toddler", "tier": "human", "name": "Past Your Bedtime", "metric": "human_champion_toddler", "threshold": 1.0, "secret": true, "description": "Complete the entire human league without growing up."},
 	{"id": "complete_human_baseball", "tier": "human", "name": "The Human Limit", "metric": "level", "threshold": 30.0, "reveal_level": 29, "description": "Master the final human batter."},
-	{"id": "distance_6ft", "tier": "human", "name": "Personal Space", "metric": "distance", "threshold": 1.0, "description": "Pitch from 6 feet."},
-	{"id": "distance_30ft", "tier": "human", "name": "There Is Now a Mound", "metric": "distance", "threshold": 4.0, "description": "Pitch from 30 feet."},
+	{"id": "distance_6ft", "tier": "human", "name": "Personal Space", "metric": "distance", "threshold": 1.0, "description": "Pitch from the 10-foot tee-ball line."},
+	{"id": "distance_30ft", "tier": "human", "name": "There Is Now a Mound", "metric": "distance", "threshold": 3.0, "description": "Pitch from a 46-foot Little League mound."},
 	{"id": "distance_regulation", "tier": "human", "name": "Sixty Feet, Six Inches, Somehow", "metric": "distance", "threshold": 6.0, "description": "Pitch from a regulation mound."},
-	{"id": "distance_outfield", "tier": "human", "name": "Pitching from Center Field", "metric": "distance", "threshold": 8.0, "description": "Pitch from 300 feet."},
+	{"id": "distance_outfield", "tier": "genetic", "name": "Pitching from the Next County", "metric": "distance", "threshold": 7.0, "description": "Pitch from the one-mile mound."},
 	{"id": "speed_2fps", "tier": "human", "name": "Twice the Game’s Name", "metric": "speed", "threshold": 2.0, "description": "Throw a pitch at 2 ft/s."},
 	{"id": "speed_10fps", "tier": "human", "name": "Breaking into Double Digits", "metric": "speed", "threshold": 10.0, "description": "Throw a pitch at 10 ft/s."},
 	{"id": "speed_60fps", "tier": "human", "name": "A Brisk Sixty Feet per Second", "metric": "speed", "threshold": 60.0, "description": "Throw a pitch at 60 ft/s."},
 	{"id": "speed_100mph", "tier": "human", "name": "Three Digits", "metric": "speed", "threshold": 146.66676444450962, "description": "Throw a pitch at 100 mph."},
-	{"id": "speed_human_cap", "tier": "human", "name": "History, Doubled", "metric": "speed", "threshold": 310.3468735645824, "secret": true, "description": "Reach 211.6 mph, twice the recorded human benchmark."},
+	{"id": "speed_human_cap", "tier": "human", "name": "History, Moderately Inconvenienced", "metric": "speed", "threshold": 168.6667902223134, "secret": true, "description": "Reach the 115 mph limit of an exceptionally implausible human body."},
 	{"id": "velocity_rank_1", "tier": "human", "name": "Arm Day", "metric": "training", "key": "velocity", "threshold": 1.0, "description": "Buy your first Speed Training rank."},
 	{"id": "command_rank_1", "tier": "human", "name": "An Attempt Was Made", "metric": "training", "key": "command", "threshold": 1.0, "description": "Buy your first Command Drills rank."},
-	{"id": "puberty", "tier": "human", "name": "Puberty Has Entered the Bullpen", "metric": "body_growth", "threshold": 3.0, "description": "Become a Gangly Teenager. The velocity is coming from inside the house."},
+	{"id": "puberty", "tier": "human", "name": "Puberty Has Entered the Bullpen", "metric": "body_growth", "threshold": 5.0, "description": "Become a Teenager. The velocity is coming from inside the house."},
 	{"id": "field_hustle_rank_1", "tier": "human", "name": "Idle Game, Active Finger", "metric": "training", "key": "field_hustle", "threshold": 1.0, "description": "Buy your first Field Hustle rank."},
 	{"id": "recovery_rank_10", "tier": "human", "name": "Between-Pitch Breathing Optional", "metric": "training", "key": "recovery", "threshold": 10.0, "description": "Reach Recovery Drills rank 10."},
 	{"id": "offline_rank_10", "tier": "human", "name": "The Scorebook Worked Overnight", "metric": "training", "key": "offline_efficiency", "threshold": 10.0, "description": "Reach Scorebook Study rank 10."},
@@ -710,6 +733,7 @@ const ACHIEVEMENTS := [
 
 	# Genetic and alien baseball — 26 achievements.
 	{"id": "genetic_offer", "tier": "genetic", "name": "Come With Me If You Want to Pitch", "metric": "genetic_offer", "threshold": 1.0, "description": "Accept the portal stranger’s deeply irresponsible baseball plan."},
+	{"id": "illegal_pitch", "tier": "genetic", "name": "Wait… That’s Illegal", "metric": "illegal_pitch", "threshold": 1.0, "description": "Learn your first pitch that cannot be reconciled with any human rulebook."},
 	{"id": "genetic_rebirth_1", "tier": "genetic", "name": "Born Again, But Baseball", "metric": "genetic_rebirths", "threshold": 1.0, "description": "Complete your first genetic rebirth."},
 	{"id": "genetic_rebirth_5", "tier": "genetic", "name": "Prenatal Free Agent", "metric": "genetic_rebirths", "threshold": 5.0, "description": "Complete five genetic rebirths."},
 	{"id": "dna_10", "tier": "genetic", "name": "Double Helix, Double Play", "metric": "lifetime_dna", "threshold": 10.0, "description": "Earn 10 lifetime DNA."},
@@ -768,10 +792,11 @@ const ACHIEVEMENTS := [
 	{"id": "no_hitter", "tier": "divine", "name": "No Hitter", "metric": "no_hitter", "threshold": 1.0, "secret": true, "description": "Defeat the entire campaign through Octathulhu without allowing a single fair hit."},
 ]
 
-# Ordinary aging is an optional XP track. Each purchased stage applies the
-# listed incremental body bonuses, while the stage's visual size is absolute.
-# Nothing here raises the human speed cap, so a deliberately stubborn toddler
-# can still finish human baseball through training, equipment, and facilities.
+# Ordinary aging is an optional XP track. Stages are intentionally granular so
+# the body displayed beside youth, school, college, and professional opponents
+# makes physical sense. Effects are incremental; visual size is absolute and
+# deliberately much less aggressive than height, because the top-down marker is
+# a person's footprint rather than a six-foot-tall side view.
 const BODY_GROWTH_STAGES := [
 	{
 		"id": "toddler",
@@ -781,63 +806,148 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 0,
 		"visual_size": 1.00,
 		"effects": {"speed": 1.00, "quality": 0.00, "recovery": 1.00},
-		"description": "Toddler penalties vs. a Regular Ol’ Guy: Speed ×0.73; Quality −0.15; Recovery ×0.86.",
+		"description": "One toddler. One arm. One foot per second.",
 	},
 	{
-		"id": "little_kid",
-		"name": "Grow into a Regular Ol’ Little Kid",
-		"body_name": "Regular Ol’ Little Kid",
-		"noun": "little kid",
+		"id": "preschooler",
+		"name": "Become a Preschooler",
+		"body_name": "Regular Ol’ Preschooler",
+		"noun": "preschooler",
 		"cost": 3.0,
 		"required_level": 0,
-		"visual_size": 1.12,
-		"effects": {"speed": 1.08, "quality": 0.025, "recovery": 1.04},
-		"description": "Speed ×1.08; Quality +0.025; Recovery ×1.04.",
+		"visual_size": 1.025,
+		"effects": {"speed": 1.03, "quality": 0.012, "recovery": 1.012},
+		"description": "Speed ×1.03; Quality +0.012; Recovery ×1.012.",
 	},
 	{
-		"id": "big_kid",
-		"name": "Grow into a Big Kid",
-		"body_name": "Regular Ol’ Big Kid",
-		"noun": "big kid",
+		"id": "grade_schooler",
+		"name": "Reach Grade-School Size",
+		"body_name": "Regular Ol’ Grade-School Kid",
+		"noun": "grade-school kid",
+		"cost": 40.0,
+		"required_level": 2,
+		"visual_size": 1.055,
+		"effects": {"speed": 1.035, "quality": 0.012, "recovery": 1.012},
+		"description": "Speed ×1.035; Quality +0.012; Recovery ×1.012.",
+	},
+	{
+		"id": "preteen",
+		"name": "Become a Preteen",
+		"body_name": "Regular Ol’ Preteen",
+		"noun": "preteen",
 		"cost": 500.0,
 		"required_level": 5,
-		"visual_size": 1.21,
-		"effects": {"speed": 1.07, "quality": 0.025, "recovery": 1.035},
-		"description": "Speed ×1.07; Quality +0.025; Recovery ×1.035.",
+		"visual_size": 1.085,
+		"effects": {"speed": 1.035, "quality": 0.012, "recovery": 1.012},
+		"description": "Speed ×1.035; Quality +0.012; Recovery ×1.012.",
+	},
+	{
+		"id": "young_teen",
+		"name": "Enter the Awkward Years",
+		"body_name": "Regular Ol’ Young Teen",
+		"noun": "young teen",
+		"cost": 8000.0,
+		"required_level": 8,
+		"visual_size": 1.12,
+		"effects": {"speed": 1.035, "quality": 0.015, "recovery": 1.015},
+		"description": "Speed ×1.035; Quality +0.015; Recovery ×1.015.",
 	},
 	{
 		"id": "teenager",
 		"name": "Become a Gangly Teenager",
 		"body_name": "Gangly Teenager",
 		"noun": "teenager",
-		"cost": 100000.0,
+		"cost": 120000.0,
 		"required_level": 11,
-		"visual_size": 1.34,
-		"effects": {"speed": 1.07, "quality": 0.03, "recovery": 1.03},
-		"description": "Speed ×1.07; Quality +0.03; Recovery ×1.03.",
+		"visual_size": 1.155,
+		"effects": {"speed": 1.04, "quality": 0.015, "recovery": 1.015},
+		"description": "Speed ×1.04; Quality +0.015; Recovery ×1.015.",
+	},
+	{
+		"id": "older_teen",
+		"name": "Survive Late Adolescence",
+		"body_name": "Regular Ol’ Older Teen",
+		"noun": "older teen",
+		"cost": 1500000.0,
+		"required_level": 14,
+		"visual_size": 1.19,
+		"effects": {"speed": 1.04, "quality": 0.018, "recovery": 1.015},
+		"description": "Speed ×1.04; Quality +0.018; Recovery ×1.015.",
 	},
 	{
 		"id": "young_adult",
 		"name": "Become a Young Adult",
-		"body_name": "Young Adult",
+		"body_name": "Regular Ol’ Young Adult",
 		"noun": "young adult",
-		"cost": 25000000.0,
-		"required_level": 18,
-		"visual_size": 1.47,
-		"effects": {"speed": 1.06, "quality": 0.03, "recovery": 1.025},
-		"description": "Speed ×1.06; Quality +0.03; Recovery ×1.025.",
+		"cost": 15000000.0,
+		"required_level": 16,
+		"visual_size": 1.225,
+		"effects": {"speed": 1.04, "quality": 0.018, "recovery": 1.015},
+		"description": "Speed ×1.04; Quality +0.018; Recovery ×1.015.",
+	},
+	{
+		"id": "adult",
+		"name": "Finish Growing",
+		"body_name": "Regular Ol’ Adult",
+		"noun": "adult",
+		"cost": 150000000.0,
+		"required_level": 19,
+		"visual_size": 1.255,
+		"effects": {"speed": 1.035, "quality": 0.018, "recovery": 1.012},
+		"description": "Speed ×1.035; Quality +0.018; Recovery ×1.012.",
+	},
+	{
+		"id": "prime_adult",
+		"name": "Reach Athletic Prime",
+		"body_name": "Regular Ol’ Prime-Age Adult",
+		"noun": "prime-age adult",
+		"cost": 1500000000.0,
+		"required_level": 22,
+		"visual_size": 1.28,
+		"effects": {"speed": 1.035, "quality": 0.015, "recovery": 1.010},
+		"description": "Speed ×1.035; Quality +0.015; Recovery ×1.010.",
+	},
+	{
+		"id": "veteran_adult",
+		"name": "Acquire Veteran Dad Strength",
+		"body_name": "Regular Ol’ Veteran Adult",
+		"noun": "veteran adult",
+		"cost": 15000000000.0,
+		"required_level": 26,
+		"visual_size": 1.30,
+		"effects": {"speed": 1.03, "quality": 0.015, "recovery": 1.008},
+		"description": "Speed ×1.03; Quality +0.015; Recovery ×1.008.",
 	},
 	{
 		"id": "regular_guy",
-		"name": "Finish Growing Up",
+		"name": "Become a Fully Grown Regular Ol’ Guy",
 		"body_name": "Regular Ol’ Guy",
 		"noun": "guy",
-		"cost": 10000000000.0,
-		"required_level": 24,
-		"visual_size": 1.60,
-		"effects": {"speed": 1.05, "quality": 0.04, "recovery": 1.02},
-		"description": "Speed ×1.05; Quality +0.04; Recovery ×1.02.",
+		"cost": 150000000000.0,
+		"required_level": 29,
+		"visual_size": 1.32,
+		"effects": {"speed": 1.025, "quality": 0.012, "recovery": 1.006},
+		"description": "Speed ×1.025; Quality +0.012; Recovery ×1.006.",
 	},
+]
+
+# Optional physical development shares the BODY catalog with age but does not
+# force one linear build. Several pairs unlock together so players can emphasize
+# strength, conditioning, command, or dubious chemistry. These purchases reset
+# with time travel just like the body they modify.
+const BODY_MODIFIERS := [
+	{"id": "playground_conditioning", "name": "Playground Conditioning", "cost": 20.0, "required_level": 2, "adjective": "Sturdy", "effects": {"speed": 1.025, "quality_add": 0.008, "visual_size": 1.006}, "stats": ["speed", "quality"], "description": "Speed ×1.025; Quality +0.008."},
+	{"id": "cardio_basics", "name": "Cardio Basics", "cost": 80.0, "required_level": 2, "adjective": "Spry", "effects": {"recovery": 1.018, "lineup": 0.985}, "stats": ["recovery", "lineup"], "description": "Recovery ×1.018; Lineup time ×0.985."},
+	{"id": "pushup_phase", "name": "The Push-Up Phase", "cost": 1800.0, "required_level": 7, "adjective": "Buff", "effects": {"speed": 1.045, "payload": 1.025, "visual_size": 1.012}, "stats": ["speed", "payload"], "description": "Speed ×1.045; Payload ×1.025."},
+	{"id": "running_laps", "name": "Actually Run the Laps", "cost": 1800.0, "required_level": 7, "adjective": "Toned", "effects": {"recovery": 1.025, "hit_delay": 0.975}, "stats": ["recovery", "hit_delay"], "description": "Recovery ×1.025; Hit delay ×0.975."},
+	{"id": "creatine", "name": "Creatine and an Alarmingly Large Water Bottle", "cost": 90000.0, "required_level": 12, "adjective": "Creatine-Fueled", "effects": {"speed": 1.045, "payload": 1.04, "visual_size": 1.012}, "stats": ["speed", "payload"], "description": "Speed ×1.045; Payload ×1.04."},
+	{"id": "mobility_program", "name": "Mobility Program", "cost": 90000.0, "required_level": 12, "adjective": "Limber", "effects": {"quality_add": 0.025, "calling": 1.06, "drag": 0.98}, "stats": ["quality", "calling", "drag"], "description": "Quality +0.025; Calling ×1.06; air drag ×0.98."},
+	{"id": "suspicious_vitamins", "name": "Suspicious Vitamins", "cost": 9000000.0, "required_level": 18, "adjective": "Suspiciously Vital", "effects": {"speed": 1.07, "recovery": 1.025, "visual_size": 1.018}, "stats": ["speed", "recovery"], "description": "Speed ×1.07; Recovery ×1.025."},
+	{"id": "sports_nutrition", "name": "Professional Sports Nutrition", "cost": 9000000.0, "required_level": 18, "adjective": "Well-Fed", "effects": {"payload": 1.06, "xp": 1.025, "mastery": 1.025}, "stats": ["payload", "xp", "mastery"], "description": "Payload ×1.06; strikeout XP ×1.025; mastery ×1.025."},
+	{"id": "advanced_strength", "name": "Advanced Strength Program", "cost": 900000000.0, "required_level": 23, "adjective": "Very Buff", "effects": {"speed": 1.065, "payload": 1.045, "visual_size": 1.018}, "stats": ["speed", "payload"], "description": "Speed ×1.065; Payload ×1.045."},
+	{"id": "altitude_cardio", "name": "Altitude Cardio Camp", "cost": 900000000.0, "required_level": 23, "adjective": "Very Toned", "effects": {"recovery": 1.035, "hit_delay": 0.95, "lineup": 0.97}, "stats": ["recovery", "hit_delay", "lineup"], "description": "Recovery ×1.035; hit delay ×0.95; lineup time ×0.97."},
+	{"id": "steroids", "name": "Extremely Obvious Steroids", "cost": 90000000000.0, "required_level": 27, "required_speed_fps": 132.0, "adjective": "Roided-Out", "effects": {"speed": 1.10, "recovery": 1.025, "visual_size": 1.028}, "stats": ["speed", "recovery"], "description": "Speed ×1.10; Recovery ×1.025."},
+	{"id": "professional_rehab", "name": "Professional Rehab Staff", "cost": 90000000000.0, "required_level": 27, "adjective": "Rebuilt", "effects": {"quality_add": 0.04, "drag": 0.94, "mastery": 1.04}, "stats": ["quality", "drag", "mastery"], "description": "Quality +0.04; air drag ×0.94; mastery ×1.04."},
 ]
 
 const TRAINING := [
@@ -848,7 +958,7 @@ const TRAINING := [
 		"growth": 1.18,
 		"required_level": 0,
 		"stats": ["speed"],
-		"description": "Base speed +0.50 ft/s.",
+		"description": "Base speed +0.75 ft/s.",
 	},
 	{
 		"id": "command",
@@ -857,77 +967,124 @@ const TRAINING := [
 		"growth": 1.18,
 		"required_level": 1,
 		"stats": ["quality"],
-		"description": "Base quality +0.04.",
+		"description": "Base quality +0.018.",
 	},
 	{
 		"id": "field_hustle",
 		"name": "Field Hustle",
 		"base_cost": 15.0,
-		"growth": 2.10,
-		"max_level": 6,
+		"growth": 1.62,
 		"required_level": 2,
 		"stats": ["tap"],
-		"description": "Tap advance +0.17 percentage points.",
+		"description": "Remaining gap to 4% ×0.92.",
 	},
 	{
 		"id": "recovery",
 		"name": "Recovery Drills",
 		"base_cost": 25.0,
-		"growth": 1.45,
-		"max_level": 26,
+		"growth": 1.42,
 		"required_level": 3,
 		"stats": ["recovery"],
-		"description": "Base recovery +0.035/s.",
+		"description": "Remaining gap to 0.48/s ×0.90.",
 	},
 	{
 		"id": "offline_efficiency",
 		"name": "Scorebook Study",
 		"base_cost": 100.0,
-		"growth": 1.65,
-		"max_level": 24,
+		"growth": 1.55,
 		"required_level": 4,
 		"stats": ["offline"],
-		"description": "Offline XP +1 percentage point.",
+		"description": "Remaining gap to 75% ×0.94.",
 	},
 	{
 		"id": "distance_control",
 		"name": "Long-Toss Mechanics",
 		"base_cost": 120.0,
-		"growth": 1.72,
-		"max_level": 20,
+		"growth": 1.58,
 		"required_level": 5,
 		"stats": ["distance"],
-		"description": "Distance-threat factor −0.025.",
+		"description": "Remaining distance threat ×0.94.",
 	},
 	{
 		"id": "turnover",
 		"name": "Lineup Hustle",
 		"base_cost": 600.0,
-		"growth": 2.40,
-		"max_level": 10,
+		"growth": 1.82,
 		"required_level": 7,
 		"stats": ["lineup"],
-		"description": "Base lineup time −0.15s.",
+		"description": "Remaining gap to 1.25s ×0.90.",
 	},
 	{
 		"id": "hit_recovery",
 		"name": "Shake It Off",
 		"base_cost": 2400.0,
-		"growth": 2.25,
-		"max_level": 8,
+		"growth": 1.82,
 		"required_level": 9,
 		"stats": ["hit_delay"],
-		"description": "Hit-delay factor −0.05.",
+		"description": "Remaining hit-delay gap to ×0.35 ×0.90.",
 	},
 	{
 		"id": "pitch_calling",
 		"name": "Pitch Calling",
 		"base_cost": 9000.0,
-		"growth": 2.10,
-		"max_level": 12,
+		"growth": 1.72,
 		"required_level": 11,
 		"stats": ["calling"],
-		"description": "Best-option bias +0.50.",
+		"description": "Best-option bias +0.85 × ln(rank + 1).",
+	},
+	{
+		"id": "payload_training",
+		"name": "Core Transfer",
+		"base_cost": 25000.0,
+		"growth": 1.76,
+		"required_level": 12,
+		"stats": ["payload"],
+		"description": "Base payload +0.01×.",
+	},
+	{
+		"id": "mastery_training",
+		"name": "Scouting Notebook",
+		"base_cost": 50000.0,
+		"growth": 1.78,
+		"required_level": 13,
+		"stats": ["mastery"],
+		"description": "Base mastery gain +0.015×.",
+	},
+	{
+		"id": "drag_training",
+		"name": "Seam Conditioning",
+		"base_cost": 100000.0,
+		"growth": 1.80,
+		"required_level": 14,
+		"stats": ["drag"],
+		"description": "Air drag ×0.985.",
+	},
+	{
+		"id": "xp_training",
+		"name": "Contract Incentives",
+		"base_cost": 250000.0,
+		"growth": 1.84,
+		"required_level": 16,
+		"stats": ["xp"],
+		"description": "Base strikeout XP +0.01×.",
+	},
+	{
+		"id": "loot_training",
+		"name": "Locker-Room Networking",
+		"base_cost": 750000.0,
+		"growth": 1.88,
+		"required_level": 18,
+		"stats": ["loot"],
+		"description": "Remaining gap to 100% loot chance ×0.995.",
+	},
+	{
+		"id": "frustration_training",
+		"name": "Competitive Memory",
+		"base_cost": 2500000.0,
+		"growth": 1.92,
+		"required_level": 20,
+		"stats": ["frustration"],
+		"description": "Frustration quality per doubling +1%.",
 	},
 ]
 
@@ -1120,15 +1277,52 @@ const PITCHES := [
 		"description": "Quality +1.95 • Speed ×1.04–1.12.",
 	},
 	{
+		"id": "gazorpian_strudelball",
+		"name": "Gazorpian Strudelball",
+		"cost": 1500000000.0,
+		"required_level": 31,
+		"bonus": 5.80,
+		"speed_min": 0.18,
+		"speed_max": 0.32,
+		"illegal": true,
+		"color": Color("f7c6ff"),
+		"description": "Quality +5.80 • Speed ×0.18–0.32. Devastating break; breakfast-paced arrival.",
+	},
+	{
 		"id": "gravity_ball",
 		"name": "Gravity Ball",
-		"cost": 900000000.0,
+		"cost": 5000000000.0,
 		"required_level": 32,
 		"bonus": 2.50,
 		"speed_min": 0.82,
 		"speed_max": 1.06,
+		"illegal": true,
 		"color": Color("65f0ff"),
 		"description": "Quality +2.50 • Speed ×0.82–1.06.",
+	},
+	{
+		"id": "andromedan_knucklebomb",
+		"name": "Andromedan Knucklebomb",
+		"cost": 15000000000.0,
+		"required_level": 33,
+		"bonus": -1.50,
+		"speed_min": 2.50,
+		"speed_max": 3.80,
+		"illegal": true,
+		"color": Color("8ff7bd"),
+		"description": "Quality −1.50 • Speed ×2.50–3.80. It goes fast; nobody knows where.",
+	},
+	{
+		"id": "nebular_spitball",
+		"name": "Nebular Spitball",
+		"cost": 20000000000.0,
+		"required_level": 34,
+		"bonus": 4.40,
+		"speed_min": 0.55,
+		"speed_max": 0.80,
+		"illegal": true,
+		"color": Color("82d9b4"),
+		"description": "Quality +4.40 • Speed ×0.55–0.80. The nebula refuses to identify the substance.",
 	},
 	{
 		"id": "plasma_sinker",
@@ -1138,8 +1332,33 @@ const PITCHES := [
 		"bonus": 3.05,
 		"speed_min": 0.94,
 		"speed_max": 1.08,
+		"illegal": true,
 		"color": Color("ff8b55"),
 		"description": "Quality +3.05 • Speed ×0.94–1.08.",
+	},
+	{
+		"id": "bubonic_swerve",
+		"name": "Bubonic Swerve",
+		"cost": 1000000000000.0,
+		"required_level": 36,
+		"bonus": 8.50,
+		"speed_min": 0.12,
+		"speed_max": 0.25,
+		"illegal": true,
+		"color": Color("b8db57"),
+		"description": "Quality +8.50 • Speed ×0.12–0.25. Historically unhittable; medically inadvisable.",
+	},
+	{
+		"id": "quasar_riser",
+		"name": "Quasar Rising Fastball",
+		"cost": 3000000000000.0,
+		"required_level": 37,
+		"bonus": 1.00,
+		"speed_min": 4.00,
+		"speed_max": 8.00,
+		"illegal": true,
+		"color": Color("fff383"),
+		"description": "Quality +1.00 • Speed ×4.00–8.00. Accuracy was traded for a localized sunrise.",
 	},
 	{
 		"id": "quantum_fork",
@@ -1149,8 +1368,21 @@ const PITCHES := [
 		"bonus": 3.60,
 		"speed_min": 0.88,
 		"speed_max": 1.10,
+		"illegal": true,
 		"color": Color("ff6fca"),
 		"description": "Quality +3.60 • Speed ×0.88–1.10.",
+	},
+	{
+		"id": "false_vacuum_change",
+		"name": "False-Vacuum Changeup",
+		"cost": 50000000000000.0,
+		"required_level": 39,
+		"bonus": 12.00,
+		"speed_min": 0.05,
+		"speed_max": 0.12,
+		"illegal": true,
+		"color": Color("6e79ff"),
+		"description": "Quality +12.00 • Speed ×0.05–0.12. Perfect deception; unacceptable cosmological downside.",
 	},
 	{
 		"id": "wormhole_changeup",
@@ -1160,19 +1392,57 @@ const PITCHES := [
 		"bonus": 4.35,
 		"speed_min": 0.72,
 		"speed_max": 1.18,
+		"illegal": true,
 		"color": Color("9d7bff"),
 		"description": "Quality +4.35 • Speed ×0.72–1.18.",
 	},
 	{
+		"id": "pitch_first_death",
+		"name": "The Pitch of the First Death",
+		"cost": 40000000000000000.0,
+		"required_level": 41,
+		"bonus": 22.00,
+		"speed_min": 0.008,
+		"speed_max": 0.025,
+		"illegal": true,
+		"color": Color("d6c8ff"),
+		"description": "Quality +22.00 • Speed ×0.008–0.025. It has been arriving since before life began.",
+	},
+	{
+		"id": "eschaton_screwball",
+		"name": "Eschaton Screwball",
+		"cost": 800000000000000000.0,
+		"required_level": 42,
+		"bonus": -6.00,
+		"speed_min": 20.00,
+		"speed_max": 40.00,
+		"illegal": true,
+		"color": Color("ff725e"),
+		"description": "Quality −6.00 • Speed ×20.00–40.00. The pitch ends before the windup agrees it began.",
+	},
+	{
 		"id": "event_horizon",
-		"name": "Event-Horizon Ball",
+		"name": "Event-Horizon Slider",
 		"cost": 8000000000000000000.0,
 		"required_level": 43,
-		"bonus": 5.20,
-		"speed_min": 0.96,
-		"speed_max": 1.25,
+		"bonus": 15.00,
+		"speed_min": 0.03,
+		"speed_max": 0.16,
+		"illegal": true,
 		"color": Color("fff6a6"),
-		"description": "Quality +5.20 • Speed ×0.96–1.25.",
+		"description": "Quality +15.00 • Speed ×0.03–0.16. Nothing escapes, including the inning schedule.",
+	},
+	{
+		"id": "causal_paradox_eephus",
+		"name": "Causal-Paradox Eephus",
+		"cost": 90000000000000000000.0,
+		"required_level": 44,
+		"bonus": 40.00,
+		"speed_min": 0.001,
+		"speed_max": 0.006,
+		"illegal": true,
+		"color": Color("ffffff"),
+		"description": "Quality +40.00 • Speed ×0.001–0.006. The strike is called several eternities before release.",
 	},
 ]
 
@@ -1456,15 +1726,6 @@ const MILESTONES := [
 		"description": "Lineup time ×0.90.",
 	},
 	{
-		"id": "suspicious_vitamins",
-		"name": "Suspicious Vitamins",
-		"cost": 3000.0,
-		"required_level": 7,
-		"stats": ["speed"],
-		"effects": {"speed": 1.25},
-		"description": "Speed ×1.25.",
-	},
-	{
 		"id": "padded_backstop",
 		"name": "Emotionally Supportive Backstop",
 		"cost": 8000.0,
@@ -1593,16 +1854,6 @@ const MILESTONES := [
 		"stats": ["lineup"],
 		"effects": {"lineup": 0.80},
 		"description": "Lineup time ×0.80.",
-	},
-	{
-		"id": "steroids",
-		"name": "Extremely Obvious Steroids",
-		"cost": 80000000000.0,
-		"required_level": 26,
-		"required_speed_fps": 88.0,
-		"stats": ["speed", "recovery"],
-		"effects": {"speed": 1.45, "recovery": 1.08},
-		"description": "Speed ×1.45; Recovery ×1.08.",
 	},
 	{
 		"id": "rapsodo_cathedral",
@@ -2272,7 +2523,7 @@ const GENETIC_UPGRADES := [
 		"name": "Autonomic Coaching Lobe",
 		"base_cost": 3.0,
 		"growth": 1.60,
-		"max_level": 9,
+		"max_level": 15,
 		"description": "License automatic buying for 1 chosen Training stat per rank.",
 	},
 	{
@@ -2469,7 +2720,7 @@ static func opponents() -> Array[Dictionary]:
 		# Per-Strike mastery and adaptive matchup odds smooth out unlucky openings.
 		# A modest twelve-percent requirement increase keeps the broad campaign pace
 		# near the original strikeout-only curve without erasing that improvement.
-		var mastery_required := 28.0 * pow(1.34, index)
+		var mastery_required := 28.0 * pow(1.25, index)
 		result.append({
 			"id": "opponent_%02d" % (index + 1),
 			"name": OPPONENT_NAMES[index],
@@ -2655,6 +2906,12 @@ static func training_by_id(id: String) -> Dictionary:
 
 static func body_growth_by_id(id: String) -> Dictionary:
 	for item in BODY_GROWTH_STAGES:
+		if item.id == id:
+			return item
+	return {}
+
+static func body_modifier_by_id(id: String) -> Dictionary:
+	for item in BODY_MODIFIERS:
 		if item.id == id:
 			return item
 	return {}

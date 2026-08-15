@@ -1,4 +1,4 @@
-NO HITTER v0.13.2
+NO HITTER v0.15.0
 ALL-PLATFORMS RELEASE
 
 Choose the browser package or the native package matching the computer that
@@ -7,14 +7,14 @@ and the game does not install services or modify the registry.
 
 BROWSER
 
-"No Hitter v0.13.2 Browser.zip" is a static website. Upload its
+"No Hitter v0.15.0 Browser.zip" is a static website. Upload its
 contents unchanged to a static host with index.html at the web root, then share
 that URL. See WEB-README.txt in the browser package for local testing and save
 details. It cannot be run reliably by double-clicking index.html.
 
 MACOS — INTEL OR APPLE SILICON
 
-1. Open "No Hitter v0.13.2 macOS Universal.dmg".
+1. Open "No Hitter v0.15.0 macOS Universal.dmg".
 2. Drag No Hitter into Applications, or run it from the disk image.
 3. The build is ad-hoc signed but not Apple-notarized. On first launch,
    Control-click the app and choose Open. If macOS still blocks it, open
@@ -66,7 +66,7 @@ Browser autosaves are local to that browser and site; use EXPORT before clearing
 site data, changing browsers, or changing devices.
 
 Offline catch-up simulates up to seven days. Strikeout XP begins at 1% of the
-open-game award and can be trained to 25% with Scorebook Study. A return popup
+open-game award and asymptotically approaches 75% with Scorebook Study. A return popup
 shows the exact XP deposited and the multiplier that was used.
 
 CONTENTS

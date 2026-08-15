@@ -80,6 +80,7 @@ var milestone_buttons := {}
 var catalog_hide_purchased_toggles := {}
 var scale_buttons := {}
 var body_growth_buttons := {}
+var body_modifier_buttons := {}
 var genetic_buttons := {}
 var eldritch_buttons := {}
 var divine_buttons := {}
@@ -89,6 +90,7 @@ var automation_catalog_heading: Label
 var stat_labels := {}
 var stat_rows := {}
 var upgrade_tabs: TabContainer
+var pitch_tab: Control
 var rebirth_tab: Control
 var achievement_tab: Control
 var achievement_count_label: Label
@@ -127,6 +129,10 @@ var inventory_slot_buttons := {}
 var field_stat_labels := {}
 var opponent_loadout_dock: VBoxContainer
 var opponent_loadout_signature := ""
+var power_comparison_panel: PanelContainer
+var power_comparison_label: Label
+var power_comparison_bar: ProgressBar
+var power_comparison_signature := ""
 var locker_dialog: Window
 var locker_dialog_close_button: Button
 var locker_dialog_status_label: Label
@@ -1055,13 +1061,19 @@ func _apply_development_arguments() -> void:
 	game.training_levels = {
 		"velocity": 180 if preview == "alien" else 315,
 		"command": 385 if preview == "alien" else 730,
-		"field_hustle": BaseballGameState.FIELD_TAP_MAX_RANK,
+		"field_hustle": 10,
 		"recovery": 26,
 		"turnover": 10,
 		"hit_recovery": 8,
 		"pitch_calling": 12,
 		"distance_control": 20,
 		"offline_efficiency": 24,
+		"payload_training": 16,
+		"mastery_training": 16,
+		"drag_training": 16,
+		"xp_training": 16,
+		"loot_training": 16,
+		"frustration_training": 16,
 	}
 	for definition in Content.GENETIC_UPGRADES:
 		game.genetic_levels[definition.id] = mini(int(definition.max_level), 2) if preview == "alien" else int(definition.max_level)
@@ -1077,6 +1089,9 @@ func _apply_development_arguments() -> void:
 	for definition in Content.MILESTONES:
 		if int(definition.required_level) <= game.highest_unlocked:
 			game.purchased_milestones.append(str(definition.id))
+	for definition in Content.BODY_MODIFIERS:
+		if int(definition.required_level) <= game.highest_unlocked:
+			game.purchased_body_modifiers.append(str(definition.id))
 	game.xp = 1.0e40
 	_log_event("%s preview active; this session will not overwrite your save." % preview.capitalize())
 
@@ -2268,7 +2283,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 			78.0,
 			44.0 if mobile_layout else 36.0
 		)
-	for collection in [training_buttons, pitch_buttons, ball_upgrade_buttons, milestone_buttons, body_growth_buttons, genetic_buttons, eldritch_buttons, divine_buttons]:
+	for collection in [training_buttons, pitch_buttons, ball_upgrade_buttons, milestone_buttons, body_growth_buttons, body_modifier_buttons, genetic_buttons, eldritch_buttons, divine_buttons]:
 		for entry_value in collection.values():
 			var entry: Dictionary = entry_value
 			(entry.container as PanelContainer).custom_minimum_size.y = 88.0 if mobile_layout else 82.0
@@ -2345,6 +2360,11 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	opponent_loadout_dock.offset_left = -40.0 if mobile_layout else -46.0
 	opponent_loadout_dock.offset_top = 44.0 if mobile_layout else 54.0
 	opponent_loadout_dock.offset_bottom = 300.0 if mobile_layout else 354.0
+	power_comparison_panel.offset_left = -174.0 if mobile_layout else -204.0
+	power_comparison_panel.offset_top = 6.0 if mobile_layout else 10.0
+	power_comparison_panel.offset_right = -44.0 if mobile_layout else -50.0
+	power_comparison_panel.offset_bottom = 50.0 if mobile_layout else 58.0
+	power_comparison_label.add_theme_font_size_override("font_size", 8 if mobile_layout else 10)
 	locker_slot_grid.columns = 4 if mobile_layout else Content.LOOT_SLOTS.size()
 	_configure_menu_overlay_geometry()
 	root_margin.queue_sort()
@@ -2427,6 +2447,7 @@ func _build_play_area(parent: Control) -> void:
 	_build_field_stat_overlay(pitch_field)
 	_build_inventory_dock(pitch_field)
 	_build_opponent_loadout_dock(pitch_field)
+	_build_power_comparison(pitch_field)
 	_build_alien_help_button(pitch_field)
 
 	field_footer = HBoxContainer.new()
@@ -2596,6 +2617,12 @@ func _build_status_stat_list(parent: Control) -> void:
 		["distance", "DISTANCE"],
 		["tap", "FIELD TAP"],
 		["offline", "OFFLINE"],
+		["payload", "PAYLOAD"],
+		["mastery", "MASTERY"],
+		["drag", "DRAG"],
+		["xp", "XP"],
+		["loot", "LOOT"],
+		["frustration", "FRUST."],
 	]
 	for row_definition in rows:
 		var stat_id := str(row_definition[0])
@@ -2739,6 +2766,40 @@ func _build_opponent_loadout_dock(parent: Control) -> void:
 	opponent_loadout_dock.offset_bottom = 354.0
 	opponent_loadout_dock.add_theme_constant_override("separation", 3)
 	parent.add_child(opponent_loadout_dock)
+
+func _build_power_comparison(parent: Control) -> void:
+	power_comparison_panel = PanelContainer.new()
+	power_comparison_panel.name = "PowerComparison"
+	power_comparison_panel.z_index = 39
+	power_comparison_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	power_comparison_panel.mouse_default_cursor_shape = Control.CURSOR_HELP
+	power_comparison_panel.set_anchor(SIDE_LEFT, 1.0)
+	power_comparison_panel.set_anchor(SIDE_TOP, 0.0)
+	power_comparison_panel.set_anchor(SIDE_RIGHT, 1.0)
+	power_comparison_panel.set_anchor(SIDE_BOTTOM, 0.0)
+	power_comparison_panel.offset_left = -204.0
+	power_comparison_panel.offset_top = 10.0
+	power_comparison_panel.offset_right = -50.0
+	power_comparison_panel.offset_bottom = 58.0
+	power_comparison_panel.add_theme_stylebox_override("panel", _compact_panel_style(6.0, 4.0, 6))
+	parent.add_child(power_comparison_panel)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 2)
+	power_comparison_panel.add_child(stack)
+	power_comparison_label = Label.new()
+	power_comparison_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	power_comparison_label.add_theme_font_size_override("font_size", 10)
+	power_comparison_label.add_theme_color_override("font_color", COLOR_TEXT)
+	power_comparison_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(power_comparison_label)
+	power_comparison_bar = ProgressBar.new()
+	power_comparison_bar.min_value = 0.0
+	power_comparison_bar.max_value = 100.0
+	power_comparison_bar.show_percentage = false
+	power_comparison_bar.custom_minimum_size.y = 7.0
+	power_comparison_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(power_comparison_bar)
+	_enable_mobile_inspection(power_comparison_panel, "Power comparison")
 
 func _loot_square_style(color: Color, strength: float, locked := false, equipped := false) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -3022,9 +3083,12 @@ func _rebuild_locker_dialog() -> void:
 		game.get_equipment_bonus_summary(),
 		clone_note,
 	]
-	locker_dialog_status_label.tooltip_text = (
-		"Overflow Scrap equals item level × rarity value: Common ×1, Magic ×3, Rare ×8, Legendary ×20, Unique ×50. Scrap has no use yet."
-	)
+	var scrap_help := "Overflow Scrap is item level × rarity value. Human tiers use ×1 / ×3 / ×8 / ×20 / ×50."
+	if _has_genetic_reveal():
+		scrap_help += " Alien tiers use ×70 / ×100 / ×150 / ×230 / ×350."
+	if _has_eldritch_reveal():
+		scrap_help += " Eldritch tiers use ×500 / ×750 / ×1,100 / ×1,700 / ×2,500."
+	locker_dialog_status_label.tooltip_text = scrap_help + " Scrap has no use yet."
 	for child in locker_dialog_items.get_children():
 		locker_dialog_items.remove_child(child)
 		child.queue_free()
@@ -3363,7 +3427,8 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	var value_label := Label.new()
 	value_label.add_theme_font_size_override("font_size", 14)
 	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_enable_mobile_inspection(value_label, heading)
+	if id != "pitch":
+		_enable_mobile_inspection(value_label, heading)
 	stack.add_child(value_label)
 	var effect_label := Label.new()
 	effect_label.add_theme_font_size_override("font_size", 12)
@@ -3371,7 +3436,28 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	effect_label.custom_minimum_size.y = 30.0
 	stack.add_child(effect_label)
-	equipment_labels[id] = {"value": value_label, "effect": effect_label}
+	var entry := {"value": value_label, "effect": effect_label, "card": card}
+	if id == "pitch":
+		var inspect_button := Button.new()
+		inspect_button.name = "InspectPitchArsenal"
+		inspect_button.flat = true
+		inspect_button.text = ""
+		inspect_button.focus_mode = Control.FOCUS_NONE
+		inspect_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		inspect_button.tooltip_text = "Open the Pitch catalog to inspect every learned pitch and its automatic-use chance."
+		inspect_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inspect_button.pressed.connect(_open_pitch_arsenal)
+		card.add_child(inspect_button)
+		entry["inspect_button"] = inspect_button
+	equipment_labels[id] = entry
+
+func _open_pitch_arsenal() -> void:
+	if upgrade_tabs == null or pitch_tab == null:
+		return
+	upgrade_tabs.current_tab = pitch_tab.get_index()
+	_refresh_mobile_tab_navigation()
+	if mobile_layout:
+		_show_mobile_overlay(upgrade_panel, "UPGRADES  •  PITCH ARSENAL")
 
 func _build_upgrade_area(parent: Control) -> void:
 	upgrade_panel = PanelContainer.new()
@@ -3476,7 +3562,7 @@ func _build_mobile_upgrade_stats(parent: Control) -> void:
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	stack.add_child(heading)
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = 3
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 1)
@@ -3491,6 +3577,12 @@ func _build_mobile_upgrade_stats(parent: Control) -> void:
 		["distance", "DISTANCE"],
 		["tap", "FIELD TAP"],
 		["offline", "OFFLINE"],
+		["payload", "PAYLOAD"],
+		["mastery", "MASTERY"],
+		["drag", "DRAG"],
+		["xp", "XP"],
+		["loot", "LOOT"],
+		["frustration", "FRUST."],
 	]
 	for row_definition in rows:
 		var stat_id := str(row_definition[0])
@@ -3559,6 +3651,7 @@ func _build_training_tab(tabs: TabContainer) -> void:
 
 func _build_pitch_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "PITCH")
+	pitch_tab = content.get_parent().get_parent() as Control
 	_section_label(content, "AUTOMATIC ARSENAL")
 	var explainer := Label.new()
 	explainer.text = "Every learned pitch enters the automatic mix. Pitch Calling increasingly favors the better ones."
@@ -3660,7 +3753,7 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 		{"id": "catalog_pitch", "catalog_id": "pitch", "name": "Auto-learn Pitches"},
 		{"id": "catalog_ball", "catalog_id": "ball", "name": "Auto-install Balls"},
 		{"id": "catalog_facility", "catalog_id": "facility", "name": "Auto-buy Facilities"},
-		{"id": "catalog_growth", "catalog_id": "growth", "name": "Auto-buy Grow Up"},
+		{"id": "catalog_growth", "catalog_id": "growth", "name": "Auto-buy Body"},
 	]
 	for catalog_value in catalog_automation_definitions:
 		var catalog: Dictionary = catalog_value
@@ -3681,7 +3774,7 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 		automation_toggles[str(catalog.id)] = {"button": toggle, "definition": definition}
 
 func _build_rebirth_tab(tabs: TabContainer) -> void:
-	var content := _create_scroll_tab(tabs, "GROW UP")
+	var content := _create_scroll_tab(tabs, "BODY")
 	rebirth_tab = content.get_parent().get_parent() as Control
 	rebirth_story_label = Label.new()
 	rebirth_story_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -3708,11 +3801,18 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 		(entry.button as Button).pressed.connect(_buy_body_growth.bind(str(definition.id)))
 		human_growth_section.add_child(entry.container)
 		body_growth_buttons[definition.id] = entry
+	_section_label(human_growth_section, "II • PHYSICAL DEVELOPMENT & QUESTIONABLE CHEMISTRY")
+	for definition_value in Content.BODY_MODIFIERS:
+		var definition: Dictionary = definition_value
+		var entry := _upgrade_row(_definition_tooltip(definition))
+		(entry.button as Button).pressed.connect(_buy_body_modifier.bind(str(definition.id)))
+		human_growth_section.add_child(entry.container)
+		body_modifier_buttons[definition.id] = entry
 
 	genetic_section = VBoxContainer.new()
 	genetic_section.add_theme_constant_override("separation", 7)
 	content.add_child(genetic_section)
-	_section_label(genetic_section, "II • GENETIC REBIRTH — THE TIME MACHINE IS FOR OBSTETRICS")
+	_section_label(genetic_section, "III • GENETIC REBIRTH — THE TIME MACHINE IS FOR OBSTETRICS")
 	genetic_reset_button = _upgrade_button("Reset the current body for DNA based on all XP earned by that body.")
 	genetic_reset_button.pressed.connect(_request_genetic_rebirth)
 	genetic_section.add_child(genetic_reset_button)
@@ -3725,7 +3825,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	eldritch_section = VBoxContainer.new()
 	eldritch_section.add_theme_constant_override("separation", 7)
 	content.add_child(eldritch_section)
-	_section_label(eldritch_section, "III • ELDRITCH ASCENSION — DESTROY THIS REALITY RESPONSIBLY")
+	_section_label(eldritch_section, "IV • ELDRITCH ASCENSION — DESTROY THIS REALITY RESPONSIBLY")
 	eldritch_reset_button = _upgrade_button("Reset the body, DNA, and every genetic enhancement for Arcana based on total DNA earned in this reality.")
 	eldritch_reset_button.pressed.connect(_request_eldritch_ascension)
 	eldritch_section.add_child(eldritch_reset_button)
@@ -3738,7 +3838,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	divine_section = VBoxContainer.new()
 	divine_section.add_theme_constant_override("separation", 7)
 	content.add_child(divine_section)
-	_section_label(divine_section, "IV • GOD PRESTIGE — SAVE IT, THEN DO IT ALL AGAIN")
+	_section_label(divine_section, "V • GOD PRESTIGE — SAVE IT, THEN DO IT ALL AGAIN")
 	for definition in Content.DIVINE_BLESSINGS:
 		var entry := _upgrade_row(str(definition.description))
 		(entry.button as Button).pressed.connect(_request_divine_ascension.bind(str(definition.id)))
@@ -4034,11 +4134,17 @@ func _set_upgrade_row(
 	if str(container.get_meta("upgrade_row_signature", "")) == signature:
 		return
 	container.set_meta("upgrade_row_signature", signature)
+	# Affordability belongs to the action, not the discovery state. An unlocked
+	# card remains fully legible when the player is saving for it; only its price
+	# button fades. Explicit catalog locks apply their own muted treatment below.
+	container.self_modulate = Color.WHITE
+	label.add_theme_color_override("font_color", COLOR_TEXT)
 	label.text = text
 	label.tooltip_text = tooltip
 	container.tooltip_text = tooltip
 	button.text = action_text
 	button.disabled = disabled
+	button.self_modulate = Color(1.0, 1.0, 1.0, 0.58 if disabled else 1.0)
 	button.tooltip_text = tooltip
 
 func _set_upgrade_row_visible(entry: Dictionary, visible: bool) -> void:
@@ -4124,7 +4230,7 @@ func _build_alien_help_dialog() -> void:
 		+ "Then he lowers his sunglasses.\n\n"
 		+ "‘Come with me if you want to… be really good at baseball.’\n\n"
 		+ "He has a Time Machine and an alarming prenatal genetics waiver. Time Travel is now "
-		+ "permanently available in GROW UP whenever this body has earned enough XP."
+		+ "permanently available in BODY whenever this body has earned enough XP."
 	)
 	alien_help_dialog.get_ok_button().text = "GET IN THE PORTAL"
 	add_child(alien_help_dialog)
@@ -4332,6 +4438,9 @@ func _set_catalog_lock_text(entry: Dictionary, definition: Dictionary, requireme
 		unlock_text,
 		"LOCKED"
 	)
+	(entry.container as Control).self_modulate = Color(0.78, 0.82, 0.90, 0.72)
+	(entry.label as Label).add_theme_color_override("font_color", COLOR_MUTED)
+	(entry.button as Button).self_modulate = Color(1.0, 1.0, 1.0, 0.42)
 
 func _refresh_reveal_visibility() -> void:
 	var genetic_revealed := _has_genetic_reveal()
@@ -4389,7 +4498,7 @@ func _get_game_subtitle() -> String:
 		return "A baseball game about a genetically modified %s" % game.get_body_growth_noun()
 	if game.genetic_offer_unlocked or game.highest_unlocked >= Content.ALIEN_EXHIBITION_INDEX:
 		return "A baseball game about a %s who found aliens" % game.get_body_growth_noun()
-	if game.has_milestone("steroids"):
+	if game.has_body_modifier("steroids"):
 		return "A baseball game about a big boi"
 	return "A baseball game about a regular ol’ %s" % game.get_body_growth_noun()
 
@@ -4398,6 +4507,11 @@ func _refresh_guide_text(
 	eldritch_revealed: bool,
 	divine_revealed: bool
 ) -> void:
+	var rarity_help := "Human gear: Common → Magic → Rare → Legendary → Unique."
+	if genetic_revealed:
+		rarity_help += " Alien baseball adds five Alien tiers; old tiers remain possible."
+	if eldritch_revealed:
+		rarity_help += " Eldritch baseball adds five more Eldritch tiers."
 	var sections: Array[String] = [
 		(
 			"SCORING\n"
@@ -4418,12 +4532,14 @@ func _refresh_guide_text(
 		),
 		(
 			"GETTING STRONGER\n"
-			+ "• TRAIN is an incremental additive XP sink. PITCH, BALL, FACILITY, and GROW UP contain the larger, expensive one-time power jumps. Locked cards reveal only their requirement.\n"
+			+ "• TRAIN is an uncapped incremental XP sink. PITCH, BALL, FACILITY, and BODY contain the larger one-time power jumps. Locked cards reveal only their requirement.\n"
 			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in STATUS. Hover on desktop or tap on phone for definitions."
 		),
 		(
 			"GEAR & ACHIEVEMENTS\n"
-			+ "• Strikeouts can drop minor sidegrade gear. Power is a quick comparison; hover on desktop or hold on phone for every stat. Stars protect items from auto-scrap. Each slot keeps 10.\n"
+			+ "• Strikeouts sometimes copy one player-wearable item from the batter's visible loadout: same slot, same rarity. Inspect enemy gear to see what can drop. Extra mastery gently favors the better worn pieces.\n"
+			+ "• %s\n" % rarity_help
+			+ "• Power is a quick comparison; hover on desktop or hold on phone for details. Stars protect items; each slot keeps 10.\n"
 			+ "• All %d achievement slots are visible. Each completed achievement permanently adds 1%% XP; unrevealed secret entries stay anonymous."
 			% Content.ACHIEVEMENTS.size()
 		),
@@ -4740,6 +4856,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		_refresh_equipment()
 		_refresh_locker()
 	_refresh_opponent_loadout()
+	_refresh_power_comparison()
 	var weight: float = float(pitch_field.get_visual_weight())
 	visual_weight_label.text = (
 		"1:1 PROJECTILES  •  %s IN FLIGHT" % BaseballGameState.format_number(
@@ -4759,29 +4876,42 @@ func _refresh_interface(refresh_expensive := true) -> void:
 func _refresh_field_stats() -> void:
 	if not field_stat_labels.is_empty():
 		var in_flight := game.is_pitch_in_flight()
-		var pitch_id := game.pending_volley_pitch_id if in_flight else ""
+		var has_last_pitch: bool = in_flight or pitch_field.pitch_serial > 0
+		var pitch_id: String = (
+			game.pending_volley_pitch_id
+			if in_flight
+			else (pitch_field.last_pitch_id if has_last_pitch else "")
+		)
 		var pitch_definition := Content.pitch_by_id(pitch_id)
-		var release_speed := (
+		var release_speed: float = (
 			game.pending_volley_speed_fps
 			if in_flight
-			else game.get_representative_pitch_speed()
+			else (pitch_field.last_pitch_speed_fps if has_last_pitch else game.get_representative_pitch_speed())
 		)
-		var plate_speed := (
+		var plate_speed: float = (
 			game.pending_volley_plate_speed_fps
 			if in_flight
-			else game.get_representative_plate_speed()
+			else (pitch_field.last_pitch_plate_speed_fps if has_last_pitch else game.get_representative_plate_speed())
 		)
-		var drag_loss := clampf(1.0 - plate_speed / maxf(release_speed, 0.000001), 0.0, 1.0)
-		var distance_index := game.pending_volley_distance_index if in_flight else game.selected_distance_index
+		var drag_loss: float = (
+			clampf(1.0 - plate_speed / maxf(release_speed, 0.000001), 0.0, 1.0)
+			if in_flight
+			else (pitch_field.last_pitch_drag_loss_fraction if has_last_pitch else game.get_pitch_drag_loss_fraction())
+		)
+		var distance_index: int = (
+			game.pending_volley_distance_index
+			if in_flight
+			else (pitch_field.last_pitch_distance_index if has_last_pitch else game.selected_distance_index)
+		)
 		var distance: Dictionary = Content.DISTANCE_TIERS[clampi(distance_index, 0, Content.DISTANCE_TIERS.size() - 1)]
 		var quality := (
 			game.get_pitch_quality_for_pitch(pitch_id, release_speed)
-			if in_flight and not pitch_definition.is_empty()
+			if has_last_pitch and not pitch_definition.is_empty()
 			else game.get_pitch_quality()
 		)
 		_set_field_stat_text("pitch", (
 			str(pitch_definition.name)
-			if in_flight and not pitch_definition.is_empty()
+			if has_last_pitch and not pitch_definition.is_empty()
 			else "AUTOMATIC MIX"
 		))
 		_set_field_stat_text("release", BaseballGameState.format_speed(release_speed))
@@ -4791,7 +4921,9 @@ func _refresh_field_stats() -> void:
 			"NONE" if drag_loss <= 0.00005 else "−%.1f%%" % (drag_loss * 100.0)
 		)
 		_set_field_stat_text("travel", BaseballGameState.format_flight_time(
-			game.pending_volley_flight_duration if in_flight else game.get_resolved_flight_seconds()
+			game.pending_volley_flight_duration
+			if in_flight
+			else (pitch_field.last_pitch_visual_travel_time if has_last_pitch else game.get_resolved_flight_seconds())
 		))
 		_set_field_stat_text("quality", "%.3f" % quality)
 		_set_field_stat_text("distance", str(distance.label))
@@ -4827,6 +4959,17 @@ func _refresh_effective_stat_labels(labels: Dictionary, speed_fps: float) -> voi
 	labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
 	labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
 	labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
+	if labels.has("payload"):
+		labels.payload.text = "×%s" % BaseballGameState.format_number(game.get_pitch_potency(), 2)
+		labels.mastery.text = "×%s" % BaseballGameState.format_number(game.get_mastery_multiplier(), 2)
+		labels.drag.text = "−%.1f%%" % (game.get_pitch_drag_loss_fraction() * 100.0)
+		labels.xp.text = "×%s" % BaseballGameState.format_number(
+			game.get_body_growth_effect_multiplier("xp")
+			* (1.0 + float(game.training_levels.get("xp_training", 0)) * BaseballGameState.XP_TRAINING_PER_RANK),
+			2
+		)
+		labels.loot.text = "%.1f%%" % (game.get_loot_drop_chance() * 100.0)
+		labels.frustration.text = "+%.3f" % game.get_frustration_quality_bonus()
 
 func _format_compact_seconds(seconds: float) -> String:
 	if absf(seconds - round(seconds)) < 0.05:
@@ -5083,8 +5226,47 @@ func _refresh_opponent_loadout() -> void:
 			str(entry.get("name", "Unknown")),
 			float(entry.get("difficulty_bonus", 0.0)),
 		]
+		if not Content.loot_slot_by_id(entry_id).is_empty():
+			button.tooltip_text += "\nStrikeout drops can copy this slot and rarity."
 		_enable_mobile_inspection(button, "Enemy %s" % kind)
 		opponent_loadout_dock.add_child(button)
+
+func _refresh_power_comparison() -> void:
+	if power_comparison_panel == null:
+		return
+	var player_power := game.get_player_power_rating()
+	var opponent_power := game.get_opponent_power_rating()
+	var player_is_stronger := player_power >= opponent_power
+	var stronger := maxf(player_power, opponent_power)
+	var weaker := minf(player_power, opponent_power)
+	var ratio := clampf(weaker / maxf(stronger, 0.000001), 0.0, 1.0)
+	var signature := "%s:%s:%d" % [
+		BaseballGameState.format_number(player_power, 2),
+		BaseballGameState.format_number(opponent_power, 2),
+		int(player_is_stronger),
+	]
+	if signature == power_comparison_signature:
+		return
+	power_comparison_signature = signature
+	power_comparison_label.text = "POWER  YOU %s  •  THEM %s" % [
+		BaseballGameState.format_number(player_power, 1),
+		BaseballGameState.format_number(opponent_power, 1),
+	]
+	power_comparison_bar.value = ratio * 100.0
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = Color(COLOR_ACCENT if player_is_stronger else COLOR_BAD, 0.88)
+	fill_style.corner_radius_top_left = 3
+	fill_style.corner_radius_top_right = 3
+	fill_style.corner_radius_bottom_left = 3
+	fill_style.corner_radius_bottom_right = 3
+	power_comparison_bar.add_theme_stylebox_override("fill", fill_style)
+	var weaker_name := "BATTER" if player_is_stronger else "YOU"
+	var stronger_name := "YOU" if player_is_stronger else "BATTER"
+	power_comparison_panel.tooltip_text = (
+		"%s is at %.1f%% of %s Power. Power summarizes the real matchup stats; it is not a separate hidden stat."
+		% [weaker_name, ratio * 100.0, stronger_name]
+	)
+	power_comparison_label.tooltip_text = power_comparison_panel.tooltip_text
 
 func _refresh_purchase_buttons() -> void:
 	for catalog_id in catalog_hide_purchased_toggles:
@@ -5118,9 +5300,13 @@ func _refresh_purchase_buttons() -> void:
 				entry,
 				"%s  •  RANK %d  •  %s XP\n%s" % [definition.name, rank, BaseballGameState.format_cost(cost), definition.description],
 				game.xp < cost,
-				_definition_tooltip(definition)
+				_definition_tooltip(definition),
+				"%s XP" % BaseballGameState.format_cost(cost)
 			)
 
+	var pitch_selection_probabilities := {}
+	for selection_entry in game.get_pitch_selection_entries():
+		pitch_selection_probabilities[str(selection_entry.id)] = float(selection_entry.probability)
 	for definition in Content.PITCHES:
 		var id := str(definition.id)
 		var entry: Dictionary = pitch_buttons[id]
@@ -5132,7 +5318,14 @@ func _refresh_purchase_buttons() -> void:
 		if not _upgrade_row_is_visible(entry):
 			continue
 		if id in game.unlocked_pitches:
-			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, _definition_tooltip(definition, ["quality", "speed"]), "LEARNED")
+			var use_chance := float(pitch_selection_probabilities.get(id, 0.0)) * 100.0
+			_set_upgrade_row(
+				entry,
+				"%s  •  %.1f%% USE\n%s" % [definition.name, use_chance, definition.description],
+				true,
+				_definition_tooltip(definition, ["quality", "speed"]) + "\n\nAutomatic use chance: %.2f%%." % use_chance,
+				"LEARNED"
+			)
 		elif game.highest_unlocked < int(definition.required_level):
 			_set_catalog_lock(entry, definition)
 		else:
@@ -5140,7 +5333,8 @@ func _refresh_purchase_buttons() -> void:
 				entry,
 				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_pitch_cost(id)), definition.description],
 				not game.can_buy_pitch(id),
-				_definition_tooltip(definition, ["quality", "speed"])
+				_definition_tooltip(definition, ["quality", "speed"]),
+				"%s XP" % BaseballGameState.format_cost(game.get_pitch_cost(id))
 			)
 
 	for definition in Content.BALL_UPGRADES:
@@ -5162,7 +5356,8 @@ func _refresh_purchase_buttons() -> void:
 				entry,
 				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_ball_upgrade_cost(id)), definition.description],
 				not game.can_buy_ball_upgrade(id),
-				_definition_tooltip(definition, ["payload"])
+				_definition_tooltip(definition, ["payload"]),
+				"%s XP" % BaseballGameState.format_cost(game.get_ball_upgrade_cost(id))
 			)
 
 	for definition in Content.MILESTONES:
@@ -5184,7 +5379,8 @@ func _refresh_purchase_buttons() -> void:
 				entry,
 				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_milestone_cost(id)), definition.description],
 				not game.can_buy_milestone(id),
-				_definition_tooltip(definition)
+				_definition_tooltip(definition),
+				"%s XP" % BaseballGameState.format_cost(game.get_milestone_cost(id))
 			)
 
 	for definition in Content.SCALE_UPGRADES:
@@ -5344,8 +5540,35 @@ func _refresh_rebirth_buttons() -> void:
 				entry,
 				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(growth_cost), definition.description],
 				not game.can_buy_body_growth(id),
-				tooltip
+				tooltip,
+				"%s XP" % BaseballGameState.format_cost(growth_cost)
 			)
+	for definition_value in Content.BODY_MODIFIERS:
+		var definition: Dictionary = definition_value
+		var id := str(definition.id)
+		var entry: Dictionary = body_modifier_buttons[id]
+		var tooltip := _definition_tooltip(definition)
+		if game.has_body_modifier(id):
+			_set_upgrade_row(
+				entry,
+				"%s\n%s" % [definition.name, definition.description],
+				true,
+				tooltip,
+				"APPLIED"
+			)
+		else:
+			var requirements := game.get_body_modifier_unmet_requirements(definition)
+			if not requirements.is_empty():
+				_set_catalog_lock_text(entry, definition, requirements)
+			else:
+				var modifier_cost := game.get_body_modifier_cost(id)
+				_set_upgrade_row(
+					entry,
+					"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(modifier_cost), definition.description],
+					not game.can_buy_body_modifier(id),
+					tooltip,
+					"%s XP" % BaseballGameState.format_cost(modifier_cost)
+				)
 	if _has_divine_reveal():
 		ascension_currency_label.text = (
 			"DNA %s  •  Arcana %s  •  Body XP %s  •  Reality DNA %s  •  Universes saved %d"
@@ -5393,7 +5616,7 @@ func _refresh_rebirth_buttons() -> void:
 		elif rank >= int(definition.max_level):
 			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description], true, str(definition.description), "MAXED")
 		else:
-			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d DNA\n%s" % [definition.name, rank, game.get_genetic_cost(id), definition.description], not game.can_buy_genetic(id), str(definition.description))
+			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d DNA\n%s" % [definition.name, rank, game.get_genetic_cost(id), definition.description], not game.can_buy_genetic(id), str(definition.description), "%d DNA" % game.get_genetic_cost(id))
 
 	var potential_arcana := game.get_potential_arcana()
 	if not game.eldritch_offer_unlocked:
@@ -5418,7 +5641,7 @@ func _refresh_rebirth_buttons() -> void:
 		elif rank >= int(definition.max_level):
 			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description], true, str(definition.description), "MAXED")
 		else:
-			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d ARCANA\n%s" % [definition.name, rank, game.get_eldritch_cost(id), definition.description], not game.can_buy_eldritch(id), str(definition.description))
+			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d ARCANA\n%s" % [definition.name, rank, game.get_eldritch_cost(id), definition.description], not game.can_buy_eldritch(id), str(definition.description), "%d ARCANA" % game.get_eldritch_cost(id))
 
 	for definition in Content.DIVINE_BLESSINGS:
 		var id := str(definition.id)
@@ -5682,6 +5905,11 @@ func _buy_body_growth(id: String) -> void:
 		game.save_game()
 	_refresh_interface()
 
+func _buy_body_modifier(id: String) -> void:
+	if game.buy_body_modifier(id) and not development_session and not game.save_writes_locked:
+		game.save_game()
+	_refresh_interface()
+
 func _show_body_limit_dialog() -> void:
 	var stage := game.get_velocity_stage_name()
 	if game.eldritch_ascensions > 0:
@@ -5695,10 +5923,17 @@ func _show_body_limit_dialog() -> void:
 			+ "farther. If only pitching could stop obeying ordinary distance and time…"
 		)
 	else:
-		body_limit_dialog.dialog_text = (
-			"This is the limit of an ordinary human pitching body: 211.6 mph. Velocity Training cannot "
-			+ "push it farther. If only there were some way to change what the body itself can handle…"
-		)
+		var current_human_limit_mph := game.get_velocity_cap_fps() * 0.681818
+		if current_human_limit_mph < BaseballGameState.HUMAN_SPEED_CAP_MPH - 0.01:
+			body_limit_dialog.dialog_text = (
+				"This is the current limit of your human development: %s mph. Stronger competition and a more developed body will make room for more Speed Training."
+				% BaseballGameState.format_number(current_human_limit_mph, 1)
+			)
+		else:
+			body_limit_dialog.dialog_text = (
+				"This is the limit of an exceptionally implausible human pitching body: %s mph. Velocity Training cannot push it farther. If only there were some way to change what the body itself can handle…"
+				% BaseballGameState.format_number(BaseballGameState.HUMAN_SPEED_CAP_MPH, 0)
+			)
 	if last_body_limit_popup_stage != stage:
 		last_body_limit_popup_stage = stage
 	body_limit_dialog.popup_centered(Vector2i(560, 190))

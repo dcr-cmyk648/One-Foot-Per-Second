@@ -130,10 +130,12 @@ var volley_in_flight := false
 var volley_release_time := 0.0
 var volley_flight_duration := 0.0
 var volley_plate_position := Vector2.ZERO
+var last_pitch_id := "dead_fish"
 var last_pitch_name := "DEAD-FISH LOB"
 var last_pitch_speed_fps := 1.0
 var last_pitch_plate_speed_fps := 1.0
 var last_pitch_drag_loss_fraction := 0.0
+var last_pitch_distance_index := 0
 var pitch_call_age := 99.0
 var last_pitch_visual_travel_time := 3.0
 var cached_star_lines := PackedVector2Array()
@@ -209,10 +211,12 @@ func reset_visual_state() -> void:
 	impact_strength = 0.0
 	strike_icon_flash = 0.0
 	removed_strike_icon = -1
+	last_pitch_id = "dead_fish"
 	last_pitch_name = "DEAD-FISH LOB"
 	last_pitch_speed_fps = 1.0
 	last_pitch_plate_speed_fps = 1.0
 	last_pitch_drag_loss_fraction = 0.0
+	last_pitch_distance_index = 0
 	pitch_call_age = 99.0
 	last_pitch_visual_travel_time = 3.0
 	queue_redraw()
@@ -529,9 +533,12 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 	}
 	if game.is_pitch_in_flight():
 		var pending_pitch := Content.pitch_by_id(game.pending_volley_pitch_id)
+		last_pitch_id = game.pending_volley_pitch_id
 		last_pitch_name = str(pending_pitch.get("name", "PITCH")).to_upper()
 		last_pitch_speed_fps = game.pending_volley_speed_fps
 		last_pitch_plate_speed_fps = game.pending_volley_plate_speed_fps
+		last_pitch_distance_index = game.pending_volley_distance_index
+		last_pitch_visual_travel_time = game.pending_volley_flight_duration
 		last_pitch_drag_loss_fraction = clampf(
 			1.0 - last_pitch_plate_speed_fps / maxf(last_pitch_speed_fps, 0.000001),
 			0.0,
@@ -880,6 +887,7 @@ func _notify_phase_events(pitch_events: Array, elapsed_seconds: float) -> int:
 				var pitch_id := str(event.get("pitch_id", "dead_fish"))
 				var pitch_definition := Content.pitch_by_id(pitch_id)
 				var exact_travel := maxf(float(event.get("flight_seconds", travel_time)), 0.001)
+				last_pitch_id = pitch_id
 				last_pitch_name = str(event.get("pitch_name", pitch_definition.get("name", "PITCH"))).to_upper()
 				last_pitch_speed_fps = maxf(float(event.get("pitch_speed_fps", snapshot.get("representative_pitch_speed", 1.0))), 0.000001)
 				last_pitch_plate_speed_fps = maxf(float(event.get("plate_speed_fps", last_pitch_speed_fps)), 0.000001)
@@ -888,6 +896,7 @@ func _notify_phase_events(pitch_events: Array, elapsed_seconds: float) -> int:
 					0.0,
 					1.0
 				)
+				last_pitch_distance_index = int(event.get("distance_index", snapshot.get("distance_index", 0)))
 				pitch_call_age = 0.0
 				volley_plate_position = _get_plate_position_unlocked()
 				volley_in_flight = true
@@ -1154,6 +1163,9 @@ func show_loot_popup(heading: String, detail: String, color: Color) -> void:
 		"duration": LOOT_POPUP_DURATION,
 	})
 	queue_redraw()
+
+func get_loot_popup_anchor() -> Vector2:
+	return _get_batter_position()
 
 func _reset_batter_for_opponent(opponent_index: int, preserve_released_ball := false) -> void:
 	configured_opponent_index = opponent_index
@@ -1469,7 +1481,7 @@ func _get_plate_position() -> Vector2:
 	return _get_plate_position_unlocked()
 
 func _get_plate_position_unlocked() -> Vector2:
-	var distance_progress := _get_distance_progress()
+	var distance_progress := _get_lane_distance_progress()
 	if portrait_layout:
 		var close_plate_y := size.y * 0.43
 		var far_plate_y := maxf(size.y * 0.23, 112.0)
@@ -1480,7 +1492,7 @@ func _get_plate_position_unlocked() -> Vector2:
 func _get_mound_position(distance_feet: float) -> Vector2:
 	var plate := _get_plate_position()
 	var minimum_separation := 132.0
-	var normalized := _get_distance_progress(distance_feet)
+	var normalized := _get_lane_distance_progress(distance_feet)
 	if portrait_layout:
 		var maximum_separation := maxf(size.y - plate.y - 76.0, minimum_separation)
 		var separation := lerpf(minimum_separation, maximum_separation, normalized)
@@ -1498,15 +1510,47 @@ func _get_distance_progress(distance_feet: float = -1.0) -> float:
 	var compressed := log(1.0 + distance_decades * 2.8) / log(1.0 + maximum_decades * 2.8)
 	return clampf(compressed, 0.0, 1.0)
 
+func _get_human_perspective_progress(distance_feet: float = -1.0) -> float:
+	if distance_feet < 0.0:
+		distance_feet = float(snapshot.distance_feet)
+	return clampf(
+		log(maxf(distance_feet / 3.0, 1.0)) / log(60.5 / 3.0),
+		0.0,
+		1.0
+	)
+
+func _get_posthuman_perspective_progress(distance_feet: float = -1.0) -> float:
+	if distance_feet < 0.0:
+		distance_feet = float(snapshot.distance_feet)
+	if distance_feet <= 60.5:
+		return 0.0
+	var maximum := float(Content.DISTANCE_TIERS.back().feet)
+	return clampf(
+		log(distance_feet / 60.5) / log(maximum / 60.5),
+		0.0,
+		1.0
+	)
+
+func _get_lane_distance_progress(distance_feet: float = -1.0) -> float:
+	if distance_feet < 0.0:
+		distance_feet = float(snapshot.distance_feet)
+	if distance_feet <= 60.5:
+		return _get_human_perspective_progress(distance_feet) * 0.62
+	return 0.62 + _get_posthuman_perspective_progress(distance_feet) * 0.38
+
 func _get_camera_scale() -> float:
-	return lerpf(3.60, 0.55, pow(_get_distance_progress(), 0.68))
+	var distance := float(snapshot.distance_feet)
+	if distance <= 60.5:
+		return lerpf(3.10, 0.92, pow(_get_human_perspective_progress(distance), 0.76))
+	return lerpf(0.92, 0.48, pow(_get_posthuman_perspective_progress(distance), 0.62))
 
 func _get_character_camera_scale() -> float:
-	# Bodies need a smoother perspective curve than the exaggerated environment.
-	# The previous 2.25 ceiling stayed perfectly flat from 3 through roughly 20
-	# feet, making a big kid at 12 feet look several feet wide. This curve keeps the
-	# funny three-foot close-up but visibly shrinks every longer human matchup.
-	return lerpf(1.90, 0.55, pow(_get_distance_progress(), 0.85))
+	# Human perspective gets its own real-distance curve. Normalizing 12 feet
+	# against a galaxy had made everyone almost as large as at the three-foot gag.
+	var distance := float(snapshot.distance_feet)
+	if distance <= 60.5:
+		return lerpf(1.82, 0.82, pow(_get_human_perspective_progress(distance), 0.82))
+	return lerpf(0.82, 0.46, pow(_get_posthuman_perspective_progress(distance), 0.66))
 
 func _get_ball_visual_scale() -> float:
 	return clampf(_get_camera_scale() * 0.75, 1.0, 2.80)
@@ -1982,7 +2026,9 @@ func _draw_loot_popups() -> void:
 		var fade := 1.0 - smoothstep(0.70, 1.0, progress)
 		var rise := progress * 28.0
 		var color: Color = popup.color
-		var baseline := get_pitcher_position() + Vector2(-width * 0.5, -58.0 - rise)
+		# Loot came from the batter's visible wardrobe, so its cue belongs to the
+		# batter. Following the batter during the exit also makes the source legible.
+		var baseline := get_loot_popup_anchor() + Vector2(-width * 0.5, -74.0 - rise)
 		draw_string(
 			font,
 			baseline + Vector2(2.0, 2.0),
@@ -2200,9 +2246,22 @@ func _draw_batter(origin: Vector2) -> void:
 
 func _get_batter_intrinsic_size() -> float:
 	var opponent_index := int(snapshot.opponent_index)
-	var era := int(opponent_index / 5)
-	var within_era := opponent_index % 5
-	var era_sizes := [0.72, 0.84, 0.96, 1.08, 1.18, 1.30, 1.58, 2.55, 4.20]
-	var intrinsic_size: float = float(era_sizes[clampi(era, 0, era_sizes.size() - 1)]) + float(within_era) * 0.04
-	var variant_seed := maxi(batter_generation, 0) * 7 + opponent_index * 11
+	var human_sizes := [
+		0.72, 0.75, 0.78, 0.82, 0.86,
+		0.90, 0.92, 0.94, 0.96, 0.98,
+		1.00, 1.03, 1.06, 1.09, 1.12,
+		1.14, 1.17, 1.20, 1.22, 1.24,
+		1.26, 1.28, 1.30, 1.32, 1.34,
+		1.35, 1.37, 1.39, 1.42, 1.45,
+	]
+	var posthuman_sizes := [
+		1.62, 1.70, 1.82, 1.94, 2.08,
+		2.25, 2.45, 2.72, 3.10, 3.55,
+		3.85, 4.20, 4.65, 5.20, 5.80,
+	]
+	var intrinsic_size := (
+		float(human_sizes[clampi(opponent_index, 0, human_sizes.size() - 1)])
+		if opponent_index <= Content.HUMAN_FINAL_INDEX
+		else float(posthuman_sizes[clampi(opponent_index - Content.ALIEN_EXHIBITION_INDEX, 0, posthuman_sizes.size() - 1)])
+	)
 	return intrinsic_size * float(snapshot.get("batter_body_scale", 1.0))

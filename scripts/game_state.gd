@@ -11,7 +11,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 21
+const SAVE_VERSION := 22
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -19,7 +19,16 @@ const MAX_NUMBER := 1.0e280
 const MAX_OFFLINE_SECONDS := 7.0 * 24.0 * 60.0 * 60.0
 const EXHIBITION_SECONDS := 60.0
 const FASTEST_RECORDED_PITCH_MPH := 105.8
-const HUMAN_SPEED_CAP_FPS := FASTEST_RECORDED_PITCH_MPH * 2.0 / 0.681818
+const HUMAN_SPEED_CAP_MPH := 115.0
+const HUMAN_SPEED_CAP_FPS := HUMAN_SPEED_CAP_MPH / 0.681818
+# A mortal can train ahead, but cannot throw like an MLB closer while still in
+# preschool. These are soft body-development ceilings keyed to the farthest
+# human level reached; equipment remains the intentionally small exception.
+const HUMAN_VELOCITY_CAP_MPH_BY_LEVEL := [
+	15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0,
+	65.0, 70.0, 75.0, 80.0, 85.0, 88.0, 91.0, 94.0, 97.0, 100.0,
+	101.0, 102.0, 103.0, 104.0, 105.0, 107.0, 109.0, 111.0, 113.0, 115.0,
+]
 const SPEED_OF_SOUND_FPS := 1125.33
 const ALIEN_SPEED_CAP_FPS := SPEED_OF_SOUND_FPS * 12.0
 const SPEED_OF_LIGHT_FPS := 983571056.0
@@ -30,28 +39,30 @@ const BASE_VELOCITY_FPS := 1.0
 # Speed is the inexpensive backbone of ordinary progression. Its built-in
 # logarithmic quality contribution is strongest while the arm is slow, then
 # naturally gives way to Command as velocity becomes respectable.
-const VELOCITY_PER_RANK_FPS := 0.50
-const QUALITY_PER_RANK := 0.04
+const VELOCITY_PER_RANK_FPS := 0.75
+const QUALITY_PER_RANK := 0.018
 const BASE_RECOVERY_RATE := 0.25
-const RECOVERY_PER_RANK := 0.035
-const RECOVERY_MAX_RANK := 26
-const LINEUP_SECONDS_PER_RANK := 0.15
-const LINEUP_MIN_SECONDS := 1.50
-const LINEUP_MAX_RANK := 10
-const HIT_DELAY_FACTOR_PER_RANK := 0.05
-const HIT_DELAY_MIN_FACTOR := 0.60
-const HIT_RECOVERY_MAX_RANK := 8
-const CALLING_BIAS_PER_RANK := 0.50
-const DISTANCE_FACTOR_PER_RANK := 0.025
-const DISTANCE_MIN_FACTOR := 0.50
+const RECOVERY_TRAINING_LIMIT := 0.48
+const RECOVERY_REMAINING_PER_RANK := 0.90
+# Training, age, ordinary BODY work, and facilities all land below this mortal
+# wind-up ceiling before the small optional equipment sidegrade is applied.
+# A complete mundane build therefore still takes at least 1.39 seconds to reset.
+const HUMAN_BODY_RECOVERY_LIMIT := 0.72
+const LINEUP_MIN_SECONDS := 1.25
+const LINEUP_REMAINING_PER_RANK := 0.90
+const HIT_DELAY_MIN_FACTOR := 0.35
+const HIT_DELAY_REMAINING_PER_RANK := 0.90
+const CALLING_LOG_BONUS := 0.85
+const DISTANCE_MIN_FACTOR := 0.40
+const DISTANCE_REMAINING_PER_RANK := 0.94
 const BASE_OFFLINE_XP_EFFICIENCY := 0.01
-const OFFLINE_XP_EFFICIENCY_PER_RANK := 0.01
-const OFFLINE_XP_MAX_RANK := 24
+const OFFLINE_XP_EFFICIENCY_LIMIT := 0.75
+const OFFLINE_REMAINING_PER_RANK := 0.94
 # Active input is deliberately modest: the displayed opening 1.7% and each
 # Field Hustle increment are exactly one third of their original values.
 const BASE_FIELD_TAP_FRACTION := 1.0 / 60.0
-const FIELD_TAP_FRACTION_PER_RANK := 1.0 / 600.0
-const FIELD_TAP_MAX_RANK := 6
+const FIELD_TAP_FRACTION_LIMIT := 0.04
+const FIELD_TAP_REMAINING_PER_RANK := 0.92
 const FIELD_TAP_PHASE_CAP := 0.50
 # Every completed plate appearance has a believable lineup-change baseline.
 # Contact adds the displayed delay on top; a walk uses the Single bonus.
@@ -63,11 +74,16 @@ const MAX_BATTER_DOWNTIME_SECONDS := BASE_BATTER_TURNOVER_SECONDS + OUTCOME_TURN
 # balls. The idle game's larger numbers come from payload potency and rewards.
 const MAX_PHYSICAL_PITCH_RATE := 20000.0
 const LOOT_DROP_CHANCE := 0.12
+const LOOT_REMAINING_PER_RANK := 0.995
 const LOOT_PITY_ROLLS := 10
 const LOOT_ROLL_INTERVAL_SECONDS := 5.0
 const LOOT_ITEMS_PER_SLOT := 10
 const LOOT_EXACT_ROLL_LIMIT := 120
-const LOOT_SCRAP_RARITY_MULTIPLIERS := [1.0, 3.0, 8.0, 20.0, 50.0]
+const LOOT_SCRAP_RARITY_MULTIPLIERS := [
+	1.0, 3.0, 8.0, 20.0, 50.0,
+	70.0, 100.0, 150.0, 230.0, 350.0,
+	500.0, 750.0, 1100.0, 1700.0, 2500.0,
+]
 const OVERMASTERY_XP_PER_DOUBLING := 0.0125
 const OVERMASTERY_LOOT_LUCK_PER_DOUBLING := 0.05
 const MASTERY_REQUIREMENT_FACTOR_PER_RANK := 0.85
@@ -81,6 +97,11 @@ const MASTERY_MATCHUP_QUALITY_PER_DOUBLING := 0.12
 # grant the first +0.08 quality step; every later step takes twice as many.
 const FRUSTRATION_REFERENCE_POINTS := 4.0
 const FRUSTRATION_QUALITY_PER_DOUBLING := 0.08
+const PAYLOAD_TRAINING_PER_RANK := 0.01
+const MASTERY_TRAINING_PER_RANK := 0.015
+const DRAG_TRAINING_FACTOR_PER_RANK := 0.985
+const XP_TRAINING_PER_RANK := 0.01
+const FRUSTRATION_TRAINING_PER_RANK := 0.01
 const FRUSTRATION_OUTCOME_POINTS := [12.0, 8.0, 5.0, 3.0, 1.0, 0.10, 0.20, 0.0]
 # Save v16 stored seconds on the old time-based curve. Keeping its reference
 # interval here lets migration preserve the exact earned quality bonus.
@@ -104,6 +125,12 @@ const AUTO_TRAINING_STAT_IDS := [
 	"turnover",
 	"hit_recovery",
 	"pitch_calling",
+	"payload_training",
+	"mastery_training",
+	"drag_training",
+	"xp_training",
+	"loot_training",
+	"frustration_training",
 ]
 const AUTO_CATALOG_IDS := ["pitch", "ball", "facility", "growth"]
 
@@ -156,6 +183,12 @@ var training_levels := {
 	"pitch_calling": 0,
 	"distance_control": 0,
 	"offline_efficiency": 0,
+	"payload_training": 0,
+	"mastery_training": 0,
+	"drag_training": 0,
+	"xp_training": 0,
+	"loot_training": 0,
+	"frustration_training": 0,
 }
 var scale_levels := {}
 var genetic_levels := {
@@ -194,6 +227,7 @@ var divine_blessings: Array[String] = []
 var unlocked_pitches: Array[String] = ["dead_fish"]
 var purchased_ball_upgrades: Array[String] = []
 var purchased_milestones: Array[String] = []
+var purchased_body_modifiers: Array[String] = []
 var unlocked_achievements: Array[String] = []
 var achievement_revision := 0
 var catalog_hide_purchased := {
@@ -283,6 +317,12 @@ var auto_training_stats := {
 	"turnover": false,
 	"hit_recovery": false,
 	"pitch_calling": false,
+	"payload_training": false,
+	"mastery_training": false,
+	"drag_training": false,
+	"xp_training": false,
+	"loot_training": false,
+	"frustration_training": false,
 }
 var auto_catalog_settings := {
 	"pitch": false,
@@ -327,17 +367,39 @@ func _opponent_variant_seed(opponent_index: int, generation: int) -> int:
 	return 911382323 + opponent_index * 972663749 + generation * 1013904223
 
 func _sample_opponent_rarity(local_rng: RandomNumberGenerator, opponent_index: int) -> int:
-	var progress := float(clampi(opponent_index, 0, opponents.size() - 1)) / float(maxi(opponents.size() - 1, 1))
-	var score := local_rng.randf() + progress * 0.78
-	if score >= 1.52:
+	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
+	if bounded <= 0:
+		return 0
+	# Every league adds a five-rarity family. Older families remain in the
+	# sample, so an alien can still turn up in a perfectly ordinary Rare cap.
+	# League champions are authored showcases: every item they wear is the top
+	# tier currently available.
+	if bounded == Content.HUMAN_FINAL_INDEX:
 		return 4
-	if score >= 1.22:
-		return 3
-	if score >= 0.90:
-		return 2
-	if score >= 0.54:
-		return 1
-	return 0
+	if bounded == Content.ALIEN_FINAL_INDEX:
+		return 9
+	if bounded == Content.FINAL_BOSS_INDEX:
+		return 14
+	var center := 0.0
+	var deviation := 0.55
+	var maximum := 4
+	if bounded <= Content.HUMAN_FINAL_INDEX:
+		center = 4.0 * float(bounded) / float(Content.HUMAN_FINAL_INDEX)
+	elif bounded <= Content.ALIEN_FINAL_INDEX:
+		var alien_progress := float(bounded - Content.ALIEN_EXHIBITION_INDEX) / float(
+			maxi(Content.ALIEN_FINAL_INDEX - Content.ALIEN_EXHIBITION_INDEX, 1)
+		)
+		center = lerpf(5.0, 9.0, alien_progress)
+		deviation = 1.65
+		maximum = 9
+	else:
+		var eldritch_progress := float(bounded - Content.ELDRITCH_EXHIBITION_INDEX) / float(
+			maxi(Content.FINAL_BOSS_INDEX - Content.ELDRITCH_EXHIBITION_INDEX, 1)
+		)
+		center = lerpf(9.2, 14.0, eldritch_progress)
+		deviation = 2.45
+		maximum = 14
+	return clampi(int(round(local_rng.randfn(center, deviation))), 0, maximum)
 
 func _generate_opponent_variant(opponent_index: int, generation: int) -> Dictionary:
 	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
@@ -370,9 +432,10 @@ func _generate_opponent_variant(opponent_index: int, generation: int) -> Diction
 		"difficulty_bonus": bat_bonus,
 	})
 
-	# Additional equipment arrives gradually: none for the very first classes,
-	# all six mundane slots by MLB, and a Relic only in post-human baseball.
-	var extra_count := clampi(int(floor(float(bounded + 1) / 5.0)), 0, 6)
+	# Little Timmy owns the tutorial cap, and later batters gradually fill every
+	# mundane slot. By professional baseball the whole visible loadout can be a
+	# real drop source; Relics join only after human baseball.
+	var extra_count := clampi(1 + int(floor(float(bounded) / 4.0)), 1, 6)
 	for slot_index in extra_count:
 		var definition: Dictionary = Content.LOOT_SLOTS[slot_index]
 		var rarity_index := _sample_opponent_rarity(local_rng, bounded)
@@ -419,6 +482,51 @@ func get_current_batter_variant() -> Dictionary:
 	if current_batter_variant.is_empty():
 		_refresh_batter_variant()
 	return current_batter_variant
+
+func _get_opponent_variant_for_loot(opponent_index: int) -> Dictionary:
+	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
+	if (
+		bounded == current_opponent
+		and int(get_current_batter_variant().get("opponent_index", -1)) == bounded
+	):
+		return get_current_batter_variant()
+	return _generate_opponent_variant(bounded, 0)
+
+func get_opponent_drop_sources(opponent_index: int = current_opponent) -> Array[Dictionary]:
+	# A parcel is a copy of one visible, player-wearable item on this batter.
+	# Body and bat affect threat but are intentionally not player equipment slots.
+	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
+	var result: Array[Dictionary] = []
+	var variant := _get_opponent_variant_for_loot(bounded)
+	for entry_value in variant.get("loadout", []):
+		var entry: Dictionary = entry_value
+		var slot_id := str(entry.get("id", ""))
+		var slot := Content.loot_slot_by_id(slot_id)
+		if slot.is_empty() or bounded < int(slot.get("required_level", 0)):
+			continue
+		result.append(entry.duplicate(true))
+	return result
+
+func _opponent_drop_source_weight(entry: Dictionary, opponent_index: int) -> float:
+	# Excess mastery cannot create a rarity the batter is not wearing. It only
+	# makes the better visible pieces a little likelier to be the selected drop.
+	var rarity_index := clampi(int(entry.get("rarity", 0)), 0, Content.LOOT_RARITIES.size() - 1)
+	return 1.0 + get_opponent_loot_luck(opponent_index) * float(rarity_index)
+
+func _sample_opponent_drop_source(opponent_index: int) -> Dictionary:
+	var sources := get_opponent_drop_sources(opponent_index)
+	if sources.is_empty():
+		return {}
+	var total_weight := 0.0
+	for entry in sources:
+		total_weight += _opponent_drop_source_weight(entry, opponent_index)
+	var roll := rng.randf() * maxf(total_weight, 0.000001)
+	var cumulative := 0.0
+	for entry in sources:
+		cumulative += _opponent_drop_source_weight(entry, opponent_index)
+		if roll <= cumulative:
+			return entry
+	return sources.back()
 
 func get_current_batter_name() -> String:
 	return str(get_current_batter_variant().name)
@@ -588,7 +696,7 @@ func get_speed_gate_status_text(opponent_index: int = current_opponent) -> Strin
 		return ""
 	match opponent_index:
 		Content.HUMAN_FINAL_INDEX:
-			return "VELOCITY TRIAL • Reach the human limit: 211.6 mph."
+			return "VELOCITY TRIAL • Reach the human limit: %s mph." % format_number(HUMAN_SPEED_CAP_MPH, 0)
 		Content.ALIEN_FINAL_INDEX:
 			return "INTERSTELLAR LICENSE • Reach Mach 3."
 		Content.FINAL_BOSS_INDEX:
@@ -614,13 +722,13 @@ func _advance_story_encounters(seconds: float, alien_witnessed: bool) -> void:
 func get_story_status_text() -> String:
 	if is_alien_exhibition_blocked():
 		if genetic_offer_unlocked:
-			return "TIME TRAVEL READY • Open GROW UP when you are ready to be born again."
+			return "TIME TRAVEL READY • Open BODY when you are ready to be born again."
 		if is_alien_help_available():
 			return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%"
 		return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100% • OBSERVE %ds" % int(ceil(EXHIBITION_SECONDS - alien_exhibition_seconds))
 	if is_eldritch_exhibition_blocked():
 		if eldritch_offer_unlocked:
-			return "ELDRITCH OFFER READY • Open GROW UP and abandon this reality."
+			return "ELDRITCH OFFER READY • Open BODY and abandon this reality."
 		return "IMPOSSIBLE EXHIBITION • 100% GRAND SLAMS • Revelation in %ds" % int(ceil(EXHIBITION_SECONDS - eldritch_exhibition_seconds))
 	return ""
 
@@ -667,6 +775,12 @@ func reset_fresh() -> void:
 		"pitch_calling": 0,
 		"distance_control": 0,
 		"offline_efficiency": 0,
+		"payload_training": 0,
+		"mastery_training": 0,
+		"drag_training": 0,
+		"xp_training": 0,
+		"loot_training": 0,
+		"frustration_training": 0,
 	}
 	scale_levels = {}
 	_reset_genetic_levels()
@@ -675,6 +789,7 @@ func reset_fresh() -> void:
 	unlocked_pitches = ["dead_fish"]
 	purchased_ball_upgrades.clear()
 	purchased_milestones.clear()
+	purchased_body_modifiers.clear()
 	unlocked_achievements.clear()
 	achievement_revision += 1
 	catalog_hide_purchased = {
@@ -745,12 +860,10 @@ func _start_new_foreground_timer_phase() -> void:
 	field_tap_advanced_seconds = 0.0
 
 func get_field_tap_fraction() -> float:
-	var rank := clampi(
-		int(training_levels.get("field_hustle", 0)),
-		0,
-		FIELD_TAP_MAX_RANK
-	)
-	return BASE_FIELD_TAP_FRACTION + float(rank) * FIELD_TAP_FRACTION_PER_RANK
+	var rank := maxi(int(training_levels.get("field_hustle", 0)), 0)
+	return FIELD_TAP_FRACTION_LIMIT - (
+		FIELD_TAP_FRACTION_LIMIT - BASE_FIELD_TAP_FRACTION
+	) * pow(FIELD_TAP_REMAINING_PER_RANK, float(rank))
 
 func get_field_tap_phase_cap() -> float:
 	return FIELD_TAP_PHASE_CAP
@@ -895,6 +1008,8 @@ func _run_automation(elapsed: float) -> void:
 					purchased = buy_milestone(str(candidate.id))
 				"growth":
 					purchased = buy_body_growth(str(candidate.id))
+				"body_modifier":
+					purchased = buy_body_modifier(str(candidate.id))
 			if not purchased:
 				break
 			catalog_purchases += 1
@@ -976,6 +1091,13 @@ func _get_auto_catalog_candidate() -> Dictionary:
 			if can_buy_body_growth(id) and cost < cheapest_cost:
 				cheapest_cost = cost
 				result = {"kind": "growth", "id": id, "cost": cost}
+		for definition_value in Content.BODY_MODIFIERS:
+			var definition: Dictionary = definition_value
+			var id := str(definition.id)
+			var cost := get_body_modifier_cost(id)
+			if can_buy_body_modifier(id) and cost < cheapest_cost:
+				cheapest_cost = cost
+				result = {"kind": "body_modifier", "id": id, "cost": cost}
 	return result
 
 func simulate_offline(seconds: float) -> Dictionary:
@@ -1462,7 +1584,7 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 		MAX_NUMBER,
 		lifetime_saved_hits + float(summary.get("saved_hits", 0.0))
 	)
-	_resolve_strikeout_loot(strikeouts, float(summary.elapsed_seconds), summary)
+	_resolve_strikeout_loot(strikeouts, float(summary.elapsed_seconds), summary, reward_opponent)
 	opponent_mastery[reward_opponent] = minf(
 		MAX_NUMBER,
 		opponent_mastery[reward_opponent] + mastery_gained
@@ -1474,7 +1596,12 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 	if should_emit and (pitch_count > 0.0 or released_count > 0.0):
 		batch_resolved.emit(summary)
 
-func _resolve_strikeout_loot(strikeouts: float, elapsed_seconds: float, summary: Dictionary) -> void:
+func _resolve_strikeout_loot(
+	strikeouts: float,
+	elapsed_seconds: float,
+	summary: Dictionary,
+	opponent_index: int = current_opponent
+) -> void:
 	if not loot_drops_enabled:
 		return
 	var elapsed := maxf(elapsed_seconds, 0.0)
@@ -1505,8 +1632,9 @@ func _resolve_strikeout_loot(strikeouts: float, elapsed_seconds: float, summary:
 	current_body_loot_found = minf(MAX_NUMBER, current_body_loot_found + float(successes))
 	summary.loot_found = int(summary.get("loot_found", 0)) + successes
 
-	if first_career_drop:
-		var first_item := _generate_loot_item(current_opponent, 0, 0)
+	var reward_opponent := clampi(opponent_index, 0, opponents.size() - 1)
+	if first_career_drop and reward_opponent == 0:
+		var first_item := _generate_loot_item(reward_opponent, 0, 0)
 		first_item.name = "Little Timmy's Oversized Cap"
 		_store_generated_loot(first_item, summary)
 		successes -= 1
@@ -1514,9 +1642,9 @@ func _resolve_strikeout_loot(strikeouts: float, elapsed_seconds: float, summary:
 		return
 	if successes <= LOOT_EXACT_ROLL_LIMIT:
 		for _drop in successes:
-			_store_generated_loot(_generate_loot_item(current_opponent), summary)
+			_store_generated_loot(_generate_loot_item(reward_opponent), summary)
 	else:
-		_generate_bulk_loot(successes, current_opponent, summary)
+		_generate_bulk_loot(successes, reward_opponent, summary)
 
 func _roll_loot_success_count(opportunities: int, guarantee_first: bool) -> int:
 	var remaining := maxi(opportunities, 0)
@@ -1526,9 +1654,10 @@ func _roll_loot_success_count(opportunities: int, guarantee_first: bool) -> int:
 		remaining -= 1
 		loot_dry_streak = 0
 	if remaining <= LOOT_EXACT_ROLL_LIMIT:
+		var drop_chance := get_loot_drop_chance()
 		for _roll in remaining:
 			var guaranteed := loot_dry_streak >= LOOT_PITY_ROLLS - 1
-			if guaranteed or rng.randf() < LOOT_DROP_CHANCE:
+			if guaranteed or rng.randf() < drop_chance:
 				successes += 1
 				loot_dry_streak = 0
 			else:
@@ -1538,8 +1667,9 @@ func _roll_loot_success_count(opportunities: int, guarantee_first: bool) -> int:
 	# Truncated geometric expectation for a 12% roll with a guarantee on roll 10.
 	# Bulk offline simulation samples around that exact long-run cadence instead
 	# of looping once for every eligible eldritch strikeout.
-	var miss_chance := 1.0 - LOOT_DROP_CHANCE
-	var expected_cycle := (1.0 - pow(miss_chance, LOOT_PITY_ROLLS)) / LOOT_DROP_CHANCE
+	var drop_chance := get_loot_drop_chance()
+	var miss_chance := 1.0 - drop_chance
+	var expected_cycle := (1.0 - pow(miss_chance, LOOT_PITY_ROLLS)) / drop_chance
 	var mean_successes := float(remaining) / expected_cycle
 	var deviation := sqrt(maxf(mean_successes * 0.45, 1.0))
 	var bulk_successes := clampi(int(round(rng.randfn(mean_successes, deviation))), 0, remaining)
@@ -1547,57 +1677,50 @@ func _roll_loot_success_count(opportunities: int, guarantee_first: bool) -> int:
 	loot_dry_streak = rng.randi_range(0, LOOT_PITY_ROLLS - 1)
 	return successes
 
+func get_loot_drop_chance() -> float:
+	var rank := maxi(int(training_levels.get("loot_training", 0)), 0)
+	return 1.0 - (1.0 - LOOT_DROP_CHANCE) * pow(LOOT_REMAINING_PER_RANK, float(rank))
+
 func _generate_bulk_loot(successes: int, opponent_index: int, summary: Dictionary) -> void:
 	var generated := 0
 	var prefiltered_scrap := 0.0
-	var available_slots := _available_loot_slot_indices(opponent_index)
-	var slot_count := available_slots.size()
-	if slot_count <= 0:
+	var sources := get_opponent_drop_sources(opponent_index)
+	if sources.is_empty():
 		return
-	var rarity_probabilities := get_loot_rarity_probabilities(opponent_index)
-	for available_index in slot_count:
-		var slot_index: int = available_slots[available_index]
-		var drops_for_slot := successes / slot_count
-		if available_index < successes % slot_count:
-			drops_for_slot += 1
-		if drops_for_slot <= 0:
+	var total_weight := 0.0
+	for source in sources:
+		total_weight += _opponent_drop_source_weight(source, opponent_index)
+	var cumulative_exact := 0.0
+	var cumulative_assigned := 0
+	for source_index in sources.size():
+		var source: Dictionary = sources[source_index]
+		var source_weight := _opponent_drop_source_weight(source, opponent_index)
+		cumulative_exact += float(successes) * source_weight / maxf(total_weight, 0.000001)
+		var target_assigned := (
+			successes
+			if source_index == sources.size() - 1
+			else int(floor(cumulative_exact))
+		)
+		var drops_for_source := maxi(target_assigned - cumulative_assigned, 0)
+		cumulative_assigned = target_assigned
+		if drops_for_source <= 0:
 			continue
-		var rarity_counts: Array[int] = []
-		var assigned := 0
-		for rarity_index in Content.LOOT_RARITIES.size():
-			var count := int(floor(float(drops_for_slot) * float(rarity_probabilities[rarity_index])))
-			assigned += count
-			rarity_counts.append(maxi(count, 0))
-		# Rounding residue belongs to Common rather than inflating Unique odds.
-		rarity_counts[0] += maxi(drops_for_slot - assigned, 0)
-
-		# Generate only the ten strongest tier candidates per slot. Everything
-		# omitted is necessarily lower-level/equal-level and lower-tier than a
-		# retained candidate, so it is the same loot the 10-item cap would remove.
-		var slot_generation_budget := mini(drops_for_slot, LOOT_ITEMS_PER_SLOT)
-		var generated_counts: Array[int] = []
-		generated_counts.resize(Content.LOOT_RARITIES.size())
-		generated_counts.fill(0)
-		for rarity_index in range(Content.LOOT_RARITIES.size() - 1, -1, -1):
-			var count_to_generate := mini(rarity_counts[rarity_index], slot_generation_budget)
-			if rarity_counts[rarity_index] > 0:
-				lifetime_max_loot_rarity = maxi(lifetime_max_loot_rarity, rarity_index)
-			for _candidate in count_to_generate:
-				_store_generated_loot(
-					_generate_loot_item(opponent_index, slot_index, rarity_index),
-					summary
-				)
-			generated += count_to_generate
-			generated_counts[rarity_index] = count_to_generate
-			slot_generation_budget -= count_to_generate
-			if slot_generation_budget <= 0:
-				break
-		for rarity_index in Content.LOOT_RARITIES.size():
-			var discarded_for_rarity := rarity_counts[rarity_index] - generated_counts[rarity_index]
-			prefiltered_scrap += float(discarded_for_rarity) * get_loot_scrap_value_for_level(
-				opponent_index + 1,
-				rarity_index
+		var slot_id := str(source.get("id", ""))
+		var slot_index := _loot_slot_index_by_id(slot_id)
+		var rarity_index := clampi(int(source.get("rarity", 0)), 0, Content.LOOT_RARITIES.size() - 1)
+		var count_to_generate := mini(drops_for_source, LOOT_ITEMS_PER_SLOT)
+		lifetime_max_loot_rarity = maxi(lifetime_max_loot_rarity, rarity_index)
+		for _candidate in count_to_generate:
+			_store_generated_loot(
+				_generate_loot_item(opponent_index, slot_index, rarity_index),
+				summary
 			)
+		generated += count_to_generate
+		var discarded_for_source := drops_for_source - count_to_generate
+		prefiltered_scrap += float(discarded_for_source) * get_loot_scrap_value_for_level(
+			opponent_index + 1,
+			rarity_index
+		)
 	var prefiltered := maxi(successes - generated, 0)
 	if prefiltered > 0:
 		summary.loot_discarded = int(summary.get("loot_discarded", 0)) + prefiltered
@@ -1618,17 +1741,38 @@ func _sample_loot_rarity(opponent_index: int = current_opponent) -> int:
 			return index
 	return Content.LOOT_RARITIES.size() - 1
 
+func _loot_slot_index_by_id(slot_id: String) -> int:
+	for index in Content.LOOT_SLOTS.size():
+		if str(Content.LOOT_SLOTS[index].id) == slot_id:
+			return index
+	return 0
+
 func _generate_loot_item(opponent_index: int, forced_slot := -1, forced_rarity := -1) -> Dictionary:
 	var available_slots := _available_loot_slot_indices(opponent_index)
 	if available_slots.is_empty():
 		available_slots.append(0)
+	var drop_source := {}
+	if forced_slot < 0 or forced_rarity < 0:
+		drop_source = _sample_opponent_drop_source(opponent_index)
 	var slot_index: int
 	var bounded_forced_slot := clampi(forced_slot, 0, Content.LOOT_SLOTS.size() - 1)
 	if forced_slot >= 0 and bounded_forced_slot in available_slots:
 		slot_index = bounded_forced_slot
+	elif not drop_source.is_empty():
+		slot_index = _loot_slot_index_by_id(str(drop_source.get("id", "hat")))
 	else:
 		slot_index = available_slots[rng.randi_range(0, available_slots.size() - 1)]
-	var rarity_index := clampi(forced_rarity, 0, Content.LOOT_RARITIES.size() - 1) if forced_rarity >= 0 else _sample_loot_rarity(opponent_index)
+	var rarity_index := (
+		clampi(forced_rarity, 0, Content.LOOT_RARITIES.size() - 1)
+		if forced_rarity >= 0
+		else clampi(int(drop_source.get("rarity", 0)), 0, Content.LOOT_RARITIES.size() - 1)
+	)
+	if drop_source.is_empty():
+		var forced_slot_id := str(Content.LOOT_SLOTS[slot_index].id)
+		for source in get_opponent_drop_sources(opponent_index):
+			if str(source.get("id", "")) == forced_slot_id and int(source.get("rarity", -1)) == rarity_index:
+				drop_source = source
+				break
 	var slot: Dictionary = Content.LOOT_SLOTS[slot_index]
 	var rarity: Dictionary = Content.LOOT_RARITIES[rarity_index]
 	var item_level := clampi(opponent_index + 1, 1, opponents.size())
@@ -1670,10 +1814,15 @@ func _generate_loot_item(opponent_index: int, forced_slot := -1, forced_rarity :
 		next_loot_id += 1
 		item_id = "L%09d" % next_loot_id
 	next_loot_id += 1
+	var family_rank := int(rarity.get("family_rank", rarity_index))
 	var hue := fmod(float(slot_index) / float(Content.LOOT_SLOTS.size()) + float(rarity_index) * 0.055 + rng.randf_range(-0.025, 0.025), 1.0)
 	if hue < 0.0:
 		hue += 1.0
-	var visual_color := Color.from_hsv(hue, 0.40 + rarity_index * 0.10, 0.82 + rarity_index * 0.035)
+	var visual_color := Color.from_hsv(
+		hue,
+		clampf(0.40 + float(family_rank) * 0.10, 0.0, 0.92),
+		clampf(0.82 + float(family_rank) * 0.035, 0.0, 1.0)
+	)
 	var item := {
 		"id": item_id,
 		"slot": str(slot.id),
@@ -1684,6 +1833,7 @@ func _generate_loot_item(opponent_index: int, forced_slot := -1, forced_rarity :
 		"roll_quality": total_roll / float(maxi(selected_stats.size(), 1)),
 		"color": visual_color.to_html(false),
 		"favorite": false,
+		"source_name": str(drop_source.get("name", "")),
 	}
 	item.name = _make_loot_name(item, slot, rarity, selected_stats)
 	return item
@@ -1707,16 +1857,17 @@ func _make_loot_name(item: Dictionary, slot: Dictionary, rarity: Dictionary, sel
 	var base_names: Array = slot.base_names
 	var base_name := str(base_names[era_index])
 	var rarity_index := int(item.rarity)
-	if rarity_index <= 0:
+	var family_rank := int(rarity.get("family_rank", rarity_index))
+	if rarity_index == 0:
 		return base_name
 	var prefixes: Array = Content.LOOT_PREFIXES[rarity_index]
 	var prefix := str(prefixes[rng.randi_range(0, prefixes.size() - 1)])
 	var suffix_stat: String = selected_stats.back()
 	var suffix_options: Array = Content.LOOT_SUFFIXES[suffix_stat]
 	var suffix := str(suffix_options[rng.randi_range(0, suffix_options.size() - 1)])
-	if rarity_index == 1:
+	if family_rank <= 1:
 		return "%s %s" % [prefix, base_name]
-	if rarity_index == Content.LOOT_RARITIES.size() - 1:
+	if family_rank >= 4:
 		return "The %s %s of %s" % [prefix, base_name, suffix]
 	return "%s %s of %s" % [prefix, base_name, suffix]
 
@@ -2112,8 +2263,10 @@ func get_pitch_selection_entries() -> Array[Dictionary]:
 	return entries
 
 func get_pitch_calling_bias() -> float:
-	var rank := clampi(int(training_levels.get("pitch_calling", 0)), 0, 12)
-	return 1.0 + float(rank) * CALLING_BIAS_PER_RANK
+	var rank := maxi(int(training_levels.get("pitch_calling", 0)), 0)
+	return (
+		1.0 + log(1.0 + float(rank)) * CALLING_LOG_BONUS
+	) * get_body_growth_effect_multiplier("calling")
 
 func _sample_pitch_id() -> String:
 	var entries := get_pitch_selection_entries()
@@ -2193,6 +2346,23 @@ func get_outcome_probabilities_for_pitch(
 	result.append(contact_probability * 0.10)
 	result.append(contact_probability * 0.15)
 	result.append(maxf(1.0 - cumulative[4], 0.0))
+	# Ordinary human mechanics should never become a secretly solved matchup from
+	# raw repeatable stats alone. Adaptation can keep lifting this ceiling, but a
+	# fresh human opponent always retains a visible chance to foul, take a Ball,
+	# or make weak contact. Post-human baseball deliberately removes this guard.
+	if opponent_index <= Content.HUMAN_FINAL_INDEX:
+		var adaptation := maxf(
+			get_opponent_mastery_quality_bonus(opponent_index)
+			+ get_frustration_quality_bonus(),
+			0.0
+		)
+		var strike_cap := 0.64 + 0.30 * (1.0 - exp(-adaptation / 1.25))
+		var excess := maxf(float(result[Content.STRIKE_INDEX]) - strike_cap, 0.0)
+		if excess > 0.0:
+			result[Content.STRIKE_INDEX] = strike_cap
+			result[Content.FOUL_INDEX] = float(result[Content.FOUL_INDEX]) + excess * 0.45
+			result[Content.BALL_INDEX] = float(result[Content.BALL_INDEX]) + excess * 0.35
+			result[4] = float(result[4]) + excess * 0.20
 	return result
 
 func get_outcome_probabilities(opponent_index: int = current_opponent) -> Array[float]:
@@ -2286,7 +2456,11 @@ func _apply_frustration_summary(summary: Dictionary) -> void:
 
 func get_frustration_quality_bonus() -> float:
 	var intervals := maxf(frustration_points, 0.0) / FRUSTRATION_REFERENCE_POINTS
-	return FRUSTRATION_QUALITY_PER_DOUBLING * log(1.0 + intervals) / log(2.0)
+	var training_multiplier := 1.0 + (
+		float(maxi(int(training_levels.get("frustration_training", 0)), 0))
+		* FRUSTRATION_TRAINING_PER_RANK
+	)
+	return FRUSTRATION_QUALITY_PER_DOUBLING * training_multiplier * log(1.0 + intervals) / log(2.0)
 
 func get_frustration_meter_ratio() -> float:
 	# A monotonic visual meter for an uncapped logarithmic bonus: it fills half
@@ -2343,25 +2517,25 @@ func get_outcome_turnover_bonus(outcome: int) -> float:
 	return bonus / get_time_multiplier()
 
 func get_trained_lineup_seconds() -> float:
-	var rank := clampi(int(training_levels.get("turnover", 0)), 0, LINEUP_MAX_RANK)
-	return maxf(
-		BASE_BATTER_TURNOVER_SECONDS - float(rank) * LINEUP_SECONDS_PER_RANK,
-		LINEUP_MIN_SECONDS
-	)
+	var rank := maxi(int(training_levels.get("turnover", 0)), 0)
+	return LINEUP_MIN_SECONDS + (
+		BASE_BATTER_TURNOVER_SECONDS - LINEUP_MIN_SECONDS
+	) * pow(LINEUP_REMAINING_PER_RANK, float(rank))
 
 func get_base_batter_turnover_seconds() -> float:
 	return (
 		get_trained_lineup_seconds()
 		* get_milestone_effect_multiplier("lineup")
+		* get_body_growth_effect_multiplier("lineup")
 		/ get_time_multiplier()
 	)
 
 func get_hit_delay_factor() -> float:
-	var rank := clampi(int(training_levels.get("hit_recovery", 0)), 0, HIT_RECOVERY_MAX_RANK)
+	var rank := maxi(int(training_levels.get("hit_recovery", 0)), 0)
 	return (
-		maxf(1.0 - float(rank) * HIT_DELAY_FACTOR_PER_RANK, HIT_DELAY_MIN_FACTOR)
-		* get_milestone_effect_multiplier("hit_delay")
-	)
+		HIT_DELAY_MIN_FACTOR
+		+ (1.0 - HIT_DELAY_MIN_FACTOR) * pow(HIT_DELAY_REMAINING_PER_RANK, float(rank))
+	) * get_milestone_effect_multiplier("hit_delay") * get_body_growth_effect_multiplier("hit_delay")
 
 func get_batter_cooldown_multiplier() -> float:
 	# Compatibility ratio for UI/tests that still need a single baseline value.
@@ -2575,28 +2749,86 @@ func get_body_growth_stage() -> Dictionary:
 	var index := clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1)
 	return Content.BODY_GROWTH_STAGES[index]
 
+func _get_body_modifier_adjectives() -> Array[String]:
+	# Keep the composed body name funny but readable. Later purchases replace the
+	# weaker adjective from their own lane rather than producing a twelve-word UI.
+	var adjectives: Array[String] = []
+	if has_body_modifier("steroids"):
+		adjectives.append("Roided-Out")
+	if has_body_modifier("advanced_strength"):
+		adjectives.append("Very Buff")
+	elif has_body_modifier("pushup_phase"):
+		adjectives.append("Buff")
+	elif has_body_modifier("playground_conditioning"):
+		adjectives.append("Sturdy")
+	if has_body_modifier("altitude_cardio"):
+		adjectives.append("Very Toned")
+	elif has_body_modifier("running_laps"):
+		adjectives.append("Toned")
+	elif has_body_modifier("cardio_basics"):
+		adjectives.append("Spry")
+	if adjectives.size() < 3 and has_body_modifier("suspicious_vitamins"):
+		adjectives.append("Suspiciously Vital")
+	elif adjectives.size() < 3 and has_body_modifier("creatine"):
+		adjectives.append("Creatine-Fueled")
+	elif adjectives.size() < 3 and has_body_modifier("professional_rehab"):
+		adjectives.append("Rebuilt")
+	return adjectives
+
 func get_body_growth_name() -> String:
 	var stage := get_body_growth_stage()
-	return str(stage.get("body_name", stage.get("name", "Regular Ol’ Toddler")))
+	var base_name := str(stage.get("body_name", stage.get("name", "Regular Ol’ Toddler")))
+	var adjectives := _get_body_modifier_adjectives()
+	if adjectives.is_empty():
+		return base_name
+	var prefix := ""
+	if base_name.begins_with("Regular Ol’ "):
+		prefix = "Regular Ol’ "
+		base_name = base_name.trim_prefix(prefix)
+	return "%s%s %s" % [prefix, ", ".join(adjectives), base_name]
 
 func get_body_growth_noun() -> String:
-	return str(get_body_growth_stage().get("noun", "pitcher"))
+	var noun := str(get_body_growth_stage().get("noun", "pitcher"))
+	var adjectives := _get_body_modifier_adjectives()
+	if adjectives.is_empty():
+		return noun
+	var lowered: Array[String] = []
+	for adjective in adjectives:
+		lowered.append(adjective.to_lower())
+	return "%s %s" % [", ".join(lowered), noun]
 
 func get_body_growth_visual_size() -> float:
-	return float(get_body_growth_stage().get("visual_size", 1.0))
+	return minf(
+		float(get_body_growth_stage().get("visual_size", 1.0))
+		* get_body_modifier_effect_multiplier("visual_size"),
+		1.48
+	)
+
+func get_body_modifier_effect_multiplier(effect_id: String) -> float:
+	var multiplier := 1.0
+	for id in purchased_body_modifiers:
+		var definition := Content.body_modifier_by_id(id)
+		if definition.is_empty():
+			continue
+		var effects: Dictionary = definition.get("effects", {})
+		multiplier *= float(effects.get(effect_id, 1.0))
+	return minf(multiplier, MAX_NUMBER)
 
 func get_body_growth_effect_multiplier(effect_id: String) -> float:
 	var multiplier := 1.0
 	for index in range(1, clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1) + 1):
 		var effects: Dictionary = Content.BODY_GROWTH_STAGES[index].get("effects", {})
 		multiplier *= float(effects.get(effect_id, 1.0))
-	return minf(multiplier, MAX_NUMBER)
+	return minf(multiplier * get_body_modifier_effect_multiplier(effect_id), MAX_NUMBER)
 
 func get_body_growth_quality_bonus() -> float:
 	var bonus := 0.0
 	for index in range(1, clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1) + 1):
 		var effects: Dictionary = Content.BODY_GROWTH_STAGES[index].get("effects", {})
 		bonus += float(effects.get("quality", 0.0))
+	for id in purchased_body_modifiers:
+		var definition := Content.body_modifier_by_id(id)
+		bonus += float((definition.get("effects", {}) as Dictionary).get("quality_add", 0.0))
 	return bonus
 
 func get_body_growth_cost(id: String) -> float:
@@ -2626,6 +2858,44 @@ func buy_body_growth(id: String) -> bool:
 	check_achievements()
 	return true
 
+func has_body_modifier(id: String) -> bool:
+	return id in purchased_body_modifiers
+
+func get_body_modifier_cost(id: String) -> float:
+	var definition := Content.body_modifier_by_id(id)
+	if definition.is_empty():
+		return MAX_NUMBER
+	return rounded_cost(float(definition.get("cost", 0.0)))
+
+func get_body_modifier_unmet_requirements(definition: Dictionary) -> Array[String]:
+	var requirements: Array[String] = []
+	var required_level := int(definition.get("required_level", 0))
+	if highest_unlocked < required_level:
+		requirements.append("REACH LEVEL %d" % (required_level + 1))
+	var required_speed := float(definition.get("required_speed_fps", 0.0))
+	if required_speed > 0.0 and get_velocity_fps() + 0.000001 < required_speed:
+		requirements.append("THROW AT %s" % format_speed(required_speed).to_upper())
+	return requirements
+
+func can_buy_body_modifier(id: String) -> bool:
+	var definition := Content.body_modifier_by_id(id)
+	return (
+		not definition.is_empty()
+		and not has_body_modifier(id)
+		and get_body_modifier_unmet_requirements(definition).is_empty()
+		and xp >= get_body_modifier_cost(id)
+	)
+
+func buy_body_modifier(id: String) -> bool:
+	if not can_buy_body_modifier(id):
+		return false
+	var definition := Content.body_modifier_by_id(id)
+	xp -= get_body_modifier_cost(id)
+	purchased_body_modifiers.append(id)
+	progression_changed.emit("BODY MODIFIED: %s." % str(definition.name))
+	check_achievements()
+	return true
+
 func get_body_velocity_fps() -> float:
 	var velocity := get_trained_base_velocity_fps()
 	if has_divine_blessing("let_there_be_fastballs"):
@@ -2651,14 +2921,25 @@ func get_velocity_cap_fps() -> float:
 		return SPEED_OF_LIGHT_FPS
 	if genetic_rebirths > 0:
 		return ALIEN_SPEED_CAP_FPS
-	return HUMAN_SPEED_CAP_FPS
+	return get_human_velocity_cap_fps()
+
+func get_human_velocity_cap_fps() -> float:
+	var development_index := clampi(
+		highest_unlocked,
+		0,
+		HUMAN_VELOCITY_CAP_MPH_BY_LEVEL.size() - 1
+	)
+	return float(HUMAN_VELOCITY_CAP_MPH_BY_LEVEL[development_index]) / 0.681818
 
 func get_velocity_stage_name() -> String:
 	if eldritch_ascensions > 0:
 		return "ELDRITCH LIMIT • 1c"
 	if genetic_rebirths > 0:
 		return "GENETIC LIMIT • MACH 12"
-	return "HUMAN LIMIT • 211.6 MPH"
+	return "HUMAN DEVELOPMENT LIMIT • %s MPH" % format_number(
+		get_human_velocity_cap_fps() * 0.681818,
+		1
+	)
 
 func get_arm_count() -> float:
 	return pow(2.0, clampi(int(genetic_levels.extra_arms), 0, 3))
@@ -2690,6 +2971,11 @@ func get_pitcher_size_multiplier() -> float:
 	# Visual growth is intentionally saturating: every kind of real pitching
 	# strength contributes, but no build can become an unreadable field-sized
 	# circle. The fresh body is ×1; the complete cosmic build approaches ×2.
+	# Human bodies are authored by age and physical development only—Command,
+	# payload, and a quick wind-up do not make a person six feet wide.
+	var growth_floor := clampf(get_body_growth_visual_size(), 1.0, 2.0)
+	if genetic_rebirths <= 0:
+		return growth_floor
 	var quality_strength := maxf(get_pitch_quality() - 0.45, 0.0)
 	var rate_strength := maxf(log(maxf(get_pitch_rate() / 0.25, 1.0)) / log(2.0), 0.0) * 1.20
 	var speed_strength := maxf(log(maxf(get_velocity_fps(), 1.0)) / log(10.0), 0.0) * 0.80
@@ -2700,14 +2986,17 @@ func get_pitcher_size_multiplier() -> float:
 		+ log(maxf(get_time_multiplier(), 1.0)) / log(2.0)
 	) * 2.0
 	var strength := quality_strength + rate_strength + speed_strength + payload_strength + anatomy_strength
-	var growth_floor := clampf(get_body_growth_visual_size(), 1.0, 2.0)
 	return growth_floor + (2.0 - growth_floor) * (1.0 - exp(-strength / 70.0))
 
 func get_recovery_rate() -> float:
-	var recovery_rank := clampi(int(training_levels.recovery), 0, RECOVERY_MAX_RANK)
-	var rate := BASE_RECOVERY_RATE + float(recovery_rank) * RECOVERY_PER_RANK
+	var recovery_rank := maxi(int(training_levels.recovery), 0)
+	var rate := RECOVERY_TRAINING_LIMIT - (
+		RECOVERY_TRAINING_LIMIT - BASE_RECOVERY_RATE
+	) * pow(RECOVERY_REMAINING_PER_RANK, float(recovery_rank))
 	rate *= get_body_growth_effect_multiplier("recovery")
 	rate *= get_milestone_effect_multiplier("recovery")
+	if genetic_rebirths <= 0:
+		rate = minf(rate, HUMAN_BODY_RECOVERY_LIMIT)
 	rate *= pow(1.18, int(genetic_levels.elastic_ucl_colony))
 	rate *= 1.0 + float(get_equipment_bonuses().rate_bonus)
 	return minf(rate, MAX_PHYSICAL_PITCH_RATE)
@@ -2727,6 +3016,8 @@ func get_pitch_potency() -> float:
 		if not definition.is_empty():
 			potency = maxf(potency, float(definition.potency))
 	potency *= get_milestone_effect_multiplier("payload")
+	potency *= get_body_growth_effect_multiplier("payload")
+	potency *= 1.0 + float(maxi(int(training_levels.get("payload_training", 0)), 0)) * PAYLOAD_TRAINING_PER_RANK
 	potency *= pow(2.50, int(genetic_levels.ball_gland))
 	potency *= pow(10.0, int(eldritch_levels.causal_seams))
 	if has_divine_blessing("loaves_and_baseballs"):
@@ -2735,6 +3026,8 @@ func get_pitch_potency() -> float:
 
 func get_mastery_multiplier() -> float:
 	var multiplier := get_milestone_effect_multiplier("mastery")
+	multiplier *= get_body_growth_effect_multiplier("mastery")
+	multiplier *= 1.0 + float(maxi(int(training_levels.get("mastery_training", 0)), 0)) * MASTERY_TRAINING_PER_RANK
 	multiplier *= pow(1.75, int(eldritch_levels.mercy_is_euclidean))
 	if has_divine_blessing("eternal_seventh"):
 		multiplier *= 2.0
@@ -2758,6 +3051,8 @@ func get_xp_multiplier(opponent_index: int = current_opponent, distance_index: i
 		* get_pitch_potency()
 		* get_distance_xp_multiplier_for_index(distance_index)
 		* get_opponent_farm_xp_multiplier(bounded_index)
+		* get_body_growth_effect_multiplier("xp")
+		* (1.0 + float(maxi(int(training_levels.get("xp_training", 0)), 0)) * XP_TRAINING_PER_RANK)
 		* (1.0 + float(equipment.xp_bonus))
 		* get_achievement_xp_multiplier()
 	)
@@ -2840,6 +3135,11 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			return float(body_growth_level)
 		"pitches_owned":
 			return float(unlocked_pitches.size())
+		"illegal_pitch":
+			for pitch_id in unlocked_pitches:
+				if bool(Content.pitch_by_id(str(pitch_id)).get("illegal", false)):
+					return 1.0
+			return 0.0
 		"ball_upgrades_owned":
 			return float(purchased_ball_upgrades.size())
 		"facilities_owned":
@@ -2926,7 +3226,7 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
 		"training", "body_growth", "genetic_upgrade", "eldritch_upgrade":
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
-		"genetic_offer", "eldritch_offer", "relic_owned", "cosmos", "human_champion_toddler", "no_hitter":
+		"genetic_offer", "eldritch_offer", "relic_owned", "illegal_pitch", "cosmos", "human_champion_toddler", "no_hitter":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
 	return {
 		"current": current,
@@ -3003,6 +3303,32 @@ func get_estimated_xp_per_second(opponent_index: int = current_opponent) -> floa
 	var metrics := get_at_bat_metrics(opponent_index)
 	return minf(MAX_NUMBER, float(metrics.strikeouts_per_second) * get_strikeout_base_points(opponent_index) * get_xp_multiplier(opponent_index))
 
+func get_player_power_rating(opponent_index: int = current_opponent) -> float:
+	# Power is a readable synthesis, not a second combat system. The same quality,
+	# adaptation, speed, recovery, payload, and turnover values that already drive
+	# baseball determine this number.
+	var matchup_quality := (
+		get_pitch_quality()
+		+ get_opponent_mastery_quality_bonus(opponent_index)
+		+ get_frustration_quality_bonus()
+	)
+	var support := (
+		log(1.0 + get_velocity_fps()) / log(2.0) * 0.16
+		+ log(1.0 + get_pitch_potency()) / log(2.0) * 0.22
+		+ log(1.0 + get_recovery_rate() / BASE_RECOVERY_RATE) / log(2.0) * 0.18
+		+ log(1.0 + BASE_BATTER_TURNOVER_SECONDS / maxf(get_base_batter_turnover_seconds(), 0.001)) / log(2.0) * 0.12
+	)
+	return minf(MAX_NUMBER, 100.0 * pow(2.0, maxf(matchup_quality + support, -8.0) / 2.0))
+
+func get_opponent_power_rating(opponent_index: int = current_opponent) -> float:
+	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
+	var resistance := get_effective_opponent_difficulty(bounded)
+	var rule_pressure := (
+		log(float(get_base_strikes_required(bounded)) / 3.0 + 1.0) / log(2.0) * 0.24
+		+ log(5.0 / float(get_balls_required(bounded)) + 1.0) / log(2.0) * 0.12
+	)
+	return minf(MAX_NUMBER, 100.0 * pow(2.0, maxf(resistance + rule_pressure, -8.0) / 2.0))
+
 func get_current_opponent() -> Dictionary:
 	return opponents[current_opponent]
 
@@ -3050,8 +3376,10 @@ func get_distance_xp_multiplier() -> float:
 	return get_distance_xp_multiplier_for_index(selected_distance_index)
 
 func get_distance_penalty_multiplier() -> float:
-	var rank := clampi(int(training_levels.get("distance_control", 0)), 0, 20)
-	return maxf(1.0 - float(rank) * DISTANCE_FACTOR_PER_RANK, DISTANCE_MIN_FACTOR)
+	var rank := maxi(int(training_levels.get("distance_control", 0)), 0)
+	return DISTANCE_MIN_FACTOR + (
+		1.0 - DISTANCE_MIN_FACTOR
+	) * pow(DISTANCE_REMAINING_PER_RANK, float(rank))
 
 func get_distance_difficulty_for_index(distance_index: int = -1) -> float:
 	var bounded := selected_distance_index if distance_index < 0 else clampi(
@@ -3083,16 +3411,23 @@ func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
 	if opponent_index > Content.HUMAN_FINAL_INDEX:
 		return 0.0
 	var shell_count := purchased_ball_upgrades.size()
+	var base_drag := 0.0
 	if shell_count <= 0:
 		return 0.0
 	if shell_count == 1:
-		return 0.012
-	if shell_count == 2:
-		return 0.009
-	if shell_count == 3:
-		return 0.005
-	var leather_progress := clampf(float(shell_count - 4) / 12.0, 0.0, 1.0)
-	return lerpf(0.0019, 0.00075, leather_progress)
+		base_drag = 0.012
+	elif shell_count == 2:
+		base_drag = 0.009
+	elif shell_count == 3:
+		base_drag = 0.005
+	else:
+		var leather_progress := clampf(float(shell_count - 4) / 12.0, 0.0, 1.0)
+		base_drag = lerpf(0.0019, 0.00075, leather_progress)
+	var training_factor := pow(
+		DRAG_TRAINING_FACTOR_PER_RANK,
+		float(maxi(int(training_levels.get("drag_training", 0)), 0))
+	)
+	return base_drag * training_factor * get_body_growth_effect_multiplier("drag")
 
 func get_plate_speed_for_release(
 	release_speed_fps: float,
@@ -3245,20 +3580,22 @@ func get_opponent_loot_luck(index: int = current_opponent) -> float:
 	return get_overmastery_doublings(index) * OVERMASTERY_LOOT_LUCK_PER_DOUBLING
 
 func get_loot_rarity_probabilities(index: int = current_opponent) -> Array[float]:
-	# Raising each base cumulative threshold to this exponent is equivalent to
-	# gently biasing one uniform rarity roll upward. The probabilities still sum
-	# to one, and the bias grows only logarithmically with excess mastery.
-	var exponent := 1.0 + get_opponent_loot_luck(index)
+	# The distribution is the batter's actual visible wardrobe. Excess mastery
+	# gently favors its better pieces, but cannot roll a tier the batter is not
+	# wearing or change the slot attached to that tier.
 	var result: Array[float] = []
-	var base_cumulative := 0.0
-	var adjusted_previous := 0.0
-	for rarity in Content.LOOT_RARITIES:
-		base_cumulative = minf(base_cumulative + float(rarity.probability), 1.0)
-		var adjusted_cumulative := pow(base_cumulative, exponent)
-		result.append(maxf(adjusted_cumulative - adjusted_previous, 0.0))
-		adjusted_previous = adjusted_cumulative
-	if not result.is_empty():
-		result[result.size() - 1] += maxf(1.0 - adjusted_previous, 0.0)
+	result.resize(Content.LOOT_RARITIES.size())
+	result.fill(0.0)
+	var sources := get_opponent_drop_sources(index)
+	var total_weight := 0.0
+	for source in sources:
+		total_weight += _opponent_drop_source_weight(source, index)
+	if total_weight <= 0.0:
+		result[0] = 1.0
+		return result
+	for source in sources:
+		var rarity_index := clampi(int(source.get("rarity", 0)), 0, result.size() - 1)
+		result[rarity_index] += _opponent_drop_source_weight(source, index) / total_weight
 	return result
 
 func get_overmastery_summary(index: int = current_opponent) -> String:
@@ -3271,12 +3608,10 @@ func get_overmastery_summary(index: int = current_opponent) -> String:
 	]
 
 func get_offline_xp_efficiency() -> float:
-	var rank := clampi(
-		int(training_levels.get("offline_efficiency", 0)),
-		0,
-		OFFLINE_XP_MAX_RANK
-	)
-	return BASE_OFFLINE_XP_EFFICIENCY + float(rank) * OFFLINE_XP_EFFICIENCY_PER_RANK
+	var rank := maxi(int(training_levels.get("offline_efficiency", 0)), 0)
+	return OFFLINE_XP_EFFICIENCY_LIMIT - (
+		OFFLINE_XP_EFFICIENCY_LIMIT - BASE_OFFLINE_XP_EFFICIENCY
+	) * pow(OFFLINE_REMAINING_PER_RANK, float(rank))
 
 func get_training_cost(id: String) -> float:
 	var definition := Content.training_by_id(id)
@@ -3669,11 +4004,18 @@ func _reset_body_progress() -> void:
 		"pitch_calling": 0,
 		"distance_control": 0,
 		"offline_efficiency": 0,
+		"payload_training": 0,
+		"mastery_training": 0,
+		"drag_training": 0,
+		"xp_training": 0,
+		"loot_training": 0,
+		"frustration_training": 0,
 	}
 	scale_levels = {}
 	unlocked_pitches = ["dead_fish"]
 	purchased_ball_upgrades.clear()
 	purchased_milestones.clear()
+	purchased_body_modifiers.clear()
 	_invalidate_milestone_effect_cache()
 	current_opponent = 0
 	highest_unlocked = 0
@@ -3896,7 +4238,7 @@ func decode_save_text(text: String) -> Dictionary:
 			return {"ok": false, "message": "The save contains an invalid %s section." % str(field)}
 	var array_fields := [
 		"loot_items", "divine_blessings", "unlocked_pitches", "purchased_ball_upgrades",
-		"purchased_milestones", "opponent_mastery", "result_totals", "unlocked_achievements",
+		"purchased_milestones", "purchased_body_modifiers", "opponent_mastery", "result_totals", "unlocked_achievements",
 	]
 	for field in array_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_ARRAY:
@@ -4038,6 +4380,7 @@ func to_save_data() -> Dictionary:
 		"eldritch_exhibition_seconds": eldritch_exhibition_seconds,
 		"cosmos_conquered": cosmos_conquered,
 		"body_growth_level": body_growth_level,
+		"purchased_body_modifiers": purchased_body_modifiers,
 		"human_league_completed_as_toddler": human_league_completed_as_toddler,
 		"no_hitter_attempt_valid": no_hitter_attempt_valid,
 		"auto_advance_enabled": auto_advance_enabled,
@@ -4092,11 +4435,13 @@ func apply_save_data(data: Dictionary) -> void:
 	highest_unlocked = clampi(int(data.get("highest_unlocked", 0)), 0, opponents.size() - 1)
 	current_opponent = clampi(int(data.get("current_opponent", 0)), 0, highest_unlocked)
 	if saved_version >= 18:
-		body_growth_level = clampi(
-			int(data.get("body_growth_level", 0)),
-			0,
-			Content.BODY_GROWTH_STAGES.size() - 1
-		)
+		var saved_body_level := int(data.get("body_growth_level", 0))
+		if saved_version < 22:
+			# v0.14 had six much broader age bands. Map by biological meaning,
+			# not raw array index, so an established adult never becomes a teen.
+			var legacy_body_map := [0, 2, 3, 5, 7, Content.BODY_GROWTH_STAGES.size() - 1]
+			saved_body_level = int(legacy_body_map[clampi(saved_body_level, 0, legacy_body_map.size() - 1)])
+		body_growth_level = clampi(saved_body_level, 0, Content.BODY_GROWTH_STAGES.size() - 1)
 		human_league_completed_as_toddler = bool(data.get("human_league_completed_as_toddler", false))
 	else:
 		# Aging did not exist in older saves. Infer a sensible body from the
@@ -4179,11 +4524,20 @@ func apply_save_data(data: Dictionary) -> void:
 		var old_turnover_factor := pow(0.93, float(old_turnover_rank))
 		saved_training["velocity"] = maxi(int(round((pow(1.045, float(old_velocity_rank)) - 1.0) / VELOCITY_PER_RANK_FPS)), 0)
 		saved_training["command"] = maxi(int(round(float(old_command_rank) * 0.12 / QUALITY_PER_RANK)), 0)
-		saved_training["recovery"] = maxi(int(round((BASE_RECOVERY_RATE * pow(1.06, float(old_recovery_rank)) - BASE_RECOVERY_RATE) / RECOVERY_PER_RANK)), 0)
-		saved_training["turnover"] = maxi(int(round((BASE_BATTER_TURNOVER_SECONDS - BASE_BATTER_TURNOVER_SECONDS * old_turnover_factor) / LINEUP_SECONDS_PER_RANK)), 0)
-		saved_training["hit_recovery"] = maxi(int(round((1.0 - old_turnover_factor) / HIT_DELAY_FACTOR_PER_RANK)), 0)
-		saved_training["pitch_calling"] = maxi(int(round((pow(1.35, float(old_calling_rank)) - 1.0) / CALLING_BIAS_PER_RANK)), 0)
-		saved_training["distance_control"] = maxi(int(round((1.0 - pow(0.97, float(old_distance_rank))) / DISTANCE_FACTOR_PER_RANK)), 0)
+		var old_recovery_value := minf(BASE_RECOVERY_RATE * pow(1.06, float(old_recovery_rank)), RECOVERY_TRAINING_LIMIT - 0.000001)
+		var recovery_ratio := maxf((RECOVERY_TRAINING_LIMIT - old_recovery_value) / (RECOVERY_TRAINING_LIMIT - BASE_RECOVERY_RATE), 0.000001)
+		saved_training["recovery"] = maxi(int(round(log(recovery_ratio) / log(RECOVERY_REMAINING_PER_RANK))), 0)
+		var old_lineup_value := maxf(BASE_BATTER_TURNOVER_SECONDS * old_turnover_factor, LINEUP_MIN_SECONDS + 0.000001)
+		var lineup_ratio := maxf((old_lineup_value - LINEUP_MIN_SECONDS) / (BASE_BATTER_TURNOVER_SECONDS - LINEUP_MIN_SECONDS), 0.000001)
+		saved_training["turnover"] = maxi(int(round(log(lineup_ratio) / log(LINEUP_REMAINING_PER_RANK))), 0)
+		var old_hit_value := maxf(old_turnover_factor, HIT_DELAY_MIN_FACTOR + 0.000001)
+		var hit_ratio := maxf((old_hit_value - HIT_DELAY_MIN_FACTOR) / (1.0 - HIT_DELAY_MIN_FACTOR), 0.000001)
+		saved_training["hit_recovery"] = maxi(int(round(log(hit_ratio) / log(HIT_DELAY_REMAINING_PER_RANK))), 0)
+		var old_calling_value := pow(1.35, float(old_calling_rank))
+		saved_training["pitch_calling"] = maxi(int(round(exp((old_calling_value - 1.0) / CALLING_LOG_BONUS) - 1.0)), 0)
+		var old_distance_value := pow(0.97, float(old_distance_rank))
+		var distance_ratio := maxf((old_distance_value - DISTANCE_MIN_FACTOR) / (1.0 - DISTANCE_MIN_FACTOR), 0.000001)
+		saved_training["distance_control"] = maxi(int(round(log(distance_ratio) / log(DISTANCE_REMAINING_PER_RANK))), 0)
 	for id in training_levels.keys():
 		var saved_rank := maxi(int(saved_training.get(id, 0)), 0)
 		var definition := Content.training_by_id(str(id))
@@ -4308,6 +4662,16 @@ func apply_save_data(data: Dictionary) -> void:
 		if not Content.ball_upgrade_by_id(str(id)).is_empty() and str(id) not in purchased_ball_upgrades:
 			purchased_ball_upgrades.append(str(id))
 
+	purchased_body_modifiers.clear()
+	for id in data.get("purchased_body_modifiers", []):
+		if not Content.body_modifier_by_id(str(id)).is_empty() and str(id) not in purchased_body_modifiers:
+			purchased_body_modifiers.append(str(id))
+	# Suspicious Vitamins and Steroids lived in FACILITY through v0.14. Move
+	# them into BODY without charging an existing player twice.
+	if saved_version < 22:
+		for legacy_id in data.get("purchased_milestones", []):
+			if not Content.body_modifier_by_id(str(legacy_id)).is_empty() and str(legacy_id) not in purchased_body_modifiers:
+				purchased_body_modifiers.append(str(legacy_id))
 	purchased_milestones.clear()
 	_invalidate_milestone_effect_cache()
 	for id in data.get("purchased_milestones", []):

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.15.0 — The batter is wearing the loot table
+
+- Rebuilt the human campaign around a roughly 12-hour first clear and recognizable baseball anchors. Thirteen authored ranges now pass through tee-ball, youth, intermediate, high-school/college, and 60-foot-6-inch regulation distance; no-equipment human development finishes at 115 mph and recovery remains below `0.72/s`.
+- Expanded ordinary development to 12 age stages and 12 optional BODY modifiers, including strength/cardio choices, Creatine, Suspicious Vitamins, sports nutrition, Extremely Obvious Steroids, and professional rehab. Human marker size now follows authored body growth rather than ballooning with raw stats.
+- Expanded Training to 15 repeatable axes—one for every displayed base stat. Speed now adds `0.75 ft/s`, Command adds only `0.018` quality, diminishing/asymptotic axes remain uncapped, and human repeatable stats cannot silently turn a fresh frontier opponent into a guaranteed strikeout.
+- Expanded the arsenal to 31 pitches. Fourteen post-human pitches use larger, stranger bonuses and real detriments, including Gazorpian Strudelball, Bubonic Swerve, Andromedan Knucklebomb, and The Pitch of the First Death. Learning the first unlocks **Wait… That’s Illegal**, bringing the achievement catalog to 109.
+- Made the Pitch Arsenal card inspectable and kept the last pitch's immutable release speed, plate speed, drag, travel time, quality, and range in the Live Throw Profile after impact. Unlocked-but-unaffordable catalog cards remain readable while only their XP action dims.
+- Rebuilt opponent equipment as the actual loot table. Every drop copies one visible player-wearable slot and rarity from the defeated batter; excess mastery may favor better worn pieces but cannot invent an unseen tier. The drop callout now follows the defeated batter rather than appearing over the pitcher.
+- Expanded equipment to 15 progressive rarities: five human, five alien, and five eldritch tiers. Later leagues retain older-family possibilities while adding a broader top end, and each era champion wears its family's top tier in every available slot. Bulk/offline loot uses the same visible-source rule as live drops.
+- Redesigned the progressive title illustration as a large animated version of the app icon, with separate portrait and landscape compositions and story-gated alien, void, and victory treatments.
+- Updated spoiler-safe Help, Gear inspection, design documentation, save migration, and regression coverage for BODY, all 15 stats, 31 pitches, 84 Facilities, 109 achievements, defeated-batter loot sources, progressive rarity families, and persistent throw telemetry. Save schema 22 maps older bodies and retired human chemistry without wiping progress.
+- Re-audited the deterministic no-loot campaign: the optimal active first human lifetime reaches the boundary in about 11 hours 15 minutes and the complete multiverse reaches its first cosmic victory in about 34 days 6 hours.
+
 ## 0.14.0 — The front office has breached causality
 
 - Rebalanced the human campaign around visible velocity: Speed Training now adds `0.50 ft/s`, repeatable Command adds only `0.04` quality, speed contributes meaningfully to pitch quality, and ordinary growth/facility multipliers were softened. The audited first lifetime moves from youth-baseball speeds to a 211.6 mph human-body cap near the professional leagues instead of rewarding an all-Command strategy.

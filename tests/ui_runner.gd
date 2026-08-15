@@ -34,6 +34,12 @@ func _run() -> void:
 	await process_frame
 	_expect(main.title_layout_grid.columns == 2 and main.title_panel.size.x >= 900.0, "A desktop title should use a wide two-column composition instead of a stretched phone card")
 	_expect(main.title_action_panel.position.x > main.title_art_frame.position.x, "Desktop title actions should sit beside the matchup art")
+	var desktop_title_stage: Rect2 = main.title_art._stage_rect(Vector2(700.0, 440.0))
+	_expect(absf(desktop_title_stage.size.x / desktop_title_stage.size.y - 1.52) < 0.02 and desktop_title_stage.size.x > 620.0, "Desktop title art should enlarge the icon-style matchup in a landscape frame")
+	if "--capture-title" in OS.get_cmdline_user_args():
+		var title_image := root.get_texture().get_image()
+		var title_error := title_image.save_png("/private/tmp/no-hitter-title-desktop.png")
+		_expect(title_error == OK, "Could not capture the desktop title screen")
 	main._open_title_resume_picker()
 	_expect(main.title_resume_stack.visible and not main.title_menu_stack.visible, "Resume should open the save-slot picker")
 	_expect(main.title_manual_slot_entries.size() == 3, "The title picker should expose all three manual save slots")
@@ -75,9 +81,10 @@ func _run() -> void:
 	_expect(main.pitch_field.process_priority < main.process_priority, "The field clock must advance before the simulation clock to prevent catch-up bursts")
 	_expect(not main.prestige_header_stack.visible, "Fresh UI reveals a prestige currency")
 	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Ordinary body growth should be visible from the first pitch")
-	_expect(main.rebirth_tab.name == "GROW UP" and main.human_growth_section.visible, "The ordinary body track should live in a plainly named GROW UP tab")
-	_expect(not main.genetic_section.visible, "Fresh GROW UP content must not reveal genetic enhancements")
+	_expect(main.rebirth_tab.name == "BODY" and main.human_growth_section.visible, "Ordinary growth and conditioning should live in a plainly named BODY tab")
+	_expect(not main.genetic_section.visible, "Fresh BODY content must not reveal genetic enhancements")
 	_expect(main.body_growth_buttons.size() == Content.BODY_GROWTH_STAGES.size() - 1, "Every later human body stage should have one ordered growth row")
+	_expect(main.body_modifier_buttons.size() == Content.BODY_MODIFIERS.size(), "Every authored physical-development option should have a BODY row")
 	_expect(not main.automation_section.visible, "Fresh UI reveals future automation")
 	_expect(not main.stat_rows.arms.visible, "Fresh Stats reveal extra arms")
 	_expect(not main.stat_rows.clones.visible, "Fresh Stats reveal clone bodies")
@@ -160,7 +167,7 @@ func _run() -> void:
 	main.pitch_field.batter_phase_age = 0.0
 	main.pitch_field.batter_phase_duration = 0.0
 	main._refresh_interface()
-	_expect(main.opponent_loadout_dock.get_child_count() == 2, "The opening opponent side should show body and bat squares")
+	_expect(main.opponent_loadout_dock.get_child_count() == 3, "The opening opponent side should show body, bat, and the droppable tutorial cap")
 	_expect(not main.locker_dialog.visible, "The equipment popup should start closed")
 	for definition in Content.LOOT_SLOTS:
 		var slot_button: Button = main.inventory_slot_buttons[str(definition.id)]
@@ -238,8 +245,8 @@ func _run() -> void:
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "The destructive reset window should begin closed and locked")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ toddler", "Fresh human baseball needs the toddler subtitle")
 	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Toddler", "The default loadout should identify the player's current body")
-	_expect((main.equipment_labels.body.value as Label).tooltip_text.contains("Toddler penalties"), "The opening body inspection should explain why the toddler is so weak")
-	_expect(main.status_stat_labels.size() == 9 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Desktop Status should populate every effective progression stat")
+	_expect((main.equipment_labels.body.value as Label).tooltip_text.contains("One foot per second"), "The opening body inspection should explain why the toddler is so weak")
+	_expect(main.status_stat_labels.size() == 15 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Desktop Status should populate every trainable effective progression stat")
 	_expect(main.equipment_summary_label.text == "No facilities owned yet", "Fresh Status should not imply an owned or unrevealed upgrade")
 	main.game.purchased_milestones.append("regulation_ball")
 	main._refresh_interface()
@@ -247,22 +254,22 @@ func _run() -> void:
 	_expect((main.equipment_progression_list.get_child(1) as Control).tooltip_text.contains("A Regulation Baseball"), "Owned Status rows should identify their upgrade")
 	main.game.purchased_milestones.erase("regulation_ball")
 	main._refresh_interface()
-	_expect((main.body_growth_buttons.little_kid.container as Control).visible, "The Regular Ol’ Little Kid option should be visible from level 1")
-	_expect((main.body_growth_buttons.little_kid.button as Button).disabled, "Growth should remain disabled until the first strikeout supplies its 3 XP cost")
+	_expect((main.body_growth_buttons.preschooler.container as Control).visible, "The Regular Ol’ Preschooler option should be visible from level 1")
+	_expect((main.body_growth_buttons.preschooler.button as Button).disabled, "Growth should remain disabled until the first strikeout supplies its 3 XP cost")
 	main.game.xp = main.game.get_strikeout_base_points()
 	main._refresh_interface()
-	_expect(not (main.body_growth_buttons.little_kid.button as Button).disabled, "One opening strikeout should afford the first growth step")
+	_expect(not (main.body_growth_buttons.preschooler.button as Button).disabled, "One opening strikeout should afford the first growth step")
 	main.game.xp = 0.0
 	main.game.body_growth_level = 1
 	main._refresh_interface()
-	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ little kid", "Growing should immediately update the milestone subtitle")
-	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Little Kid", "Growing should immediately update the body loadout")
+	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ preschooler", "Growing should immediately update the milestone subtitle")
+	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Preschooler", "Growing should immediately update the body loadout")
 	main.game.body_growth_level = 0
 	main._refresh_interface()
-	main.game.purchased_milestones.append("steroids")
+	main.game.purchased_body_modifiers.append("steroids")
 	main._refresh_interface()
 	_expect(main.header_subtitle.text == "A baseball game about a big boi", "The first steroid use should update the subtitle")
-	main.game.purchased_milestones.erase("steroids")
+	main.game.purchased_body_modifiers.erase("steroids")
 	main._refresh_interface()
 	main.development_session = false
 	main._request_hard_reset()
@@ -284,7 +291,7 @@ func _run() -> void:
 	var opening_training: Dictionary = main.training_buttons.velocity
 	_expect(opening_training.container is PanelContainer and not (opening_training.container is BaseButton), "Upgrade descriptions should live in passive scrollable cards")
 	_expect((opening_training.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Dragging an upgrade description should reach the ScrollContainer")
-	_expect((opening_training.button as Button).text == "BUY" and (opening_training.button as Button).custom_minimum_size.y >= 44.0, "Each purchasable upgrade needs a separate touch-sized BUY control")
+	_expect((opening_training.button as Button).text.ends_with("XP") and (opening_training.button as Button).custom_minimum_size.y >= 44.0, "Each purchasable upgrade needs a separate touch-sized price control")
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({
 		"id": "ui_rare_hat",
@@ -405,7 +412,7 @@ func _run() -> void:
 	main.alien_help_dialog.hide()
 	_expect(main.game.genetic_offer_unlocked and not main.alien_help_button.visible, "Accepting portal help should persistently reveal Time Travel and dismiss HELP")
 	_expect(main.prestige_header_stack.visible, "Genetic offer did not reveal DNA")
-	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer should remain available through GROW UP")
+	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer should remain available through BODY")
 	_expect(main.genetic_section.visible, "Genetic offer did not reveal mutations")
 	_expect(not main.eldritch_section.visible, "Genetic offer prematurely reveals eldritch upgrades")
 	_expect(not main.divine_section.visible, "Genetic offer prematurely reveals divine rewards")

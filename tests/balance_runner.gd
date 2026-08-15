@@ -30,16 +30,20 @@ func _initialize() -> void:
 		elapsed += step
 		if game.highest_unlocked != previous_unlocked:
 			previous_unlocked = game.highest_unlocked
+			var metrics := game.get_at_bat_metrics()
 			print(
-				"%s  Level %02d  %-43s rate=%-9s speed=%-11s quality=%6.2f threat=%6.2f payload=%-8s xp=%s"
+				"%s  Level %02d  %-43s recovery=%-5s speed=%-11s strike=%5.1f%% SO=%5.1f%% quality=%6.2f threat=%6.2f mastery=%s payload=%-8s xp=%s"
 				% [
 					_format_clock(elapsed),
 					game.highest_unlocked + 1,
 					game.opponents[game.highest_unlocked].name,
 					BaseballGameState.format_number(game.get_pitch_rate()),
 					BaseballGameState.format_speed(game.get_velocity_fps()),
+					float((metrics.probabilities as Array)[Content.STRIKE_INDEX]) * 100.0,
+					float(metrics.strikeout_probability) * 100.0,
 					game.get_pitch_quality(),
 					game.get_effective_opponent_difficulty(),
+					BaseballGameState.format_number(game.get_mastery_requirement()),
 					"×%s" % BaseballGameState.format_number(game.get_pitch_potency()),
 					BaseballGameState.format_number(game.xp),
 				]
@@ -77,6 +81,11 @@ func _purchase_available_content() -> void:
 		for definition in Content.BODY_GROWTH_STAGES:
 			if game.can_buy_body_growth(str(definition.id)):
 				game.buy_body_growth(str(definition.id))
+				purchase_count += 1
+				bought = true
+		for definition in Content.BODY_MODIFIERS:
+			if game.can_buy_body_modifier(str(definition.id)):
+				game.buy_body_modifier(str(definition.id))
 				purchase_count += 1
 				bought = true
 		for definition in Content.PITCHES:

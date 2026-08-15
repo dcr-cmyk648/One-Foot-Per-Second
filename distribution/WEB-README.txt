@@ -31,9 +31,10 @@ the underlying game and exported save format remain identical to desktop.
 TITLE SCREEN
 
 Startup offers Resume Game, Start New Game, and Import Save. Resume opens the
-autosave and three device-local manual slots. The animated matchup changes only
-after the save has reached a new story era, so it never previews alien, eldritch,
-or divine baseball early. The in-game Saves menu can return to this screen.
+autosave and three device-local manual slots. The large app-icon-style animated
+matchup uses separate portrait and landscape framing and changes only after the
+save has reached a new story era, so it never previews alien, eldritch, or divine
+baseball early. The in-game Saves menu can return to this screen.
 
 IPHONE HOME SCREEN INSTALL
 
@@ -54,8 +55,8 @@ new release activates. After one successful online load, the current build can a
 start offline when the browser retains its cache.
 
 Closing the game or suspending its tab simulates up to seven days. Strikeout XP
-starts at 1% of the open-game award; Scorebook Study adds one percentage point
-per rank up to 25% for the current body. Returning with earned XP shows a popup
+starts at 1% of the open-game award; Scorebook Study approaches a 75% ceiling
+with diminishing returns for the current body. Returning with earned XP shows a popup
 with the exact deposit, elapsed time, and efficiency used.
 
 CODEX SITES
