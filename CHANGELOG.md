@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.2 — Buy the number, not the horizon
+
+- Replaced every repeatable Training card's eventual “approaches” target with the calculated effect of its next rank. The short line now reports the real change to the effective stat currently shown in the interface, including active BODY, Facility, equipment, cap, and diminishing-return effects; reductions use an explicit minus sign.
+- Added the same live next-rank result to desktop hover and stationary mobile hold details while preserving the complete underlying formula beneath it. Preview calculations restore the original rank immediately and cannot purchase, spend, emit progression, or alter a save.
+- Added regression coverage for additive, diminishing, asymptotic, reduction, and Frustration previews plus desktop and phone card rendering. Save schema remains 22, so existing progress continues without migration.
+
 ## 0.15.1 — The scouting report fits on the phone
 
 - Shortened every repeatable Training summary and removed the duplicated XP cost from its passive card text; the separate price button remains the only purchase action. Diminishing axes now say what stat they approach instead of leading with “remaining gap” notation.

@@ -170,6 +170,8 @@ func _run() -> void:
 	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7%", "The phone upgrade overlay should show the reduced current field-tap advance")
 	var phone_training_row: Dictionary = main.training_buttons.velocity
 	_expect((phone_training_row.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone upgrade descriptions should remain draggable scroll regions")
+	_expect((phone_training_row.label as Label).text.contains("+0.75 ft/s Speed"), "Phone Training cards should show a succinct, exact next-rank gain")
+	_expect(not (phone_training_row.label as Label).text.contains("approaches"), "Phone Training cards should not show eventual asymptotic targets")
 	_expect(not (phone_training_row.label as Label).text.contains("•  1 XP"), "The Training card should not repeat a price already shown on its action button")
 	_expect((phone_training_row.button as Button).text.ends_with("XP"), "Phone purchases should put the actual XP price on the action control")
 	_expect((phone_training_row.button as Button).get_combined_minimum_size().y >= 44.0, "Phone upgrade price controls should be touch-sized")

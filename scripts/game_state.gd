@@ -3613,6 +3613,68 @@ func get_offline_xp_efficiency() -> float:
 		OFFLINE_XP_EFFICIENCY_LIMIT - BASE_OFFLINE_XP_EFFICIENCY
 	) * pow(OFFLINE_REMAINING_PER_RANK, float(rank))
 
+func _get_training_effect_value(id: String) -> float:
+	# These are the same effective values shown in CURRENT STATS. Keeping the
+	# mapping here lets every client describe a rank by its real, current impact
+	# instead of repeating an asymptotic target that may be many ranks away.
+	match id:
+		"velocity":
+			return get_representative_pitch_speed()
+		"command":
+			return get_pitch_quality()
+		"field_hustle":
+			return get_field_tap_fraction()
+		"recovery":
+			return get_recovery_rate()
+		"offline_efficiency":
+			return get_offline_xp_efficiency()
+		"distance_control":
+			return get_distance_penalty_multiplier()
+		"turnover":
+			return get_base_batter_turnover_seconds()
+		"hit_recovery":
+			return get_hit_delay_factor()
+		"pitch_calling":
+			return get_pitch_calling_bias()
+		"payload_training":
+			return get_pitch_potency()
+		"mastery_training":
+			return get_mastery_multiplier()
+		"drag_training":
+			return get_pitch_drag_loss_fraction()
+		"xp_training":
+			return (
+				get_body_growth_effect_multiplier("xp")
+				* (1.0 + float(maxi(int(training_levels.get("xp_training", 0)), 0)) * XP_TRAINING_PER_RANK)
+			)
+		"loot_training":
+			return get_loot_drop_chance()
+		"frustration_training":
+			# Frustration itself resets on a strikeout. The stable trainable stat is
+			# the Quality granted by each logarithmic doubling, not today's meter.
+			return FRUSTRATION_QUALITY_PER_DOUBLING * (
+				1.0
+				+ float(maxi(int(training_levels.get("frustration_training", 0)), 0))
+				* FRUSTRATION_TRAINING_PER_RANK
+			)
+	return 0.0
+
+func get_training_next_rank_effect(id: String) -> Dictionary:
+	if not training_levels.has(id):
+		return {}
+	var stored_rank = training_levels[id]
+	var current_rank := maxi(int(stored_rank), 0)
+	var before := _get_training_effect_value(id)
+	training_levels[id] = current_rank + 1
+	var after := _get_training_effect_value(id)
+	training_levels[id] = stored_rank
+	return {
+		"rank": current_rank + 1,
+		"before": before,
+		"after": after,
+		"delta": after - before,
+	}
+
 func get_training_cost(id: String) -> float:
 	var definition := Content.training_by_id(id)
 	if definition.is_empty():

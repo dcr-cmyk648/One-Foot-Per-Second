@@ -292,8 +292,19 @@ func _run() -> void:
 	_expect(opening_training.container is PanelContainer and not (opening_training.container is BaseButton), "Upgrade descriptions should live in passive scrollable cards")
 	_expect((opening_training.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Dragging an upgrade description should reach the ScrollContainer")
 	_expect((opening_training.container as Control).tooltip_text.contains("Each rank adds 0.75 ft/s"), "Desktop hover should expose the same unabridged Training explanation as mobile hold")
+	_expect((opening_training.label as Label).text.contains("+0.75 ft/s Speed"), "Training cards should show the exact effect of the next rank")
+	_expect((opening_training.container as Control).tooltip_text.contains("Next rank: +0.75 ft/s Speed."), "Desktop hover should include the same live next-rank calculation")
 	_expect(not (opening_training.label as Label).text.contains("•  1 XP"), "Training copy should not repeat a price already shown on its action button")
 	_expect((opening_training.button as Button).text.ends_with("XP") and (opening_training.button as Button).custom_minimum_size.y >= 44.0, "Each purchasable upgrade needs a separate touch-sized price control")
+	main.game.highest_unlocked = 3
+	main.game.training_levels.recovery = 8
+	main._refresh_interface()
+	var recovery_summary: String = main._training_next_rank_summary("recovery")
+	_expect((main.training_buttons.recovery.label as Label).text.contains(recovery_summary), "A diminishing Training card should recalculate the exact next-rank gain")
+	_expect(not (main.training_buttons.recovery.label as Label).text.contains("approaches"), "Visible Training cards should not substitute an eventual target for the next purchase")
+	main.game.highest_unlocked = 0
+	main.game.training_levels.recovery = 0
+	main._refresh_interface()
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({
 		"id": "ui_rare_hat",

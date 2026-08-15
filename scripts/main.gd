@@ -5337,6 +5337,80 @@ func _refresh_power_comparison() -> void:
 	)
 	power_comparison_label.tooltip_text = power_comparison_panel.tooltip_text
 
+func _format_training_delta_number(value: float) -> String:
+	var magnitude := absf(value)
+	if magnitude <= 0.000000000001:
+		return "0"
+	if magnitude >= 1000.0:
+		return BaseballGameState.format_number(magnitude, 2)
+	var decimals := 0
+	if magnitude < 0.000001:
+		return "%.2e" % magnitude
+	elif magnitude < 0.0001:
+		decimals = 6
+	elif magnitude < 0.001:
+		decimals = 5
+	elif magnitude < 0.01:
+		decimals = 4
+	elif magnitude < 0.1:
+		decimals = 3
+	elif magnitude < 10.0:
+		decimals = 2
+	elif magnitude < 100.0:
+		decimals = 1
+	var rendered := ("%." + str(decimals) + "f") % magnitude
+	while "." in rendered and rendered.ends_with("0"):
+		rendered = rendered.substr(0, rendered.length() - 1)
+	if rendered.ends_with("."):
+		rendered = rendered.substr(0, rendered.length() - 1)
+	return rendered
+
+func _format_signed_training_delta(value: float, scale: float = 1.0) -> String:
+	var scaled := value * scale
+	if absf(scaled) <= 0.000000000001:
+		return "0"
+	return "%s%s" % ["+" if scaled > 0.0 else "−", _format_training_delta_number(scaled)]
+
+func _training_next_rank_summary(id: String) -> String:
+	var effect := game.get_training_next_rank_effect(id)
+	if effect.is_empty():
+		return "No change"
+	var delta := float(effect.delta)
+	match id:
+		"velocity":
+			return "%s ft/s Speed" % _format_signed_training_delta(delta)
+		"command":
+			return "%s Quality" % _format_signed_training_delta(delta)
+		"field_hustle":
+			return "%s%% Field Tap" % _format_signed_training_delta(delta, 100.0)
+		"recovery":
+			return "%s/s Recovery" % _format_signed_training_delta(delta)
+		"offline_efficiency":
+			return "%s%% Offline XP" % _format_signed_training_delta(delta, 100.0)
+		"distance_control":
+			return "%s× Distance Threat" % _format_signed_training_delta(delta)
+		"turnover":
+			return "%ss Lineup Time" % _format_signed_training_delta(delta)
+		"hit_recovery":
+			return "%s× Hit Delay" % _format_signed_training_delta(delta)
+		"pitch_calling":
+			return "%s× Better-Pitch Bias" % _format_signed_training_delta(delta)
+		"payload_training":
+			return "%s× Payload" % _format_signed_training_delta(delta)
+		"mastery_training":
+			return "%s× Mastery" % _format_signed_training_delta(delta)
+		"drag_training":
+			if absf(delta) <= 0.000000000001:
+				return "0% Air Drag (none now)"
+			return "%s%% Air Drag" % _format_signed_training_delta(delta, 100.0)
+		"xp_training":
+			return "%s× Strikeout XP" % _format_signed_training_delta(delta)
+		"loot_training":
+			return "%s%% Loot Chance" % _format_signed_training_delta(delta, 100.0)
+		"frustration_training":
+			return "%s Frustration Quality" % _format_signed_training_delta(delta)
+	return "%s" % _format_signed_training_delta(delta)
+
 func _refresh_purchase_buttons() -> void:
 	for catalog_id in catalog_hide_purchased_toggles:
 		var filter_toggle: CheckButton = catalog_hide_purchased_toggles[catalog_id]
@@ -5365,11 +5439,12 @@ func _refresh_purchase_buttons() -> void:
 			)
 		else:
 			var cost := game.get_training_cost(id)
+			var next_rank_summary := _training_next_rank_summary(id)
 			_set_upgrade_row(
 				entry,
-				"%s  •  RANK %d\n%s" % [definition.name, rank, definition.description],
+				"%s  •  RANK %d\n%s" % [definition.name, rank, next_rank_summary],
 				game.xp < cost,
-				_definition_tooltip(definition),
+				"Next rank: %s.\n\n%s" % [next_rank_summary, _definition_tooltip(definition)],
 				"%s XP" % BaseballGameState.format_cost(cost)
 			)
 

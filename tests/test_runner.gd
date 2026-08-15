@@ -1540,6 +1540,38 @@ func _test_batter_rotation() -> void:
 	game.free()
 
 func _test_progression_and_purchases() -> void:
+	var delta_game: BaseballGameState = GameStateScript.new()
+	var field_tap_effect := delta_game.get_training_next_rank_effect("field_hustle")
+	_expect_close(
+		float(field_tap_effect.delta),
+		(BaseballGameState.FIELD_TAP_FRACTION_LIMIT - BaseballGameState.BASE_FIELD_TAP_FRACTION)
+			* (1.0 - BaseballGameState.FIELD_TAP_REMAINING_PER_RANK),
+		"A Training preview should calculate the exact next Field Tap increment"
+	)
+	var lineup_effect := delta_game.get_training_next_rank_effect("turnover")
+	_expect_close(float(lineup_effect.delta), -0.175, "A Training preview should report the exact next lineup-time reduction")
+	var offline_effect := delta_game.get_training_next_rank_effect("offline_efficiency")
+	_expect_close(float(offline_effect.delta), 0.0444, "A Training preview should report the exact next offline-XP increase")
+	delta_game.training_levels.recovery = 8
+	var stored_recovery_rank := int(delta_game.training_levels.recovery)
+	var recovery_effect := delta_game.get_training_next_rank_effect("recovery")
+	_expect_close(
+		float(recovery_effect.delta),
+		(BaseballGameState.RECOVERY_TRAINING_LIMIT - BaseballGameState.BASE_RECOVERY_RATE)
+			* pow(BaseballGameState.RECOVERY_REMAINING_PER_RANK, 8.0)
+			* (1.0 - BaseballGameState.RECOVERY_REMAINING_PER_RANK),
+		"A diminishing Training preview should calculate that specific rank rather than its eventual target"
+	)
+	_expect(int(delta_game.training_levels.recovery) == stored_recovery_rank, "Previewing a Training rank must never purchase or mutate it")
+	var frustration_effect := delta_game.get_training_next_rank_effect("frustration_training")
+	_expect_close(
+		float(frustration_effect.delta),
+		BaseballGameState.FRUSTRATION_QUALITY_PER_DOUBLING * BaseballGameState.FRUSTRATION_TRAINING_PER_RANK,
+		"Frustration Training should preview its stable per-doubling Quality increment"
+	)
+	_expect(delta_game.get_training_next_rank_effect("not_a_stat").is_empty(), "Unknown Training axes should not invent a preview")
+	delta_game.free()
+
 	var game: BaseballGameState = GameStateScript.new()
 	game.rng.seed = 7
 	var summary: Dictionary = game.simulate_offline(1800.0)

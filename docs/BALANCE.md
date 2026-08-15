@@ -1,4 +1,4 @@
-# No Hitter — v0.15.1 Balance Audit
+# No Hitter — v0.15.2 Balance Audit
 
 ## Outcome
 
