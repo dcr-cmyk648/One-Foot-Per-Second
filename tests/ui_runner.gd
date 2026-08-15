@@ -262,14 +262,16 @@ func _run() -> void:
 	_expect(not main.offline_progress_dialog.visible, "The offline-XP return popup should begin closed")
 	main._show_offline_progress({
 		"earned_xp": 12.5,
+		"mastery_gained": 2.75,
 		"offline_seconds": 3600.0,
-		"offline_xp_efficiency": 0.01,
+		"offline_reward_efficiency": 0.01,
 		"strikeouts": 3.0,
 	}, "Welcome back")
 	await process_frame
 	_expect(main.offline_progress_dialog.visible, "Returning with offline XP should open a summary popup")
 	_expect(main.offline_progress_dialog.dialog_text.contains("+12.5 XP"), "The return popup should lead with the exact XP deposited")
-	_expect(main.offline_progress_dialog.dialog_text.contains("Offline efficiency: 1%"), "The return popup should explain the multiplier used")
+	_expect(main.offline_progress_dialog.dialog_text.contains("XP & mastery efficiency: 1%"), "The return popup should explain the shared reward multiplier")
+	_expect(main.offline_progress_dialog.dialog_text.contains("Opponent mastery gained: 2.75"), "The return popup should disclose reduced offline mastery")
 	main.offline_progress_dialog.hide()
 	_expect(not main.hard_reset_dialog.visible and main.hard_reset_confirm_button.disabled, "The destructive reset window should begin closed and locked")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ toddler", "Fresh human baseball needs the toddler subtitle")

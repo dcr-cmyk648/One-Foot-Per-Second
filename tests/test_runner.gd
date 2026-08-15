@@ -562,11 +562,31 @@ func _test_field_tapping() -> void:
 	var opening_fraction := game.get_field_tap_fraction_for_duration(game.get_pitch_cooldown_seconds())
 	_expect_close(float(first_tap.get("seconds", 0.0)), game.get_pitch_cooldown_seconds() * opening_fraction, "The opening recovery tap should use the duration-scaled fraction")
 	_expect_close(game.pitch_credit, opening_fraction, "A recovery tap should add its duration-scaled release credit")
+	var second_burst_tap := game.apply_field_tap()
+	var third_burst_tap := game.apply_field_tap()
+	_expect_close(float(second_burst_tap.seconds), float(first_tap.seconds), "A tiny two-tap burst should remain inside the normal-tapping grace rate")
+	_expect(float(third_burst_tap.seconds) < float(first_tap.seconds), "Ultra-fast repeated taps should immediately begin yielding diminishing returns")
+	_expect(float(third_burst_tap.fatigue_multiplier) < 1.0, "A diminished tap should disclose its burst-fatigue multiplier")
+	game.field_tap_burst_rate = 0.0
+	game.field_tap_advanced_seconds = float(first_tap.seconds)
+	game.pitch_credit = opening_fraction
 	for _tap in 29:
+		game._decay_field_tap_fatigue(0.25)
 		game.apply_field_tap()
 	_expect_close(game.pitch_credit, BaseballGameState.FIELD_TAP_PHASE_CAP, "Tapping may provide exactly half of one timer")
 	var capped_tap := game.apply_field_tap()
 	_expect(not bool(capped_tap.get("applied", false)) and str(capped_tap.get("reason", "")) == "idle_limit", "The idle half of a timer must never be tappable")
+
+	var ordinary_rhythm: BaseballGameState = GameStateScript.new()
+	var ordinary_first := ordinary_rhythm.apply_field_tap()
+	ordinary_rhythm._decay_field_tap_fatigue(0.25)
+	var ordinary_second := ordinary_rhythm.apply_field_tap()
+	_expect_close(float(ordinary_second.seconds), float(ordinary_first.seconds), "A normal four-or-fewer-taps-per-second rhythm should remain effectively untouched")
+	var tired_rate := 24.0
+	var unmodified_fatigue := ordinary_rhythm.get_field_tap_fatigue_multiplier_for_burst_rate(tired_rate, 0)
+	var genetic_fatigue := ordinary_rhythm.get_field_tap_fatigue_multiplier_for_burst_rate(tired_rate, 10)
+	_expect(genetic_fatigue > unmodified_fatigue and genetic_fatigue < 1.0, "Later Autonomic Clicking Finger ranks should mitigate, but not erase, ultra-fast tap decay")
+	ordinary_rhythm.free()
 
 	var upgraded: BaseballGameState = GameStateScript.new()
 	upgraded.training_levels.field_hustle = 10
@@ -602,6 +622,7 @@ func _test_field_tapping() -> void:
 	_expect(field.field_tap_effects.is_empty(), "The field tap cue should retire quickly")
 
 	upgraded._clear_pitch_cycle()
+	upgraded._decay_field_tap_fatigue(1.0)
 	upgraded.batter_cooldown_remaining = 12.0
 	upgraded.batter_replacement_pending = true
 	var lineup_tap := upgraded.apply_field_tap()
@@ -618,6 +639,9 @@ func _test_field_tapping() -> void:
 	_expect_close(automatic.get_automatic_field_tap_rate(), 0.80, "All eldritch clickers should inherit the genetic click rate")
 	automatic.genetic_levels.autonomic_clicking_finger = 10
 	_expect(automatic.get_automatic_click_rate_per_clicker() > 0.20 and automatic.get_automatic_click_rate_per_clicker() < 1.0, "Repeatable click speed should grow logarithmically without exploding")
+	automatic.eldritch_levels.hands_beyond_the_mouse = 50
+	_expect(automatic.get_effective_automatic_field_tap_rate() < automatic.get_automatic_field_tap_rate(), "A wall of ultra-fast automatic clickers should share sustained tap decay")
+	_expect(automatic.get_effective_automatic_field_tap_rate() > 0.0, "Tap decay should diminish automation rather than disable it")
 	var natural_cycle := automatic.get_pitch_cooldown_seconds()
 	var automatic_cycle := automatic.get_automatic_timer_seconds(natural_cycle)
 	_expect(automatic_cycle < natural_cycle and automatic_cycle >= natural_cycle * 0.50, "Automatic clicks should accelerate timers without crossing the shared half-idle budget")
@@ -1613,8 +1637,10 @@ func _test_progression_and_purchases() -> void:
 	_expect(game.xp > 0.0, "Thirty opening minutes should produce XP")
 	_expect_close(game.get_offline_xp_efficiency(), 0.01, "Fresh offline XP should begin at one-percent efficiency")
 	_expect_close(float(summary.earned_xp), float(summary.raw_earned_xp) * 0.01, "Offline catch-up should deposit only the trained share of normal XP")
+	_expect_close(float(summary.mastery_gained), float(summary.raw_mastery_gained) * 0.01, "Offline catch-up should apply the same efficiency reduction to called-Strike mastery")
+	_expect_close(game.opponent_mastery[0], float(summary.mastery_gained), "Only reduced offline mastery should reach the active opponent")
 	_expect_close(float(summary.offline_xp_efficiency), 0.01, "Offline summaries should report the multiplier used for their award")
-	_expect(game.highest_unlocked >= 1, "Opening mastery should unlock another opponent")
+	_expect_close(float(summary.offline_reward_efficiency), 0.01, "Offline summaries should identify the shared XP-and-mastery efficiency")
 	game.xp = 10000.0
 	var initial_speed := game.get_velocity_fps()
 	_expect(game.buy_training("velocity"), "Velocity training should purchase")

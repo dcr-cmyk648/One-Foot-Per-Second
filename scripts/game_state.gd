@@ -73,6 +73,15 @@ const FIELD_TAP_PHASE_CAP := 0.50
 # four extra points asymptotically.
 const FIELD_TAP_DURATION_BONUS_LIMIT := 0.04
 const FIELD_TAP_DURATION_EXPONENT := 0.7781512503836436
+# A normal human rhythm is effectively free. Faster bursts build a quarter-second
+# moving tap rate; effectiveness then approaches a finite sustained throughput
+# instead of letting macro-speed input erase the idle game. Autonomic Clicking
+# Finger ranks raise the soft tolerance logarithmically for later automation.
+const FIELD_TAP_FATIGUE_TIME_CONSTANT_SECONDS := 0.25
+const FIELD_TAP_FATIGUE_IMPULSE_PER_TAP := 1.0 / FIELD_TAP_FATIGUE_TIME_CONSTANT_SECONDS
+const FIELD_TAP_FATIGUE_FREE_RATE := 4.0
+const FIELD_TAP_FATIGUE_BASE_TOLERANCE := 8.0
+const FIELD_TAP_FATIGUE_TOLERANCE_LOG_BONUS := 0.50
 const AUTO_CLICK_RATE_PER_LOG2_RANK := 0.20
 const AUTO_CLICK_PROCESS_LIMIT := 256
 # Every completed plate appearance has a believable lineup-change baseline.
@@ -314,6 +323,7 @@ var foreground_timer_serial := 0
 var field_tap_phase_key := ""
 var field_tap_phase_original_seconds := 0.0
 var field_tap_advanced_seconds := 0.0
+var field_tap_burst_rate := 0.0
 var automatic_field_tap_credit := 0.0
 var simulation_accumulator := 0.0
 var last_batch: Dictionary = {}
@@ -856,6 +866,7 @@ func reset_fresh() -> void:
 	_reset_auto_training_stats()
 	_reset_auto_catalog_settings()
 	automation_accumulator = 0.0
+	field_tap_burst_rate = 0.0
 	automatic_field_tap_credit = 0.0
 	_reset_mastery()
 
@@ -898,6 +909,53 @@ func get_field_tap_fraction_for_duration(timer_seconds: float) -> float:
 func get_field_tap_phase_cap() -> float:
 	return FIELD_TAP_PHASE_CAP
 
+func get_field_tap_fatigue_tolerance_for_rank(rank: int) -> float:
+	rank = maxi(rank, 0)
+	return FIELD_TAP_FATIGUE_BASE_TOLERANCE * (
+		1.0
+		+ FIELD_TAP_FATIGUE_TOLERANCE_LOG_BONUS
+		* log(float(rank + 1)) / log(2.0)
+	)
+
+func get_field_tap_fatigue_tolerance() -> float:
+	return get_field_tap_fatigue_tolerance_for_rank(
+		int(genetic_levels.get("autonomic_clicking_finger", 0))
+	)
+
+func get_field_tap_fatigue_multiplier_for_burst_rate(
+	burst_rate: float,
+	genetic_rank := -1
+) -> float:
+	var excess_rate := maxf(burst_rate - FIELD_TAP_FATIGUE_FREE_RATE, 0.0)
+	if excess_rate <= 0.0:
+		return 1.0
+	var rank := (
+		int(genetic_levels.get("autonomic_clicking_finger", 0))
+		if genetic_rank < 0
+		else genetic_rank
+	)
+	var tolerance := maxf(get_field_tap_fatigue_tolerance_for_rank(rank), 0.000001)
+	var load := excess_rate / tolerance
+	return 1.0 / sqrt(1.0 + load * load)
+
+func get_field_tap_fatigue_multiplier() -> float:
+	return get_field_tap_fatigue_multiplier_for_burst_rate(field_tap_burst_rate)
+
+func _decay_field_tap_fatigue(elapsed: float) -> void:
+	if field_tap_burst_rate <= 0.0 or elapsed <= 0.0:
+		return
+	field_tap_burst_rate *= exp(
+		-maxf(elapsed, 0.0) / FIELD_TAP_FATIGUE_TIME_CONSTANT_SECONDS
+	)
+	if field_tap_burst_rate < 0.000001:
+		field_tap_burst_rate = 0.0
+
+func _record_field_tap_fatigue() -> void:
+	field_tap_burst_rate = minf(
+		MAX_NUMBER,
+		field_tap_burst_rate + FIELD_TAP_FATIGUE_IMPULSE_PER_TAP
+	)
+
 func get_automatic_click_rate_per_clicker_for_rank(rank: int) -> float:
 	rank = maxi(rank, 0)
 	if rank <= 0:
@@ -917,9 +975,28 @@ func get_automatic_clicker_count() -> int:
 func get_automatic_field_tap_rate() -> float:
 	return get_automatic_click_rate_per_clicker() * float(get_automatic_clicker_count())
 
+func get_automatic_field_tap_fatigue_multiplier() -> float:
+	var click_rate := get_automatic_field_tap_rate()
+	if click_rate <= 0.0:
+		return 1.0
+	var decay_exponent := 1.0 / (
+		click_rate * FIELD_TAP_FATIGUE_TIME_CONSTANT_SECONDS
+	)
+	var steady_burst_rate := 0.0
+	if decay_exponent < 0.000001:
+		steady_burst_rate = click_rate
+	elif decay_exponent < 60.0:
+		steady_burst_rate = FIELD_TAP_FATIGUE_IMPULSE_PER_TAP / (
+			exp(decay_exponent) - 1.0
+		)
+	return get_field_tap_fatigue_multiplier_for_burst_rate(steady_burst_rate)
+
+func get_effective_automatic_field_tap_rate() -> float:
+	return get_automatic_field_tap_rate() * get_automatic_field_tap_fatigue_multiplier()
+
 func get_automatic_timer_seconds(timer_seconds: float) -> float:
 	var duration := maxf(timer_seconds, 0.0)
-	var click_rate := get_automatic_field_tap_rate()
+	var click_rate := get_effective_automatic_field_tap_rate()
 	if duration <= 0.0 or click_rate <= 0.0:
 		return duration
 	var seconds_per_click := duration * get_field_tap_fraction_for_duration(duration)
@@ -960,8 +1037,10 @@ func apply_field_tap(automatic := false) -> Dictionary:
 		# Keep the immutable volley alive for one normal simulation tick so its
 		# authoritative impact event and the visual ball reach the plate together.
 		maximum_without_skipping_resolution = maxf(timer_remaining - 0.000001, 0.0)
+	var fresh_tap_fraction := get_field_tap_fraction_for_duration(original)
+	var fatigue_multiplier := get_field_tap_fatigue_multiplier()
 	var advance_seconds := minf(
-		original * get_field_tap_fraction_for_duration(original),
+		original * fresh_tap_fraction * fatigue_multiplier,
 		minf(remaining_tap_budget, maximum_without_skipping_resolution)
 	)
 	if advance_seconds <= 0.000001:
@@ -973,6 +1052,7 @@ func apply_field_tap(automatic := false) -> Dictionary:
 		}
 
 	field_tap_advanced_seconds += advance_seconds
+	_record_field_tap_fatigue()
 	match phase:
 		"flight":
 			pitch_flight_remaining = maxf(pitch_flight_remaining - advance_seconds, 0.000001)
@@ -1001,7 +1081,11 @@ func apply_field_tap(automatic := false) -> Dictionary:
 		"phase": phase,
 		"seconds": advance_seconds,
 		"fraction": advance_seconds / original,
-		"tap_fraction": get_field_tap_fraction_for_duration(original),
+		"tap_fraction": advance_seconds / original,
+		"fresh_tap_fraction": fresh_tap_fraction,
+		"fatigue_multiplier": fatigue_multiplier,
+		"burst_rate": field_tap_burst_rate,
+		"fatigue_tolerance": get_field_tap_fatigue_tolerance(),
 		"timer_seconds": original,
 		"cap": FIELD_TAP_PHASE_CAP,
 	}
@@ -1029,6 +1113,7 @@ func is_pitch_in_flight() -> bool:
 	return pending_volley_size > 0 and pitch_flight_remaining > 0.0
 
 func advance(delta: float) -> void:
+	_decay_field_tap_fatigue(maxf(delta, 0.0))
 	simulation_accumulator += maxf(delta, 0.0)
 	# Ordinary idle accounting can run at a coarse cadence, but a visible flight
 	# and batter handoff share a frame-by-frame animation clock with PitchField.
@@ -1189,6 +1274,7 @@ func simulate_offline(seconds: float) -> Dictionary:
 	last_offline_seconds = bounded_seconds
 	if bounded_seconds < 1.0:
 		return {}
+	_decay_field_tap_fatigue(bounded_seconds)
 	# The first impossible alien is a witnessed story beat. Closing or
 	# suspending the game cannot quietly reveal its escape hatch.
 	_advance_story_encounters(bounded_seconds, false)
@@ -1196,6 +1282,7 @@ func simulate_offline(seconds: float) -> Dictionary:
 	var summary := _resolve_elapsed(bounded_seconds, false, false, efficiency)
 	summary["offline_seconds"] = bounded_seconds
 	summary["offline_xp_efficiency"] = efficiency
+	summary["offline_reward_efficiency"] = efficiency
 	last_batch = summary
 	return summary
 
@@ -1206,6 +1293,7 @@ func simulate_active_time(seconds: float) -> Dictionary:
 	var bounded_seconds := clampf(seconds, 0.0, MAX_OFFLINE_SECONDS)
 	if bounded_seconds <= 0.0:
 		return {}
+	_decay_field_tap_fatigue(bounded_seconds)
 	_advance_story_encounters(bounded_seconds, true)
 	var summary := _resolve_elapsed(bounded_seconds, false, false)
 	summary["simulated_active_seconds"] = bounded_seconds
@@ -1229,6 +1317,7 @@ func _empty_resolution_summary() -> Dictionary:
 		"raw_earned_xp": 0.0,
 		"earned_xp": 0.0,
 		"base_score": 0.0,
+		"raw_mastery_gained": 0.0,
 		"mastery_gained": 0.0,
 		"visual_outcome": Content.STRIKE_INDEX,
 		"visual_strikeout": false,
@@ -1250,7 +1339,7 @@ func _resolve_elapsed(
 	seconds: float,
 	stochastic: bool,
 	should_emit: bool,
-	xp_reward_multiplier := 1.0
+	offline_reward_multiplier := 1.0
 ) -> Dictionary:
 	var summary := _empty_resolution_summary()
 	var remaining := maxf(seconds, 0.0)
@@ -1262,14 +1351,14 @@ func _resolve_elapsed(
 		if batter_cooldown_remaining <= 0.000001:
 			_complete_batter_replacement()
 		pitch_credit = 0.0
-		_apply_resolution(summary, should_emit, xp_reward_multiplier)
+		_apply_resolution(summary, should_emit, offline_reward_multiplier)
 		return summary
 	# Repeat universes remember both prestige offers. Once their exhibition
 	# batter is reached, hold the ball until the player takes the already-known
 	# reset instead of manufacturing unavoidable Grand Slams into a clean run.
 	if is_story_offer_ready() and not is_pitch_in_flight():
 		pitch_credit = 0.0
-		_apply_resolution(summary, should_emit, xp_reward_multiplier)
+		_apply_resolution(summary, should_emit, offline_reward_multiplier)
 		return summary
 	var elapsed_offset := 0.0
 	var recovery_rate := maxf(get_recovery_rate(), 0.000001)
@@ -1309,7 +1398,7 @@ func _resolve_elapsed(
 		if remaining > 0.0 and not is_pitch_in_flight() and not is_story_offer_ready():
 			pitch_credit = 0.0
 			_resolve_aggregate_time(remaining, summary, stochastic)
-		_apply_resolution(summary, should_emit, xp_reward_multiplier)
+			_apply_resolution(summary, should_emit, offline_reward_multiplier)
 		return summary
 
 	var transitions := 0
@@ -1360,7 +1449,7 @@ func _resolve_elapsed(
 	if remaining > 0.000001 and not should_emit and not is_story_offer_ready():
 		pitch_credit = 0.0
 		_resolve_aggregate_time(remaining, summary, stochastic)
-	_apply_resolution(summary, should_emit, xp_reward_multiplier)
+	_apply_resolution(summary, should_emit, offline_reward_multiplier)
 	return summary
 
 func _resolve_one_pitch(summary: Dictionary, _stochastic: bool, elapsed_offset := -1.0) -> void:
@@ -1625,7 +1714,7 @@ func _resolve_aggregate_time(seconds: float, summary: Dictionary, stochastic: bo
 	summary.strike_requirement = requirement
 	summary.ball_requirement = get_balls_required()
 
-func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multiplier := 1.0) -> void:
+func _apply_resolution(summary: Dictionary, should_emit: bool, reward_multiplier := 1.0) -> void:
 	var pitch_count := float(summary.pitches)
 	var released_count := float(summary.get("released_pitches", 0.0))
 	var strikeouts := float(summary.strikeouts)
@@ -1651,13 +1740,15 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, xp_reward_multipl
 		get_strikeout_base_points(reward_opponent)
 		/ float(maxi(get_strikes_required(reward_opponent), 1))
 	)
-	var mastery_gained := minf(
+	var raw_mastery_gained := minf(
 		called_strikes * mastery_per_strike * get_mastery_multiplier(),
 		MAX_NUMBER
 	)
+	var mastery_gained := minf(raw_mastery_gained * maxf(reward_multiplier, 0.0), MAX_NUMBER)
 	var raw_earned_xp := minf(base_score * get_xp_multiplier(reward_opponent, reward_distance), MAX_NUMBER)
-	var earned_xp := minf(raw_earned_xp * maxf(xp_reward_multiplier, 0.0), MAX_NUMBER)
+	var earned_xp := minf(raw_earned_xp * maxf(reward_multiplier, 0.0), MAX_NUMBER)
 	summary.base_score = base_score
+	summary.raw_mastery_gained = raw_mastery_gained
 	summary.mastery_gained = mastery_gained
 	summary.raw_earned_xp = raw_earned_xp
 	summary.earned_xp = earned_xp
@@ -4214,6 +4305,7 @@ func _reset_body_progress() -> void:
 	loot_roll_cooldown_remaining = 0.0
 	consecutive_home_runs = 0
 	simulation_accumulator = 0.0
+	field_tap_burst_rate = 0.0
 	automatic_field_tap_credit = 0.0
 	cosmos_conquered = false
 	auto_advance_enabled = auto_advance_enabled and has_auto_advance_capacity()
@@ -4588,6 +4680,9 @@ func to_save_data() -> Dictionary:
 
 func apply_save_data(data: Dictionary) -> void:
 	var saved_version := int(data.get("version", 0))
+	# Tap fatigue is deliberately a brief input condition, not permanent progress.
+	# Loading or importing a run always begins with rested fingers.
+	field_tap_burst_rate = 0.0
 	xp = clampf(float(data.get("xp", 0.0)), 0.0, MAX_NUMBER)
 	run_xp = clampf(float(data.get("run_xp", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_xp = clampf(float(data.get("lifetime_xp", xp)), 0.0, MAX_NUMBER)

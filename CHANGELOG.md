@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.2 — The finger developed a union
+
+- Added short-burst tap fatigue. Ordinary tapping at roughly four taps per second or less stays at full strength, while ultra-fast manual or automatic bursts receive smooth diminishing returns instead of scaling directly with input spam.
+- Made fatigue recover on a quarter-second moving curve and kept every tap's on-field percentage honest. The shared 50% per-phase idle floor still applies after the new reduction.
+- Expanded repeatable **Autonomic Clicking Finger** ranks to improve rapid-tap tolerance as well as click speed. The sustained auto-click estimate, foreground auto-taps, Status readout, Help, and offline cycle solver now use the same fatigue rules.
+- Applied the player's 1%–75% offline-efficiency multiplier to called-Strike opponent mastery as well as strikeout XP. Return summaries now show the reduced mastery deposit and the shared multiplier.
+- Kept save schema 23. Tap fatigue is a brief input condition rather than saved progression, so loading or importing always begins rested and every existing save remains compatible.
+
 ## 0.16.1 — The body learned to negotiate
 
 - Replaced Speed Training's hard `BODY LIMIT REACHED` stop with an unlimited asymptotic curve. Raw gains remain familiar through 85% of the current body limit, then each finite rank closes a smaller share of the remaining gap while the card continues to show its exact effective gain.

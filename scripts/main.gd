@@ -1110,6 +1110,9 @@ func _apply_browser_offline_catchup(seconds: float) -> void:
 
 func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
 	var loot_note := ""
+	var mastery_note := "%s mastery." % BaseballGameState.format_number(
+		float(summary.get("mastery_gained", 0.0))
+	)
 	if int(summary.get("loot_found", 0)) > 0:
 		loot_note = " Locker parcels: %d found, %d kept, %d cleared by slot limits." % [
 			int(summary.get("loot_found", 0)),
@@ -1120,12 +1123,13 @@ func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
 		if scrap_gained > 0.0:
 			loot_note += " Scrap recovered: %s." % BaseballGameState.format_number(scrap_gained, 0)
 	_log_event(
-		"%s — %s produced %s pitches and %s XP.%s"
+		"%s — %s produced %s pitches, %s XP, and %s%s"
 		% [
 			prefix,
 			BaseballGameState.format_duration(float(summary.get("offline_seconds", 0.0))),
 			BaseballGameState.format_number(float(summary.get("pitches", 0.0))),
 			BaseballGameState.format_number(float(summary.get("earned_xp", 0.0))),
+			mastery_note,
 			loot_note,
 		]
 	)
@@ -1133,7 +1137,8 @@ func _log_offline_summary(summary: Dictionary, prefix: String) -> void:
 
 func _show_offline_progress(summary: Dictionary, prefix: String) -> void:
 	var earned_xp := float(summary.get("earned_xp", 0.0))
-	if earned_xp <= 0.0 or offline_progress_dialog == null:
+	var mastery_gained := float(summary.get("mastery_gained", 0.0))
+	if (earned_xp <= 0.0 and mastery_gained <= 0.0) or offline_progress_dialog == null:
 		return
 	if title_screen_active:
 		pending_title_offline_summary = summary.duplicate(true)
@@ -1141,8 +1146,10 @@ func _show_offline_progress(summary: Dictionary, prefix: String) -> void:
 		return
 	var detail_lines: Array[String] = [
 		"Away for %s" % BaseballGameState.format_duration(float(summary.get("offline_seconds", 0.0))),
-		"Offline efficiency: %.0f%%" % (float(summary.get("offline_xp_efficiency", 0.0)) * 100.0),
+		"XP & mastery efficiency: %.0f%%" % (float(summary.get("offline_reward_efficiency", summary.get("offline_xp_efficiency", 0.0))) * 100.0),
 	]
+	if mastery_gained > 0.0:
+		detail_lines.append("Opponent mastery gained: %s" % BaseballGameState.format_number(mastery_gained, 3))
 	var strikeouts := float(summary.get("strikeouts", 0.0))
 	if strikeouts > 0.0:
 		detail_lines.append("Strikeouts completed: %s" % BaseballGameState.format_number(strikeouts))
@@ -1153,9 +1160,12 @@ func _show_offline_progress(summary: Dictionary, prefix: String) -> void:
 	if scrap_gained > 0.0:
 		detail_lines.append("Scrap recovered: %s" % BaseballGameState.format_number(scrap_gained, 0))
 	offline_progress_dialog.title = prefix.to_upper()
+	var award_line := "+%s XP" % BaseballGameState.format_number(earned_xp, 3)
+	if mastery_gained > 0.0:
+		award_line += "  •  +%s mastery" % BaseballGameState.format_number(mastery_gained, 3)
 	offline_progress_dialog.dialog_text = (
-		"+%s XP\n\n%s"
-		% [BaseballGameState.format_number(earned_xp, 3), "\n".join(detail_lines)]
+		"%s\n\n%s"
+		% [award_line, "\n".join(detail_lines)]
 	)
 	offline_progress_dialog.popup_centered_clamped(Vector2i(440, 270), 0.92)
 
@@ -4181,7 +4191,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		"pitch_calling": "Best-option calling bias",
 		"field_tap": "Field tap advance",
 		"automatic_taps": "Automatic field clickers",
-		"offline_xp": "Offline XP efficiency",
+		"offline_xp": "Offline reward efficiency",
 		"strikes": "Strikes per batter",
 		"balls": "Balls per walk",
 		"strikeout_odds": "Strikeout chance / at-bat",
@@ -4734,7 +4744,7 @@ func _refresh_guide_text(
 		(
 			"PITCH FLOW\n"
 			+ "• During human play, one pitch must resolve before recovery begins. The pitcher dial shows recovery; the plate dial shows the next batter.\n"
-			+ "• Tap open field to advance recovery, flight, or lineup. Long waits gain more time per tap than short waits; all tapping together can provide at most half of one timer.\n"
+			+ "• Tap open field to advance recovery, flight, or lineup. Long waits gain more time per tap. Ordinary tapping stays fresh; ultra-fast bursts briefly lose efficiency. All tapping together can provide at most half of one timer.\n"
 			+ "• Bad outcomes add Frustration: Grand Slams add most; Balls and Fouls barely add any. Its uncapped logarithmic quality bonus resets on a strikeout."
 		),
 		(
@@ -4753,7 +4763,7 @@ func _refresh_guide_text(
 		),
 		(
 			"AWAY PLAY & SAVES\n"
-			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. Your return popup shows the exact deposit.\n"
+			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. It scales both XP and called-Strike mastery; your return popup shows the exact deposit.\n"
 			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Browser installs update on their Web channel; native builds check every five minutes and offer the matching official package. Export before any update."
 		),
 		(
@@ -4767,13 +4777,13 @@ func _refresh_guide_text(
 		sections.append(
 			"TIME TRAVEL\n"
 			+ "• The portal stranger unlocks genetic rebirth. It resets XP, levels, and gear for DNA based on total body XP; mutations persist.\n"
-			+ "• Autonomic Coaching licenses Training auto-buy. Autonomic Clicking Finger adds one auto-clicker whose rate grows logarithmically without a hard rank limit. Alien counts can require more Strikes."
+			+ "• Autonomic Coaching licenses Training auto-buy. Autonomic Clicking Finger adds one auto-clicker; its speed and resistance to rapid-tap fatigue grow logarithmically without a hard rank limit. Alien counts can require more Strikes."
 		)
 	if eldritch_revealed:
 		sections.append(
 			"REALITY ASCENSION\n"
 			+ "• Abandoning a reality resets XP, levels, gear, DNA, and genetics for Arcana based on DNA earned in that reality. Eldritch upgrades persist.\n"
-			+ "• Hands From Beyond the Mouse adds repeatable clickers that inherit genetic click speed. Front Office Outside Time automates one-time catalogs; clones, portals, and time compression automate the rest of cosmic baseball."
+			+ "• Hands From Beyond the Mouse adds repeatable clickers that inherit genetic click speed and fatigue tolerance. Front Office Outside Time automates one-time catalogs; clones, portals, and time compression automate the rest of cosmic baseball."
 		)
 	if divine_revealed:
 		sections.append(
@@ -5524,7 +5534,7 @@ func _training_next_rank_summary(id: String) -> String:
 		"recovery":
 			return "%s/s Recovery" % _format_signed_training_delta(delta)
 		"offline_efficiency":
-			return "%s%% Offline XP" % _format_signed_training_delta(delta, 100.0)
+			return "%s%% Offline XP & Mastery" % _format_signed_training_delta(delta, 100.0)
 		"distance_control":
 			return "%s× Distance Threat" % _format_signed_training_delta(delta)
 		"turnover":
@@ -5765,13 +5775,20 @@ func _prestige_upgrade_description(id: String, eldritch := false) -> String:
 		var clickers := game.get_automatic_clicker_count()
 		var current_rate := game.get_automatic_click_rate_per_clicker()
 		var next_rate := game.get_automatic_click_rate_per_clicker_for_rank(rank + 1)
+		var current_tolerance := game.get_field_tap_fatigue_tolerance_for_rank(rank)
+		var next_tolerance := game.get_field_tap_fatigue_tolerance_for_rank(rank + 1)
 		if rank <= 0:
-			return "Unlock 1 clicker • %.2f clicks/s." % next_rate
-		return "%d clicker%s • %.2f/s each • next %.2f/s." % [
+			return "Unlock 1 clicker • %.2f/s • burst tolerance %.1f/s." % [
+				next_rate,
+				next_tolerance,
+			]
+		return "%d clicker%s • %.2f/s each • next %.2f/s • tolerance %.1f→%.1f/s." % [
 			clickers,
 			"" if clickers == 1 else "s",
 			current_rate,
 			next_rate,
+			current_tolerance,
+			next_tolerance,
 		]
 	if id == "hands_beyond_the_mouse":
 		var extra_clickers := int(game.eldritch_levels.get(id, 0))
@@ -6009,17 +6026,24 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	stat_labels.lineup_time.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
 	stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	stat_labels.pitch_calling.text = "×%.3f" % game.get_pitch_calling_bias()
-	stat_labels.field_tap.text = "%.1f%% short • %.1f%% at 10s • %.1f%% long limit • %.0f%% phase cap" % [
+	var live_tap_efficiency := game.get_field_tap_fatigue_multiplier()
+	stat_labels.field_tap.text = "%.1f%% short • %.1f%% at 10s • %.1f%% long limit • %.0f%% phase cap%s" % [
 		game.get_field_tap_fraction() * 100.0,
 		game.get_field_tap_fraction_for_duration(10.0) * 100.0,
 		game.get_field_tap_fraction_for_duration(1000000.0) * 100.0,
 		game.get_field_tap_phase_cap() * 100.0,
+		(
+			" • burst %.0f%%" % (live_tap_efficiency * 100.0)
+			if live_tap_efficiency < 0.9995
+			else ""
+		),
 	]
-	stat_labels.automatic_taps.text = "%d clicker%s • %.3f/s each • %.3f/s total" % [
+	stat_labels.automatic_taps.text = "%d clicker%s • %.3f/s each • %.3f/s raw • %.3f/s sustained" % [
 		game.get_automatic_clicker_count(),
 		"" if game.get_automatic_clicker_count() == 1 else "s",
 		game.get_automatic_click_rate_per_clicker(),
 		game.get_automatic_field_tap_rate(),
+		game.get_effective_automatic_field_tap_rate(),
 	]
 	stat_labels.offline_xp.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 	stat_labels.strikes.text = str(game.get_strikes_per_batter())

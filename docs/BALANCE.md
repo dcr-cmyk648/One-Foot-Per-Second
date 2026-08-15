@@ -1,4 +1,4 @@
-# No Hitter — v0.16.1 Balance Audit
+# No Hitter — v0.16.2 Balance Audit
 
 ## Outcome
 
@@ -6,12 +6,12 @@ The complete campaign is long but finite, every prestige layer changes the strat
 
 | Milestone | Approximate active-production time |
 |---|---:|
-| Human baseball cleared | 11 h |
-| Portal HELP becomes available | 11 h 5 m |
+| Human baseball cleared | 12 h 30 m |
+| Portal HELP becomes available | 12 h 35 m |
 | Complete human development | 115 mph; 0.72 recoveries/s |
-| First cosmic victory | 11 d 15 h |
+| First cosmic victory | 13 d 15 h |
 
-These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances the first witnessed alien minute. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study approaches 75% with diminishing returns.
+These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances the first witnessed alien minute. Offline strikeout XP and called-Strike mastery both begin at 1% of their open-game awards, and Scorebook Study approaches 75% with diminishing returns.
 
 Automation is purchased as bounded capacity rather than an all-or-nothing skip. Each genetic Migratory Baseball Instinct rank licenses one of the 29 human destinations; each eldritch Interstellar Road-Trip Itinerary rank licenses one of the 10 alien destinations. Autonomic Coaching buys one independently chosen repeatable-stat license per rank, while the later Front Office purchases whole one-time catalogs only when their individual switches are enabled. No automation performs a prestige reset or bypasses an unwitnessed story gate.
 
@@ -82,11 +82,11 @@ The 109 achievements are deliberately modest individually and additive rather th
 achievement XP multiplier = 1 + completed achievements × 0.01
 ```
 
-Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 109 produce `×2.09`. The multiplier applies alongside ball, opponent, prestige, level-assigned range, mastery, and equipment factors and survives every prestige reset. The no-loot runner reaches the human boundary in roughly 11 hours and first cosmic victory in 11 days 15 hours. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. **Puberty Has Entered the Bullpen** marks the Teenager body. **Wait… That’s Illegal** marks the first post-human pitch. The final No Hitter slot remains an extreme post-victory replay challenge rather than baseline progression: a God Prestige opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 109 produce `×2.09`. The multiplier applies alongside ball, opponent, prestige, level-assigned range, mastery, and equipment factors and survives every prestige reset. The dedicated first-lifetime runner reaches the human boundary in 12 hours 30 minutes, and the complete no-loot multiverse runner reaches its first cosmic victory in 13 days 15 hours. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. **Puberty Has Entered the Bullpen** marks the Teenager body. **Wait… That’s Illegal** marks the first post-human pitch. The final No Hitter slot remains an extreme post-victory replay challenge rather than baseline progression: a God Prestige opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
 
 ## Complete reset cadence
 
-The current greedy no-loot audit uses 15 genetic and eldritch resets before its first cosmic victory. The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
+The current greedy no-loot audit uses 11 genetic and eldritch resets before its first cosmic victory. The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
 
 ## Speed and rate calibration
 
@@ -130,9 +130,9 @@ Ordinary Training has one clear purchase per displayed base stat:
 
 Only Speed begins unlocked; the other 14 axes appear gradually. Every displayed base stat has one repeatable Training purchase. Distinct operations intentionally stack across systems: Training raises the additive base or approaches a transparent asymptote, while one-time Facilities and BODY choices multiply the completed stat.
 
-Active field taps begin at 1.7% on a timer of one second or less. Duration adds a saturating bonus: a fresh ten-second wait advances by exactly 0.5 seconds per tap, and even an arbitrarily long timer gains at most four additional percentage points. Repeatable Field Hustle independently raises the base toward 4%. Manual and automatic taps share a 50% budget per recovery, flight, or lineup phase; the authoritative timer and visible meter remain synchronized.
+Active field taps begin at 1.7% on a timer of one second or less. Duration adds a saturating bonus: a fresh ten-second wait advances by exactly 0.5 seconds per tap, and even an arbitrarily long timer gains at most four additional percentage points. Repeatable Field Hustle independently raises the base toward 4%. A quarter-second moving burst rate leaves roughly four taps per second or less untouched, then applies a smooth inverse-hypotenuse reduction above that grace rate. This makes very fast manual and automatic input approach finite sustained throughput instead of scaling linearly. Manual and automatic taps still share a 50% budget per recovery, flight, or lineup phase; the authoritative timer and visible meter remain synchronized.
 
-The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits the genetic rate. Aggregate/offline cycle math applies the same duration curve and 50% phase floor, so automation never eliminates the idle half even at extreme ranks.
+The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum and raises burst tolerance from the base `8/s` to `8 × (1 + 0.50 × log2(r + 1))/s`. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits both genetic values. Aggregate/offline cycle math applies the same duration curve, sustained-fatigue estimate, and 50% phase floor, so automation never eliminates the idle half even at extreme ranks.
 
 Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers; a parallel human project lane ranges from 500 XP to 3.2 trillion XP so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, Facility, and BODY each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
@@ -144,7 +144,7 @@ Human baseball is fixed at one unresolved ball. Post-human sources come from arm
 
 At readable rates, projectile creation is driven only by authoritative release events. A release snapshots pitch type, exact speed, distance, duration, color, path, and source hand. Movement and upgrades cannot mutate it. No release occurs while the plate is empty or while the previous human pitch is unresolved, and returning a batter never creates a catch-up burst.
 
-Dense and offline production use the exact count-state renewal model rather than iterating every pitch. It retains terminal-outcome mix, saved-hit volume, walks, strikeouts, downtime, mastery, and statistically equivalent loot rolls while allowing seven days of offline play to resolve quickly. The raw strikeout XP from that same solution is multiplied by the saved body's 1%–75% asymptotic offline efficiency before it reaches spendable, run, or lifetime XP; foreground pacing audits explicitly use the full-rate path.
+Dense and offline production use the exact count-state renewal model rather than iterating every pitch. It retains terminal-outcome mix, saved-hit volume, walks, strikeouts, downtime, mastery, and statistically equivalent loot rolls while allowing seven days of offline play to resolve quickly. Raw strikeout XP and raw called-Strike mastery from that same solution are multiplied by the saved body's 1%–75% asymptotic offline efficiency before they reach spendable XP or the opponent's mastery total; foreground pacing audits explicitly use the full-rate path.
 
 ## Verified failure modes
 
