@@ -144,7 +144,7 @@ func _run() -> void:
 	field_click.pressed = true
 	field_click.position = Vector2(310.0, 210.0)
 	main.pitch_field._on_field_gui_input(field_click)
-	_expect(is_equal_approx(main.game.pitch_credit, 1.0 / 60.0), "Clicking unobstructed field space should advance the opening timer by one third of its former amount")
+	_expect(is_equal_approx(main.game.pitch_credit, main.game.get_field_tap_fraction_for_duration(main.game.get_pitch_cooldown_seconds())), "Clicking unobstructed field space should use the opening timer's duration-scaled advance")
 	_expect(main.pitch_field.field_tap_effects.size() == 1, "A field click should create its local feedback ring")
 	_expect(main.game.has_achievement("first_field_tap"), "The first active field tap should unlock its achievement")
 	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast (got %s)" % main.achievement_toast_name.text)
@@ -159,8 +159,9 @@ func _run() -> void:
 	main.pitch_field.batter_phase_age = 0.0
 	main.pitch_field.batter_phase_duration = 3.0
 	main.pitch_field._on_field_gui_input(field_click)
-	_expect(is_equal_approx(main.game.batter_cooldown_remaining, 2.95), "A field click should hurry the authoritative next-batter timer")
-	_expect(is_equal_approx(main.pitch_field.batter_phase_age, 0.05), "A field click should hurry the visible next-batter meter in lockstep")
+	var expected_lineup_advance: float = 3.0 * main.game.get_field_tap_fraction_for_duration(3.0)
+	_expect(is_equal_approx(main.game.batter_cooldown_remaining, 3.0 - expected_lineup_advance), "A field click should hurry the authoritative next-batter timer")
+	_expect(is_equal_approx(main.pitch_field.batter_phase_age, expected_lineup_advance), "A field click should hurry the visible next-batter meter in lockstep")
 	main.game.batter_cooldown_remaining = 0.0
 	main.game.batter_replacement_pending = false
 	main.pitch_field.batter_phase = "active"
@@ -214,6 +215,18 @@ func _run() -> void:
 	await process_frame
 	_expect(not main.mobile_overlay_panel.visible and main.save_stack.visible, "Closing desktop SAVES should restore its header controls")
 	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.get_ok_button().text == "UPDATE", "Browser updates should require an explicit backup-aware confirmation")
+	_expect(main.native_update_confirmation != null and main.native_update_export_button.text == "EXPORT BACKUP", "Native builds should include a backup-aware update prompt")
+	_expect(main._is_newer_release("0.16.0", "0.15.9") and not main._is_newer_release("0.15.2", "0.15.2"), "Native updater version comparison should use semantic components")
+	var native_manifest := JSON.stringify({
+		"version": "999.0.0",
+		"release_page": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/tag/v999.0.0",
+		"downloads": {"macos": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v999.0.0/No%20Hitter.dmg"},
+	}).to_utf8_buffer()
+	main._on_native_update_manifest_received(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), native_manifest)
+	await process_frame
+	_expect(main.native_update_confirmation.visible and main.native_update_confirmation.dialog_text.contains("remain in place"), "A newer native release should explain save preservation before download")
+	_expect(main.native_update_download_url.begins_with("https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/"), "The native updater should select only an official platform download")
+	main.native_update_confirmation.hide()
 	_expect(main._browser_save_has_more_progress({"lifetime_pitches": 100.0}, {"lifetime_pitches": 1.0}), "Browser recovery should recognize a demonstrably more advanced mirror")
 	var normal_elapsed: Dictionary = main._split_browser_elapsed(0.20, 0.20)
 	_expect(is_equal_approx(float(normal_elapsed.live), 0.20) and is_zero_approx(float(normal_elapsed.offline)), "Normal browser frames should remain live simulation time")

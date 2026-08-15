@@ -129,11 +129,11 @@ func _max_ordinary_build(game: BaseballGameState, maximum_level: int) -> void:
 
 func _max_genetics(game: BaseballGameState) -> void:
 	for definition in Content.GENETIC_UPGRADES:
-		game.genetic_levels[definition.id] = int(definition.max_level)
+		game.genetic_levels[definition.id] = int(definition.get("max_level", 6))
 
 func _max_eldritch(game: BaseballGameState) -> void:
 	for definition in Content.ELDRITCH_UPGRADES:
-		game.eldritch_levels[definition.id] = int(definition.max_level)
+		game.eldritch_levels[definition.id] = int(definition.get("max_level", 6))
 
 func _audit_prestige_curves() -> void:
 	print("\n=== Prestige award breakpoints ===")

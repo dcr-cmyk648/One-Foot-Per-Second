@@ -5,13 +5,14 @@ signal batch_resolved(summary: Dictionary)
 signal progression_changed(message: String)
 signal save_status_changed(message: String)
 signal achievement_unlocked(definition: Dictionary, total_unlocked: int)
+signal automatic_field_tap_applied(result: Dictionary)
 
 const Content = preload("res://scripts/content.gd")
 const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 22
+const SAVE_VERSION := 23
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -64,6 +65,14 @@ const BASE_FIELD_TAP_FRACTION := 1.0 / 60.0
 const FIELD_TAP_FRACTION_LIMIT := 0.04
 const FIELD_TAP_REMAINING_PER_RANK := 0.92
 const FIELD_TAP_PHASE_CAP := 0.50
+# Long waits should respond more generously to active play without turning short
+# late-game cycles into click spam. This curve adds exactly 3.333 percentage
+# points at ten seconds (a fresh tap therefore advances 0.5 s), then approaches
+# four extra points asymptotically.
+const FIELD_TAP_DURATION_BONUS_LIMIT := 0.04
+const FIELD_TAP_DURATION_EXPONENT := 0.7781512503836436
+const AUTO_CLICK_RATE_PER_LOG2_RANK := 0.20
+const AUTO_CLICK_PROCESS_LIMIT := 256
 # Every completed plate appearance has a believable lineup-change baseline.
 # Contact adds the displayed delay on top; a walk uses the Single bonus.
 const BASE_BATTER_TURNOVER_SECONDS := 3.0
@@ -143,6 +152,7 @@ var lifetime_xp := 0.0
 var lifetime_pitches := 0.0
 var lifetime_field_taps := 0.0
 var lifetime_field_tap_seconds := 0.0
+var lifetime_automatic_field_taps := 0.0
 var lifetime_saved_hits := 0.0
 var lifetime_max_pitch_speed_fps := 1.0
 var lifetime_max_distance_index := 0
@@ -207,6 +217,7 @@ var genetic_levels := {
 	"autonomic_wardrobe": 0,
 	"inherited_scorebook": 0,
 	"symbiotic_wardrobe": 0,
+	"autonomic_clicking_finger": 0,
 }
 var eldritch_levels := {
 	"mirror_clones": 0,
@@ -222,6 +233,7 @@ var eldritch_levels := {
 	"clone_dress_code": 0,
 	"front_office_outside_time": 0,
 	"interstellar_itinerary": 0,
+	"hands_beyond_the_mouse": 0,
 }
 var divine_blessings: Array[String] = []
 var unlocked_pitches: Array[String] = ["dead_fish"]
@@ -299,6 +311,7 @@ var foreground_timer_serial := 0
 var field_tap_phase_key := ""
 var field_tap_phase_original_seconds := 0.0
 var field_tap_advanced_seconds := 0.0
+var automatic_field_tap_credit := 0.0
 var simulation_accumulator := 0.0
 var last_batch: Dictionary = {}
 var last_offline_seconds := 0.0
@@ -556,6 +569,7 @@ func _reset_genetic_levels() -> void:
 		"autonomic_wardrobe": 0,
 		"inherited_scorebook": 0,
 		"symbiotic_wardrobe": 0,
+		"autonomic_clicking_finger": 0,
 	}
 
 func _reset_eldritch_levels() -> void:
@@ -573,6 +587,7 @@ func _reset_eldritch_levels() -> void:
 		"clone_dress_code": 0,
 		"front_office_outside_time": 0,
 		"interstellar_itinerary": 0,
+		"hands_beyond_the_mouse": 0,
 	}
 
 func _empty_auto_training_stats() -> Dictionary:
@@ -739,6 +754,7 @@ func reset_fresh() -> void:
 	lifetime_pitches = 0.0
 	lifetime_field_taps = 0.0
 	lifetime_field_tap_seconds = 0.0
+	lifetime_automatic_field_taps = 0.0
 	lifetime_saved_hits = 0.0
 	lifetime_max_pitch_speed_fps = 1.0
 	lifetime_max_distance_index = 0
@@ -836,6 +852,7 @@ func reset_fresh() -> void:
 	_reset_auto_training_stats()
 	_reset_auto_catalog_settings()
 	automation_accumulator = 0.0
+	automatic_field_tap_credit = 0.0
 	_reset_mastery()
 
 func _clear_pitch_cycle() -> void:
@@ -865,10 +882,47 @@ func get_field_tap_fraction() -> float:
 		FIELD_TAP_FRACTION_LIMIT - BASE_FIELD_TAP_FRACTION
 	) * pow(FIELD_TAP_REMAINING_PER_RANK, float(rank))
 
+func get_field_tap_duration_bonus(timer_seconds: float) -> float:
+	var duration := maxf(timer_seconds, 1.0)
+	return FIELD_TAP_DURATION_BONUS_LIMIT * (
+		1.0 - pow(duration, -FIELD_TAP_DURATION_EXPONENT)
+	)
+
+func get_field_tap_fraction_for_duration(timer_seconds: float) -> float:
+	return get_field_tap_fraction() + get_field_tap_duration_bonus(timer_seconds)
+
 func get_field_tap_phase_cap() -> float:
 	return FIELD_TAP_PHASE_CAP
 
-func apply_field_tap() -> Dictionary:
+func get_automatic_click_rate_per_clicker_for_rank(rank: int) -> float:
+	rank = maxi(rank, 0)
+	if rank <= 0:
+		return 0.0
+	return AUTO_CLICK_RATE_PER_LOG2_RANK * log(float(rank + 1)) / log(2.0)
+
+func get_automatic_click_rate_per_clicker() -> float:
+	return get_automatic_click_rate_per_clicker_for_rank(
+		int(genetic_levels.get("autonomic_clicking_finger", 0))
+	)
+
+func get_automatic_clicker_count() -> int:
+	if int(genetic_levels.get("autonomic_clicking_finger", 0)) <= 0:
+		return 0
+	return 1 + maxi(int(eldritch_levels.get("hands_beyond_the_mouse", 0)), 0)
+
+func get_automatic_field_tap_rate() -> float:
+	return get_automatic_click_rate_per_clicker() * float(get_automatic_clicker_count())
+
+func get_automatic_timer_seconds(timer_seconds: float) -> float:
+	var duration := maxf(timer_seconds, 0.0)
+	var click_rate := get_automatic_field_tap_rate()
+	if duration <= 0.0 or click_rate <= 0.0:
+		return duration
+	var seconds_per_click := duration * get_field_tap_fraction_for_duration(duration)
+	var accelerated := duration / (1.0 + click_rate * seconds_per_click)
+	return maxf(duration * (1.0 - FIELD_TAP_PHASE_CAP), accelerated)
+
+func apply_field_tap(automatic := false) -> Dictionary:
 	var phase := ""
 	var timer_total := 0.0
 	var timer_remaining := 0.0
@@ -903,7 +957,7 @@ func apply_field_tap() -> Dictionary:
 		# authoritative impact event and the visual ball reach the plate together.
 		maximum_without_skipping_resolution = maxf(timer_remaining - 0.000001, 0.0)
 	var advance_seconds := minf(
-		original * get_field_tap_fraction(),
+		original * get_field_tap_fraction_for_duration(original),
 		minf(remaining_tap_budget, maximum_without_skipping_resolution)
 	)
 	if advance_seconds <= 0.000001:
@@ -927,20 +981,45 @@ func apply_field_tap() -> Dictionary:
 				pitch_credit + advance_seconds * maxf(get_recovery_rate(), 0.000001),
 				1.0
 			)
-	lifetime_field_taps = minf(MAX_NUMBER, lifetime_field_taps + 1.0)
+	if automatic:
+		lifetime_automatic_field_taps = minf(MAX_NUMBER, lifetime_automatic_field_taps + 1.0)
+	else:
+		lifetime_field_taps = minf(MAX_NUMBER, lifetime_field_taps + 1.0)
 	lifetime_field_tap_seconds = minf(
 		MAX_NUMBER,
 		lifetime_field_tap_seconds + advance_seconds
 	)
-	check_achievements()
+	if not automatic:
+		check_achievements()
 	return {
 		"applied": true,
+		"automatic": automatic,
 		"phase": phase,
 		"seconds": advance_seconds,
 		"fraction": advance_seconds / original,
-		"tap_fraction": get_field_tap_fraction(),
+		"tap_fraction": get_field_tap_fraction_for_duration(original),
+		"timer_seconds": original,
 		"cap": FIELD_TAP_PHASE_CAP,
 	}
+
+func _run_automatic_field_taps(elapsed: float) -> void:
+	var click_rate := get_automatic_field_tap_rate()
+	if click_rate <= 0.0:
+		automatic_field_tap_credit = 0.0
+		return
+	automatic_field_tap_credit += maxf(elapsed, 0.0) * click_rate
+	var clicks_due := mini(int(floor(automatic_field_tap_credit)), AUTO_CLICK_PROCESS_LIMIT)
+	if clicks_due <= 0:
+		return
+	# Scheduled clicks are consumed even when this phase has reached its shared
+	# 50% input budget. They never bank up into an instant burst on the next ball.
+	automatic_field_tap_credit -= float(clicks_due)
+	if automatic_field_tap_credit >= 1.0:
+		automatic_field_tap_credit = fmod(automatic_field_tap_credit, 1.0)
+	for _click in clicks_due:
+		var result := apply_field_tap(true)
+		if bool(result.get("applied", false)):
+			automatic_field_tap_applied.emit(result)
 
 func is_pitch_in_flight() -> bool:
 	return pending_volley_size > 0 and pitch_flight_remaining > 0.0
@@ -962,6 +1041,7 @@ func advance(delta: float) -> void:
 	var elapsed := simulation_accumulator
 	simulation_accumulator = 0.0
 	_advance_story_encounters(elapsed, true)
+	_run_automatic_field_taps(elapsed)
 	_resolve_elapsed(elapsed, true, true)
 	_run_automation(elapsed)
 
@@ -1189,7 +1269,10 @@ func _resolve_elapsed(
 		return summary
 	var elapsed_offset := 0.0
 	var recovery_rate := maxf(get_recovery_rate(), 0.000001)
-	var active_cycle_seconds := 1.0 / recovery_rate + get_resolved_flight_seconds()
+	var active_cycle_seconds := (
+		get_automatic_timer_seconds(1.0 / recovery_rate)
+		+ get_automatic_timer_seconds(get_resolved_flight_seconds())
+	)
 	var use_aggregate := (
 		not should_emit
 		and remaining / maxf(active_cycle_seconds, 0.000001) > OFFLINE_AGGREGATE_CYCLE_THRESHOLD
@@ -2666,8 +2749,14 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 	for outcome in terminal_probabilities.size():
 		if outcome == Content.FOUL_INDEX:
 			continue
-		expected_downtime += float(terminal_probabilities[outcome]) * get_batter_downtime(outcome)
-	var active_volley_seconds := get_pitch_cooldown_seconds() + get_resolved_flight_seconds()
+		expected_downtime += (
+			float(terminal_probabilities[outcome])
+			* get_automatic_timer_seconds(get_batter_downtime(outcome))
+		)
+	var active_volley_seconds := (
+		get_automatic_timer_seconds(get_pitch_cooldown_seconds())
+		+ get_automatic_timer_seconds(get_resolved_flight_seconds())
+	)
 	var cycle_seconds := active_volleys * active_volley_seconds + expected_downtime
 	return {
 		"probabilities": probabilities,
@@ -3920,16 +4009,22 @@ func get_genetic_cost(id: String) -> int:
 	if definition.is_empty():
 		return 2147483647
 	var rank := int(genetic_levels.get(id, 0))
-	if rank >= int(definition.max_level):
+	if definition.has("max_level") and rank >= int(definition.max_level):
 		return 2147483647
-	return maxi(int(round(float(definition.base_cost) * pow(float(definition.growth), rank))), 1)
+	var raw_cost := float(definition.base_cost) * pow(float(definition.growth), rank)
+	if not is_finite(raw_cost) or raw_cost >= 2147483647.0:
+		return 2147483647
+	return maxi(int(round(raw_cost)), 1)
 
 func can_buy_genetic(id: String) -> bool:
 	var definition := Content.genetic_by_id(id)
 	return (
 		genetic_offer_unlocked
 		and not definition.is_empty()
-		and int(genetic_levels.get(id, 0)) < int(definition.max_level)
+		and (
+			not definition.has("max_level")
+			or int(genetic_levels.get(id, 0)) < int(definition.max_level)
+		)
 		and dna >= get_genetic_cost(id)
 	)
 
@@ -3950,16 +4045,22 @@ func get_eldritch_cost(id: String) -> int:
 	if definition.is_empty():
 		return 2147483647
 	var rank := int(eldritch_levels.get(id, 0))
-	if rank >= int(definition.max_level):
+	if definition.has("max_level") and rank >= int(definition.max_level):
 		return 2147483647
-	return maxi(int(round(float(definition.base_cost) * pow(float(definition.growth), rank))), 1)
+	var raw_cost := float(definition.base_cost) * pow(float(definition.growth), rank)
+	if not is_finite(raw_cost) or raw_cost >= 2147483647.0:
+		return 2147483647
+	return maxi(int(round(raw_cost)), 1)
 
 func can_buy_eldritch(id: String) -> bool:
 	var definition := Content.eldritch_by_id(id)
 	return (
 		eldritch_offer_unlocked
 		and not definition.is_empty()
-		and int(eldritch_levels.get(id, 0)) < int(definition.max_level)
+		and (
+			not definition.has("max_level")
+			or int(eldritch_levels.get(id, 0)) < int(definition.max_level)
+		)
 		and arcana >= get_eldritch_cost(id)
 	)
 
@@ -4095,6 +4196,7 @@ func _reset_body_progress() -> void:
 	loot_roll_cooldown_remaining = 0.0
 	consecutive_home_runs = 0
 	simulation_accumulator = 0.0
+	automatic_field_tap_credit = 0.0
 	cosmos_conquered = false
 	auto_advance_enabled = auto_advance_enabled and has_auto_advance_capacity()
 	auto_farm_enabled = auto_farm_enabled and has_genetic_upgrade("predator_scouting")
@@ -4389,6 +4491,7 @@ func to_save_data() -> Dictionary:
 		"lifetime_pitches": lifetime_pitches,
 		"lifetime_field_taps": lifetime_field_taps,
 		"lifetime_field_tap_seconds": lifetime_field_tap_seconds,
+		"lifetime_automatic_field_taps": lifetime_automatic_field_taps,
 		"lifetime_saved_hits": lifetime_saved_hits,
 		"lifetime_max_pitch_speed_fps": lifetime_max_pitch_speed_fps,
 		"lifetime_max_distance_index": lifetime_max_distance_index,
@@ -4473,6 +4576,7 @@ func apply_save_data(data: Dictionary) -> void:
 	lifetime_pitches = clampf(float(data.get("lifetime_pitches", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_field_taps = clampf(float(data.get("lifetime_field_taps", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_field_tap_seconds = clampf(float(data.get("lifetime_field_tap_seconds", 0.0)), 0.0, MAX_NUMBER)
+	lifetime_automatic_field_taps = clampf(float(data.get("lifetime_automatic_field_taps", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_saved_hits = clampf(float(data.get("lifetime_saved_hits", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_max_pitch_speed_fps = clampf(float(data.get("lifetime_max_pitch_speed_fps", 1.0)), 1.0, MAX_NUMBER)
 	lifetime_max_distance_index = clampi(int(data.get("lifetime_max_distance_index", 0)), 0, Content.DISTANCE_TIERS.size() - 1)
@@ -4611,12 +4715,18 @@ func apply_save_data(data: Dictionary) -> void:
 	var saved_genetic: Dictionary = data.get("genetic_levels", {})
 	for id in genetic_levels.keys():
 		var definition := Content.genetic_by_id(str(id))
-		genetic_levels[id] = clampi(int(saved_genetic.get(id, 0)), 0, int(definition.max_level))
+		var genetic_saved_rank := maxi(int(saved_genetic.get(id, 0)), 0)
+		if definition.has("max_level"):
+			genetic_saved_rank = mini(genetic_saved_rank, int(definition.max_level))
+		genetic_levels[id] = genetic_saved_rank
 	_reset_eldritch_levels()
 	var saved_eldritch: Dictionary = data.get("eldritch_levels", {})
 	for id in eldritch_levels.keys():
 		var definition := Content.eldritch_by_id(str(id))
-		eldritch_levels[id] = clampi(int(saved_eldritch.get(id, 0)), 0, int(definition.max_level))
+		var eldritch_saved_rank := maxi(int(saved_eldritch.get(id, 0)), 0)
+		if definition.has("max_level"):
+			eldritch_saved_rank = mini(eldritch_saved_rank, int(definition.max_level))
+		eldritch_levels[id] = eldritch_saved_rank
 	if saved_version == 6:
 		genetic_levels.compressed_strike_genome = clampi(int(saved_genetic.get("expanded_strike_genome", 0)), 0, 3)
 		eldritch_levels.portal_outfield = clampi(int(saved_eldritch.get("impossible_count", 0)), 0, 4)

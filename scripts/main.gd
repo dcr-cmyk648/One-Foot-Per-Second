@@ -18,6 +18,10 @@ const WEB_UPDATE_CHECK_INTERVAL := 300.0
 const WEB_UPDATE_SNOOZE_SECONDS := 600.0
 const WEB_UPDATE_SAVE_FLUSH_SECONDS := 1.50
 const WEB_UPDATE_RELOAD_WATCHDOG_SECONDS := 6.0
+const NATIVE_UPDATE_MANIFEST_URL := "https://dcr-cmyk648.github.io/One-Foot-Per-Second/update-manifest.json"
+const NATIVE_UPDATE_CHECK_INTERVAL := 300.0
+const NATIVE_UPDATE_INITIAL_DELAY := 3.0
+const OFFICIAL_RELEASE_URL_PREFIX := "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/"
 const BROWSER_SAVE_MIRROR_KEY := "no_hitter_portable_save_mirror_v1"
 const BROWSER_SAVE_ROLLBACK_KEY := "no_hitter_portable_save_rollback_v1"
 const BROWSER_MANUAL_SAVE_SLOT_COUNT := 3
@@ -177,6 +181,12 @@ var mobile_inspection_dialog: AcceptDialog
 var offline_progress_dialog: AcceptDialog
 var browser_update_confirmation: ConfirmationDialog
 var browser_update_export_button: Button
+var native_update_confirmation: ConfirmationDialog
+var native_update_export_button: Button
+var native_update_request: HTTPRequest
+var native_update_check_elapsed := NATIVE_UPDATE_CHECK_INTERVAL - NATIVE_UPDATE_INITIAL_DELAY
+var native_update_notified_version := ""
+var native_update_download_url := ""
 var alien_help_dialog: AcceptDialog
 var alien_help_button: Button
 var pending_import_save: Dictionary = {}
@@ -303,6 +313,7 @@ func _ready() -> void:
 	game.progression_changed.connect(_on_progression_changed)
 	game.save_status_changed.connect(_on_save_status_changed)
 	game.achievement_unlocked.connect(_on_achievement_unlocked)
+	game.automatic_field_tap_applied.connect(_on_automatic_field_tap_applied)
 	_build_interface()
 	_configure_platform_ui()
 	var offline_summary := game.load_game()
@@ -340,6 +351,8 @@ func _process(delta: float) -> void:
 	if is_web_build:
 		_poll_browser_lifecycle(delta)
 		_update_browser_release_status(delta)
+	else:
+		_update_native_release_status(delta)
 	if is_web_build and web_backgrounded_at > 0.0:
 		web_last_wall_clock = Time.get_unix_time_from_system()
 		return
@@ -771,6 +784,100 @@ func _update_browser_release_status(delta: float) -> void:
 		update_banner.visible = true
 		update_banner.move_to_front()
 
+func _update_native_release_status(delta: float) -> void:
+	if development_session or native_update_request == null:
+		return
+	native_update_check_elapsed += maxf(delta, 0.0)
+	if native_update_check_elapsed < NATIVE_UPDATE_CHECK_INTERVAL:
+		return
+	if native_update_request.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	native_update_check_elapsed = 0.0
+	var cache_buster := int(Time.get_unix_time_from_system() / NATIVE_UPDATE_CHECK_INTERVAL)
+	var error := native_update_request.request(
+		"%s?check=%d" % [NATIVE_UPDATE_MANIFEST_URL, cache_buster],
+		PackedStringArray(["Cache-Control: no-cache"])
+	)
+	if error != OK:
+		# Network absence is normal for an installed idle game. Retry quietly on the
+		# next interval without blocking play or showing an error dialog.
+		native_update_check_elapsed = NATIVE_UPDATE_CHECK_INTERVAL - 60.0
+
+func _version_components(version: String) -> Array[int]:
+	var normalized := version.strip_edges().trim_prefix("v").get_slice("-", 0)
+	var pieces := normalized.split(".")
+	var result: Array[int] = [0, 0, 0]
+	for index in mini(pieces.size(), result.size()):
+		result[index] = int(pieces[index])
+	return result
+
+func _is_newer_release(candidate: String, current: String) -> bool:
+	var candidate_parts := _version_components(candidate)
+	var current_parts := _version_components(current)
+	for index in candidate_parts.size():
+		if candidate_parts[index] != current_parts[index]:
+			return candidate_parts[index] > current_parts[index]
+	return false
+
+func _native_update_download_key() -> String:
+	var architecture := Engine.get_architecture_name().to_lower()
+	match OS.get_name():
+		"macOS":
+			return "macos"
+		"Windows":
+			return "windows_arm64" if "arm" in architecture else "windows_x86_64"
+		"Linux", "FreeBSD", "NetBSD", "OpenBSD", "BSD":
+			return "linux_arm64" if "arm" in architecture or "aarch64" in architecture else "linux_x86_64"
+	return ""
+
+func _on_native_update_manifest_received(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray
+) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		return
+	var parsed = JSON.parse_string(body.get_string_from_utf8())
+	if not parsed is Dictionary:
+		return
+	var manifest: Dictionary = parsed
+	var candidate_version := str(manifest.get("version", ""))
+	var current_version := str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	if (
+		candidate_version.is_empty()
+		or candidate_version == native_update_notified_version
+		or not _is_newer_release(candidate_version, current_version)
+	):
+		return
+	var release_url := str(manifest.get("release_page", ""))
+	var downloads: Dictionary = manifest.get("downloads", {})
+	var platform_url := str(downloads.get(_native_update_download_key(), release_url))
+	if not platform_url.begins_with(OFFICIAL_RELEASE_URL_PREFIX):
+		return
+	native_update_notified_version = candidate_version
+	native_update_download_url = platform_url
+	native_update_confirmation.title = "NO HITTER v%s IS READY" % candidate_version
+	native_update_confirmation.dialog_text = (
+		"This installed build is v%s. Download the current package now?\n\n"
+		+ "Your automatic and manual saves live outside the application and remain in place when the new build replaces it. EXPORT BACKUP is still recommended before updating."
+	) % current_version
+	native_update_confirmation.popup_centered_clamped(Vector2i(500, 250), 0.90)
+
+func _handle_native_update_custom_action(action: StringName) -> void:
+	if action != &"export_backup":
+		return
+	native_update_confirmation.hide()
+	call_deferred("_request_export_save")
+
+func _download_native_update() -> void:
+	if not native_update_download_url.begins_with(OFFICIAL_RELEASE_URL_PREFIX):
+		return
+	if game != null and not development_session and not game.save_writes_locked:
+		game.save_game()
+	OS.shell_open(native_update_download_url)
+	_log_event("Opened the official v%s update download. Your local save remains in the shared No Hitter data folder." % native_update_notified_version)
+
 func _on_browser_update_available() -> void:
 	if not is_web_build:
 		return
@@ -1096,10 +1203,12 @@ func _apply_development_arguments() -> void:
 		"frustration_training": 16,
 	}
 	for definition in Content.GENETIC_UPGRADES:
-		game.genetic_levels[definition.id] = mini(int(definition.max_level), 2) if preview == "alien" else int(definition.max_level)
+		var preview_max := int(definition.get("max_level", 6))
+		game.genetic_levels[definition.id] = mini(preview_max, 2) if preview == "alien" else preview_max
 	if preview != "alien":
 		for definition in Content.ELDRITCH_UPGRADES:
-			game.eldritch_levels[definition.id] = mini(int(definition.max_level), 3) if preview == "eldritch" else int(definition.max_level)
+			var preview_max := int(definition.get("max_level", 6))
+			game.eldritch_levels[definition.id] = mini(preview_max, 3) if preview == "eldritch" else preview_max
 	for definition in Content.PITCHES:
 		if int(definition.required_level) <= game.highest_unlocked and str(definition.id) not in game.unlocked_pitches:
 			game.unlocked_pitches.append(str(definition.id))
@@ -4066,6 +4175,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		"hit_delay": "Fair-hit delay multiplier",
 		"pitch_calling": "Best-option calling bias",
 		"field_tap": "Field tap advance",
+		"automatic_taps": "Automatic field clickers",
 		"offline_xp": "Offline XP efficiency",
 		"strikes": "Strikes per batter",
 		"balls": "Balls per walk",
@@ -4107,6 +4217,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 			"hit_delay": "hit_delay",
 			"pitch_calling": "calling",
 			"field_tap": "tap",
+			"automatic_taps": "auto_tap",
 			"offline_xp": "offline",
 		}.get(str(id), ""))
 		if not str(help_id).is_empty():
@@ -4254,6 +4365,7 @@ func _build_confirmation_dialog() -> void:
 	_build_mobile_inspection_dialog()
 	_build_offline_progress_dialog()
 	_build_browser_update_confirmation()
+	_build_native_update_confirmation()
 	_build_alien_help_dialog()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
@@ -4284,6 +4396,28 @@ func _build_browser_update_confirmation() -> void:
 	)
 	browser_update_export_button.custom_minimum_size = Vector2(60.0, 36.0)
 	add_child(browser_update_confirmation)
+
+func _build_native_update_confirmation() -> void:
+	native_update_request = HTTPRequest.new()
+	native_update_request.name = "NativeUpdateRequest"
+	native_update_request.timeout = 12.0
+	native_update_request.request_completed.connect(_on_native_update_manifest_received)
+	add_child(native_update_request)
+	native_update_confirmation = ConfirmationDialog.new()
+	native_update_confirmation.name = "NativeUpdateConfirmation"
+	native_update_confirmation.title = "UPDATE AVAILABLE"
+	native_update_confirmation.dialog_autowrap = true
+	native_update_confirmation.min_size = Vector2i(430, 230)
+	native_update_confirmation.ok_button_text = "DOWNLOAD UPDATE"
+	native_update_confirmation.cancel_button_text = "LATER"
+	native_update_confirmation.confirmed.connect(_download_native_update)
+	native_update_confirmation.custom_action.connect(_handle_native_update_custom_action)
+	native_update_export_button = native_update_confirmation.add_button(
+		"EXPORT BACKUP",
+		true,
+		"export_backup"
+	)
+	add_child(native_update_confirmation)
 
 func _build_alien_help_dialog() -> void:
 	alien_help_dialog = AcceptDialog.new()
@@ -4544,7 +4678,7 @@ func _refresh_reveal_visibility() -> void:
 	if eldritch_revealed:
 		equipment_progression_heading.text = "FACILITIES, MUTATIONS & MAGIC"
 
-	for id in ["arms", "dna", "genetic_rebirths"]:
+	for id in ["arms", "automatic_taps", "dna", "genetic_rebirths"]:
 		stat_rows[id].visible = genetic_revealed
 	for id in ["equipment_inheritance", "clones", "time", "arcana", "eldritch_ascensions"]:
 		stat_rows[id].visible = eldritch_revealed
@@ -4595,7 +4729,7 @@ func _refresh_guide_text(
 		(
 			"PITCH FLOW\n"
 			+ "• During human play, one pitch must resolve before recovery begins. The pitcher dial shows recovery; the plate dial shows the next batter.\n"
-			+ "• Tap open field to advance the active recovery, flight, or lineup timer by Field Tap %. Tapping can provide at most half of one timer.\n"
+			+ "• Tap open field to advance recovery, flight, or lineup. Long waits gain more time per tap than short waits; all tapping together can provide at most half of one timer.\n"
 			+ "• Bad outcomes add Frustration: Grand Slams add most; Balls and Fouls barely add any. Its uncapped logarithmic quality bonus resets on a strikeout."
 		),
 		(
@@ -4615,7 +4749,7 @@ func _refresh_guide_text(
 		(
 			"AWAY PLAY & SAVES\n"
 			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. Your return popup shows the exact deposit.\n"
-			+ "• Autosave runs every 10 seconds. SAVES opens the same manual slots on every platform, plus EXPORT, IMPORT, and title return. Mobile file pickers can use an enabled Drive provider. Export before browser updates."
+			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Browser installs update on their Web channel; native builds check every five minutes and offer the matching official package. Export before any update."
 		),
 		(
 			"VISUALS\n"
@@ -4628,13 +4762,13 @@ func _refresh_guide_text(
 		sections.append(
 			"TIME TRAVEL\n"
 			+ "• The portal stranger unlocks genetic rebirth. It resets XP, levels, and gear for DNA based on total body XP; mutations persist.\n"
-			+ "• Each Autonomic Coaching Lobe rank licenses one chosen Training auto-buy. Alien counts can require more Strikes; extra arms, hit protection, and count compression make those at-bats possible."
+			+ "• Autonomic Coaching licenses Training auto-buy. Autonomic Clicking Finger adds one auto-clicker whose rate grows logarithmically without a hard rank limit. Alien counts can require more Strikes."
 		)
 	if eldritch_revealed:
 		sections.append(
 			"REALITY ASCENSION\n"
 			+ "• Abandoning a reality resets XP, levels, gear, DNA, and genetics for Arcana based on DNA earned in that reality. Eldritch upgrades persist.\n"
-			+ "• Front Office Outside Time can automate one-time catalogs. Clones, portals, time compression, and wardrobe preservation turn later campaigns into multi-ball baseball."
+			+ "• Hands From Beyond the Mouse adds repeatable clickers that inherit genetic click speed. Front Office Outside Time automates one-time catalogs; clones, portals, and time compression automate the rest of cosmic baseball."
 		)
 	if divine_revealed:
 		sections.append(
@@ -5026,7 +5160,10 @@ func _refresh_effective_stat_labels(labels: Dictionary, speed_fps: float) -> voi
 	labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	labels.calling.text = "×%.2f" % game.get_pitch_calling_bias()
 	labels.distance.text = "×%.3f" % game.get_distance_penalty_multiplier()
-	labels.tap.text = "%.1f%%" % (game.get_field_tap_fraction() * 100.0)
+	labels.tap.text = "%.1f–%.1f%%" % [
+		game.get_field_tap_fraction() * 100.0,
+		game.get_field_tap_fraction_for_duration(1000000.0) * 100.0,
+	]
 	labels.offline.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 	if labels.has("payload"):
 		labels.payload.text = "×%s" % BaseballGameState.format_number(game.get_pitch_potency(), 2)
@@ -5133,7 +5270,7 @@ func _get_owned_upgrade_entries() -> Array[Dictionary]:
 				entries.append({
 					"kind": "MUTATION R%d" % rank,
 					"name": str(definition.name),
-					"detail": str(definition.description),
+					"detail": _prestige_upgrade_description(str(definition.id)),
 				})
 	if _has_eldritch_reveal():
 		for definition_value in Content.ELDRITCH_UPGRADES:
@@ -5143,7 +5280,7 @@ func _get_owned_upgrade_entries() -> Array[Dictionary]:
 				entries.append({
 					"kind": "MAGIC R%d" % rank,
 					"name": str(definition.name),
-					"detail": str(definition.description),
+					"detail": _prestige_upgrade_description(str(definition.id), true),
 				})
 	if _has_divine_reveal():
 		for id_value in game.divine_blessings:
@@ -5382,7 +5519,7 @@ func _training_next_rank_summary(id: String) -> String:
 		"command":
 			return "%s Quality" % _format_signed_training_delta(delta)
 		"field_hustle":
-			return "%s%% Field Tap" % _format_signed_training_delta(delta, 100.0)
+			return "%s%% Base Field Tap" % _format_signed_training_delta(delta, 100.0)
 		"recovery":
 			return "%s/s Recovery" % _format_signed_training_delta(delta)
 		"offline_efficiency":
@@ -5629,6 +5766,29 @@ func _refresh_purchase_buttons() -> void:
 			var enabled := game.auto_advance_enabled if str(id) == "advance" else game.auto_farm_enabled
 			toggle.set_pressed_no_signal(enabled)
 
+func _prestige_upgrade_description(id: String, eldritch := false) -> String:
+	if id == "autonomic_clicking_finger":
+		var rank := int(game.genetic_levels.get(id, 0))
+		var clickers := game.get_automatic_clicker_count()
+		var current_rate := game.get_automatic_click_rate_per_clicker()
+		var next_rate := game.get_automatic_click_rate_per_clicker_for_rank(rank + 1)
+		if rank <= 0:
+			return "Unlock 1 clicker • %.2f clicks/s." % next_rate
+		return "%d clicker%s • %.2f/s each • next %.2f/s." % [
+			clickers,
+			"" if clickers == 1 else "s",
+			current_rate,
+			next_rate,
+		]
+	if id == "hands_beyond_the_mouse":
+		var extra_clickers := int(game.eldritch_levels.get(id, 0))
+		return "%d extra clicker%s • next rank +1." % [
+			extra_clickers,
+			"" if extra_clickers == 1 else "s",
+		]
+	var definition := Content.eldritch_by_id(id) if eldritch else Content.genetic_by_id(id)
+	return str(definition.get("description", ""))
+
 func _refresh_rebirth_buttons() -> void:
 	var story := "%s. Growing up is optional; every ordinary age remains within human limits." % game.get_body_growth_name()
 	if game.cosmos_conquered:
@@ -5755,12 +5915,13 @@ func _refresh_rebirth_buttons() -> void:
 		var id := str(definition.id)
 		var rank := int(game.genetic_levels[id])
 		var entry: Dictionary = genetic_buttons[id]
+		var description := _prestige_upgrade_description(id)
 		if not game.genetic_offer_unlocked:
-			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, str(definition.description), "LOCKED")
-		elif rank >= int(definition.max_level):
-			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description], true, str(definition.description), "MAXED")
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, description], true, description, "LOCKED")
+		elif definition.has("max_level") and rank >= int(definition.max_level):
+			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), description], true, description, "MAXED")
 		else:
-			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d DNA\n%s" % [definition.name, rank, game.get_genetic_cost(id), definition.description], not game.can_buy_genetic(id), str(definition.description), "%d DNA" % game.get_genetic_cost(id))
+			_set_upgrade_row(entry, "%s  •  RANK %d\n%s" % [definition.name, rank, description], not game.can_buy_genetic(id), "%s\n\n%s" % [description, str(definition.description)], "%d DNA" % game.get_genetic_cost(id))
 
 	var potential_arcana := game.get_potential_arcana()
 	if not game.eldritch_offer_unlocked:
@@ -5780,12 +5941,13 @@ func _refresh_rebirth_buttons() -> void:
 		var id := str(definition.id)
 		var rank := int(game.eldritch_levels[id])
 		var entry: Dictionary = eldritch_buttons[id]
+		var description := _prestige_upgrade_description(id, true)
 		if not game.eldritch_offer_unlocked:
-			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, str(definition.description), "LOCKED")
-		elif rank >= int(definition.max_level):
-			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), definition.description], true, str(definition.description), "MAXED")
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, description], true, description, "LOCKED")
+		elif definition.has("max_level") and rank >= int(definition.max_level):
+			_set_upgrade_row(entry, "%s  •  RANK %d / %d\n%s" % [definition.name, rank, int(definition.max_level), description], true, description, "MAXED")
 		else:
-			_set_upgrade_row(entry, "%s  •  RANK %d  •  %d ARCANA\n%s" % [definition.name, rank, game.get_eldritch_cost(id), definition.description], not game.can_buy_eldritch(id), str(definition.description), "%d ARCANA" % game.get_eldritch_cost(id))
+			_set_upgrade_row(entry, "%s  •  RANK %d\n%s" % [definition.name, rank, description], not game.can_buy_eldritch(id), "%s\n\n%s" % [description, str(definition.description)], "%d ARCANA" % game.get_eldritch_cost(id))
 
 	for definition in Content.DIVINE_BLESSINGS:
 		var id := str(definition.id)
@@ -5842,9 +6004,17 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	stat_labels.lineup_time.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
 	stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	stat_labels.pitch_calling.text = "×%.3f" % game.get_pitch_calling_bias()
-	stat_labels.field_tap.text = "%.1f%% per tap • %.0f%% maximum contribution per timer" % [
+	stat_labels.field_tap.text = "%.1f%% short • %.1f%% at 10s • %.1f%% long limit • %.0f%% phase cap" % [
 		game.get_field_tap_fraction() * 100.0,
+		game.get_field_tap_fraction_for_duration(10.0) * 100.0,
+		game.get_field_tap_fraction_for_duration(1000000.0) * 100.0,
 		game.get_field_tap_phase_cap() * 100.0,
+	]
+	stat_labels.automatic_taps.text = "%d clicker%s • %.3f/s each • %.3f/s total" % [
+		game.get_automatic_clicker_count(),
+		"" if game.get_automatic_clicker_count() == 1 else "s",
+		game.get_automatic_click_rate_per_clicker(),
+		game.get_automatic_field_tap_rate(),
 	]
 	stat_labels.offline_xp.text = "%.0f%%" % (game.get_offline_xp_efficiency() * 100.0)
 	stat_labels.strikes.text = str(game.get_strikes_per_batter())
@@ -5996,6 +6166,14 @@ func _on_field_tapped(field_position: Vector2) -> void:
 			float(result.get("seconds", 0.0))
 		)
 	pitch_field.show_field_tap(field_position, result)
+
+func _on_automatic_field_tap_applied(result: Dictionary) -> void:
+	if pitch_field == null or not bool(result.get("applied", false)):
+		return
+	pitch_field.apply_field_timer_advance(
+		str(result.get("phase", "")),
+		float(result.get("seconds", 0.0))
+	)
 
 func _on_progression_changed(message: String) -> void:
 	_log_event(message)

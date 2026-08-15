@@ -117,8 +117,8 @@ func _test_content() -> void:
 	_expect(Content.MILESTONES.size() == 84, "BODY-only chemistry should leave eighty-four interstitial facilities and interventions")
 	_expect(Content.DISTANCE_TIERS.size() == 13, "Expected regulation age-group mounds followed by the 3-foot-to-galaxy ladder")
 	_expect(Content.SCALE_UPGRADES.is_empty(), "Physical scale must live in prestige layers, not ordinary XP")
-	_expect(Content.GENETIC_UPGRADES.size() == 15, "Expected fifteen genetic enhancements")
-	_expect(Content.ELDRITCH_UPGRADES.size() == 13, "Expected thirteen eldritch abilities")
+	_expect(Content.GENETIC_UPGRADES.size() == 16, "Expected sixteen genetic enhancements")
+	_expect(Content.ELDRITCH_UPGRADES.size() == 14, "Expected fourteen eldritch abilities")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
 	_expect(Content.ACHIEVEMENTS.size() == 109, "The achievement catalog should retain every distinct achievement")
 	var achievement_ids := {}
@@ -552,10 +552,14 @@ func _test_live_field_contract() -> void:
 func _test_field_tapping() -> void:
 	var game: BaseballGameState = GameStateScript.new()
 	_expect_close(game.get_field_tap_fraction(), 1.0 / 60.0, "A fresh field tap should advance one third of the former five-percent value")
+	_expect_close(game.get_field_tap_fraction_for_duration(1.0), 1.0 / 60.0, "A one-second timer should retain the small base tap")
+	_expect_close(game.get_field_tap_fraction_for_duration(10.0), 0.05, "A fresh ten-second timer should advance exactly five percent")
+	_expect_close(10.0 * game.get_field_tap_fraction_for_duration(10.0), 0.50, "A fresh tap should remove half a second from a ten-second wait")
 	var first_tap := game.apply_field_tap()
 	_expect(bool(first_tap.get("applied", false)) and str(first_tap.get("phase", "")) == "recovery", "The opening field tap should advance pitch recovery")
-	_expect_close(float(first_tap.get("seconds", 0.0)), 1.0 / 15.0, "One sixtieth of the opening four-second recovery should be about 0.067 seconds")
-	_expect_close(game.pitch_credit, 1.0 / 60.0, "A recovery tap should add one sixtieth release credit")
+	var opening_fraction := game.get_field_tap_fraction_for_duration(game.get_pitch_cooldown_seconds())
+	_expect_close(float(first_tap.get("seconds", 0.0)), game.get_pitch_cooldown_seconds() * opening_fraction, "The opening recovery tap should use the duration-scaled fraction")
+	_expect_close(game.pitch_credit, opening_fraction, "A recovery tap should add its duration-scaled release credit")
 	for _tap in 29:
 		game.apply_field_tap()
 	_expect_close(game.pitch_credit, BaseballGameState.FIELD_TAP_PHASE_CAP, "Tapping may provide exactly half of one timer")
@@ -574,8 +578,9 @@ func _test_field_tapping() -> void:
 	var immutable_outcome := upgraded.pending_volley_outcome
 	var flight_before := upgraded.pitch_flight_remaining
 	var flight_tap := upgraded.apply_field_tap()
+	var flight_tap_fraction := upgraded.get_field_tap_fraction_for_duration(flight_before)
 	_expect(str(flight_tap.get("phase", "")) == "flight", "A tap during travel should advance the immutable flight clock")
-	_expect_close(upgraded.pitch_flight_remaining, flight_before * (1.0 - upgraded_tap_fraction), "An upgraded flight tap should remove its displayed fraction of the released duration")
+	_expect_close(upgraded.pitch_flight_remaining, flight_before * (1.0 - flight_tap_fraction), "An upgraded flight tap should remove its duration-scaled fraction of the released duration")
 	_expect_close(upgraded.pending_volley_speed_fps, immutable_speed, "Tapping flight time must not mutate the sampled pitch speed")
 	_expect(upgraded.pending_volley_outcome == immutable_outcome, "Tapping flight time must not reroll the hidden outcome")
 
@@ -584,7 +589,7 @@ func _test_field_tapping() -> void:
 	field.apply_field_timer_advance("flight", float(flight_tap.seconds))
 	_expect(field.stream_time > stream_before, "The visible ball should fast-forward with the authoritative flight timer")
 	field.show_field_tap(Vector2(200.0, 140.0), flight_tap)
-	var tap_percent := upgraded_tap_fraction * 100.0
+	var tap_percent := flight_tap_fraction * 100.0
 	var expected_tap_label := (
 		"+%d%%" % int(round(tap_percent))
 		if absf(tap_percent - round(tap_percent)) < 0.05
@@ -598,8 +603,23 @@ func _test_field_tapping() -> void:
 	upgraded.batter_cooldown_remaining = 12.0
 	upgraded.batter_replacement_pending = true
 	var lineup_tap := upgraded.apply_field_tap()
+	var lineup_tap_fraction := upgraded.get_field_tap_fraction_for_duration(12.0)
 	_expect(str(lineup_tap.get("phase", "")) == "lineup", "A tap at an empty plate should advance the lineup timer")
-	_expect_close(upgraded.batter_cooldown_remaining, 12.0 * (1.0 - upgraded_tap_fraction), "A lineup tap should advance the same displayed percentage as every other foreground timer")
+	_expect_close(upgraded.batter_cooldown_remaining, 12.0 * (1.0 - lineup_tap_fraction), "A lineup tap should use the same duration curve as every other foreground timer")
+
+	var automatic: BaseballGameState = GameStateScript.new()
+	automatic.genetic_levels.autonomic_clicking_finger = 1
+	_expect_close(automatic.get_automatic_click_rate_per_clicker(), 0.20, "The first genetic auto-clicker rank should click once every five seconds")
+	_expect(automatic.get_automatic_clicker_count() == 1, "Genetics should unlock exactly one automatic clicker")
+	automatic.eldritch_levels.hands_beyond_the_mouse = 3
+	_expect(automatic.get_automatic_clicker_count() == 4, "Each eldritch rank should add one more automatic clicker")
+	_expect_close(automatic.get_automatic_field_tap_rate(), 0.80, "All eldritch clickers should inherit the genetic click rate")
+	automatic.genetic_levels.autonomic_clicking_finger = 10
+	_expect(automatic.get_automatic_click_rate_per_clicker() > 0.20 and automatic.get_automatic_click_rate_per_clicker() < 1.0, "Repeatable click speed should grow logarithmically without exploding")
+	var natural_cycle := automatic.get_pitch_cooldown_seconds()
+	var automatic_cycle := automatic.get_automatic_timer_seconds(natural_cycle)
+	_expect(automatic_cycle < natural_cycle and automatic_cycle >= natural_cycle * 0.50, "Automatic clicks should accelerate timers without crossing the shared half-idle budget")
+	automatic.free()
 	field.free()
 	game.free()
 	upgraded.free()
@@ -1849,8 +1869,11 @@ func _test_save_round_trip_and_migration() -> void:
 	original.training_levels.offline_efficiency = 9
 	original.genetic_levels.compressed_strike_genome = 3
 	original.genetic_levels.prehensile_outfield = 2
+	original.genetic_levels.autonomic_clicking_finger = 27
 	original.eldritch_levels.mirror_clones = 2
 	original.eldritch_levels.portal_outfield = 3
+	original.eldritch_levels.hands_beyond_the_mouse = 13
+	original.lifetime_automatic_field_taps = 7654.0
 	original.lifetime_strikeouts = 2468.0
 	original.current_body_strikeouts = 135.0
 	original.frustration_points = 47.5
@@ -1870,6 +1893,8 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(restored.lifetime_genetic_rebirths == 8 and restored.lifetime_eldritch_ascensions == 3, "Lifetime reset stats should survive saves")
 	_expect(restored.get_strikes_per_batter() == 4, "Genetic count compression should survive saves")
 	_expect(int(restored.genetic_levels.prehensile_outfield) == 2 and int(restored.eldritch_levels.portal_outfield) == 3, "Hit-protection upgrades should survive saves")
+	_expect(int(restored.genetic_levels.autonomic_clicking_finger) == 27 and int(restored.eldritch_levels.hands_beyond_the_mouse) == 13, "Unbounded automatic-clicker ranks should survive save round-trips without clamping")
+	_expect_close(restored.lifetime_automatic_field_taps, 7654.0, "Automatic-click lifetime accounting should survive saves")
 	_expect_close(restored.lifetime_strikeouts, 2468.0, "Strikeout totals should survive saves")
 	_expect_close(restored.frustration_points, 47.5, "The active outcome-weighted Frustration score should survive saves")
 	_expect(restored.plate_strikes == 3 and restored.plate_balls == 2 and restored.batter_cooldown_remaining > 0.0, "The complete live count should survive saves")
@@ -1987,9 +2012,9 @@ func _test_cosmic_completion_and_magnitude() -> void:
 	for id in game.training_levels:
 		game.training_levels[id] = 400
 	for definition in Content.GENETIC_UPGRADES:
-		game.genetic_levels[definition.id] = int(definition.max_level)
+		game.genetic_levels[definition.id] = int(definition.get("max_level", 6))
 	for definition in Content.ELDRITCH_UPGRADES:
-		game.eldritch_levels[definition.id] = int(definition.max_level)
+		game.eldritch_levels[definition.id] = int(definition.get("max_level", 6))
 	for definition in Content.PITCHES:
 		if str(definition.id) not in game.unlocked_pitches:
 			game.unlocked_pitches.append(str(definition.id))

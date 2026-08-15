@@ -31,6 +31,8 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
+node "${OFPS_ROOT}/scripts/stamp_release_metadata.mjs" "${OFPS_ROOT}"
+
 "${OFPS_ROOT}/scripts/install_desktop_export_templates.sh"
 
 OFPS_BUILD_DIR="${OFPS_ROOT}/build"

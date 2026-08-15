@@ -63,7 +63,8 @@ node "${OFPS_ROOT}/scripts/prepare_web_pwa.mjs" "${OFPS_ROOT}" "${OFPS_WEB_BUILD
 
 for OFPS_REQUIRED_FILE in \
   index.html index.js index.pck index.wasm \
-  index.manifest.json index.192x192.png index.offline.html index.service.worker.js; do
+  index.manifest.json index.192x192.png index.offline.html index.service.worker.js \
+  update-manifest.json; do
   if [[ ! -s "${OFPS_WEB_BUILD_DIR}/${OFPS_REQUIRED_FILE}" ]]; then
     echo "Web export is incomplete: ${OFPS_REQUIRED_FILE} is missing or empty." >&2
     exit 1
@@ -74,6 +75,11 @@ if ! /usr/bin/grep -q '"index\.wasm"' "${OFPS_WEB_BUILD_DIR}/index.html" \
     || ! /usr/bin/grep -q '"executable":"index"' "${OFPS_WEB_BUILD_DIR}/index.html"; then
   echo "Web launcher does not reference the exported WebAssembly module." >&2
   exit 1
+fi
+if ! /usr/bin/grep -q "\"version\": \"${OFPS_VERSION}\"" "${OFPS_WEB_BUILD_DIR}/update-manifest.json" \
+		|| ! /usr/bin/grep -q 'github.com/dcr-cmyk648/One-Foot-Per-Second/releases' "${OFPS_WEB_BUILD_DIR}/update-manifest.json"; then
+	echo "Web export is missing current native-update metadata." >&2
+	exit 1
 fi
 if ! /usr/bin/grep -q '"serviceWorker":"index\.service\.worker\.js"' "${OFPS_WEB_BUILD_DIR}/index.html" \
 		|| ! /usr/bin/grep -q "const CACHE_VERSION = '" "${OFPS_WEB_BUILD_DIR}/index.service.worker.js" \

@@ -1,14 +1,26 @@
 {
   "game": "No Hitter",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "engine": "Godot 4.7.1",
-  "save_version": 22,
+  "save_version": 23,
+  "updates": {
+    "browser": "service-worker",
+    "native_check_minutes": 5,
+    "manifest": "https://dcr-cmyk648.github.io/One-Foot-Per-Second/update-manifest.json",
+    "save_location": "external-shared"
+  },
   "platforms": [
     {
       "id": "macos-universal",
       "os": "macOS",
-      "architectures": ["arm64", "x86_64"],
-      "minimum_os": {"arm64": "11.0", "x86_64": "10.13"},
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "minimum_os": {
+        "arm64": "11.0",
+        "x86_64": "10.13"
+      },
       "format": "dmg",
       "signed": "ad-hoc",
       "notarized": false
@@ -16,35 +28,46 @@
     {
       "id": "windows-x86_64",
       "os": "Windows",
-      "architectures": ["x86_64"],
+      "architectures": [
+        "x86_64"
+      ],
       "format": "zip",
       "signed": false
     },
     {
       "id": "windows-arm64",
       "os": "Windows",
-      "architectures": ["arm64"],
+      "architectures": [
+        "arm64"
+      ],
       "format": "zip",
       "signed": false
     },
     {
       "id": "linux-x86_64",
       "os": "Linux",
-      "architectures": ["x86_64"],
+      "architectures": [
+        "x86_64"
+      ],
       "format": "tar.gz",
       "signed": false
     },
     {
       "id": "linux-arm64",
       "os": "Linux",
-      "architectures": ["arm64"],
+      "architectures": [
+        "arm64"
+      ],
       "format": "tar.gz",
       "signed": false
     },
     {
       "id": "browser",
       "os": "Web",
-      "requirements": ["WebAssembly", "WebGL 2.0"],
+      "requirements": [
+        "WebAssembly",
+        "WebGL 2.0"
+      ],
       "threading": "single-threaded",
       "format": "static-site-zip",
       "gameplay_parity": true,

@@ -1,4 +1,4 @@
-# No Hitter — v0.15.2 Balance Audit
+# No Hitter — v0.16.0 Balance Audit
 
 ## Outcome
 
@@ -130,7 +130,9 @@ Ordinary Training has one clear purchase per displayed base stat:
 
 Only Speed begins unlocked; the other 14 axes appear gradually. Every displayed base stat has one repeatable Training purchase. Distinct operations intentionally stack across systems: Training raises the additive base or approaches a transparent asymptote, while one-time Facilities and BODY choices multiply the completed stat.
 
-Active field taps begin at 1.7% of the current foreground timer's starting duration and approach 4% through repeatable Field Hustle. The tap budget is capped at 50% per recovery, flight, or lineup phase. The next-batter handoff is accelerated in the same way as wind-up and flight, with its authoritative cooldown and visual on-deck meter kept synchronized. No amount of clicking can replace the other half of the timer, and untouched idle/offline pacing remains unchanged.
+Active field taps begin at 1.7% on a timer of one second or less. Duration adds a saturating bonus: a fresh ten-second wait advances by exactly 0.5 seconds per tap, and even an arbitrarily long timer gains at most four additional percentage points. Repeatable Field Hustle independently raises the base toward 4%. Manual and automatic taps share a 50% budget per recovery, flight, or lineup phase; the authoritative timer and visible meter remain synchronized.
+
+The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits the genetic rate. Aggregate/offline cycle math applies the same duration curve and 50% phase floor, so automation never eliminates the idle half even at extreme ranks.
 
 Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers; a parallel human project lane ranges from 500 XP to 3.2 trillion XP so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, and Facility each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 

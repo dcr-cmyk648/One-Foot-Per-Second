@@ -181,7 +181,8 @@ const STAT_HELP := {
 	"calling": "Calling biases the random arsenal toward stronger learned pitch types without removing weaker ones.",
 	"distance": "Distance control reduces the added batter threat from the range assigned to the current opponent level.",
 	"offline": "Offline efficiency is the share of normal strikeout XP deposited while the game is closed or suspended.",
-	"tap": "Tapping the open field advances the active pitch, flight, or lineup timer. Taps may supply at most half of one timer; the rest must pass normally.",
+	"tap": "Tapping the open field advances the active recovery, flight, or lineup timer. Long waits get a larger percentage than short waits, but manual and automatic taps together may supply at most half of one timer.",
+	"auto_tap": "Automatic clickers use the same duration-scaled Field Tap and share its 50% phase budget. Genetic ranks logarithmically improve speed; Eldritch ranks add clickers.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
 	"frustration": "Bad results build Frustration by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Its uncapped logarithmic quality bonus resets on a completed strikeout.",
@@ -978,8 +979,8 @@ const TRAINING := [
 		"growth": 1.62,
 		"required_level": 2,
 		"stats": ["tap"],
-		"description": "Field tap approaches 4%.",
-		"details": "Each rank removes 8% of the gap between the current Field Tap and 4%. Gains diminish forever; there is no hard rank limit.",
+		"description": "Base field tap approaches 4%.",
+		"details": "Each rank removes 8% of the gap between the short-timer Field Tap and 4%. Longer timers receive a separate duration bonus. Gains diminish forever; there is no hard rank limit.",
 	},
 	{
 		"id": "recovery",
@@ -2542,6 +2543,13 @@ const GENETIC_UPGRADES := [
 		"description": "License automatic buying for 1 chosen Training stat per rank.",
 	},
 	{
+		"id": "autonomic_clicking_finger",
+		"name": "Autonomic Clicking Finger",
+		"base_cost": 2.0,
+		"growth": 1.70,
+		"description": "One automatic field clicker; click speed grows logarithmically per rank.",
+	},
+	{
 		"id": "predator_scouting",
 		"name": "Predator Scouting Reflex",
 		"base_cost": 8.0,
@@ -2591,6 +2599,13 @@ const ELDRITCH_UPGRADES := [
 		"growth": 5.0,
 		"max_level": 3,
 		"description": "Time layers ×2; potential throwing sources ×2; batter downtime ÷2.",
+	},
+	{
+		"id": "hands_beyond_the_mouse",
+		"name": "Hands From Beyond the Mouse",
+		"base_cost": 1.0,
+		"growth": 2.25,
+		"description": "+1 automatic clicker per rank; every clicker inherits genetic click speed.",
 	},
 	{
 		"id": "non_euclidean_bullpen",

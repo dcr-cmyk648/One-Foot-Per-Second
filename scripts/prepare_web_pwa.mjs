@@ -9,6 +9,12 @@ if (!projectRootArgument || !webBuildArgument) {
 const projectRoot = resolve(projectRootArgument);
 const webBuild = resolve(webBuildArgument);
 const iconName = "index.192x192.png";
+const projectSettings = await readFile(join(projectRoot, "project.godot"), "utf8");
+const versionMatch = projectSettings.match(/^config\/version="([^"]+)"/m);
+if (!versionMatch) {
+  throw new Error("Could not read config/version from project.godot");
+}
+const version = versionMatch[1];
 await copyFile(join(projectRoot, "assets", "icon-192.png"), join(webBuild, iconName));
 
 const indexPath = join(webBuild, "index.html");
@@ -35,3 +41,25 @@ manifest.icons = (Array.isArray(manifest.icons) ? manifest.icons : [])
   .concat([{ sizes: "192x192", src: iconName, type: "image/png", purpose: "any" }])
   .sort((left, right) => Number.parseInt(left.sizes, 10) - Number.parseInt(right.sizes, 10));
 await writeFile(manifestPath, JSON.stringify(manifest));
+
+const repository = "dcr-cmyk648/One-Foot-Per-Second";
+const tag = `v${version}`;
+const assetBase = `https://github.com/${repository}/releases/download/${tag}`;
+const assetUrl = (name) => `${assetBase}/${encodeURIComponent(name)}`;
+const updateManifest = {
+  schema: 1,
+  channel: "stable",
+  version,
+  release_page: `https://github.com/${repository}/releases/tag/${tag}`,
+  downloads: {
+    macos: assetUrl(`No Hitter v${version} macOS Universal.dmg`),
+    windows_x86_64: assetUrl(`No Hitter v${version} Windows x86_64.zip`),
+    windows_arm64: assetUrl(`No Hitter v${version} Windows ARM64.zip`),
+    linux_x86_64: assetUrl(`No Hitter v${version} Linux x86_64.tar.gz`),
+    linux_arm64: assetUrl(`No Hitter v${version} Linux ARM64.tar.gz`),
+  },
+};
+await writeFile(
+  join(webBuild, "update-manifest.json"),
+  `${JSON.stringify(updateManifest, null, 2)}\n`,
+);

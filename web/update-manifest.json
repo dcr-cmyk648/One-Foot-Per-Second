@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "channel": "stable",
+  "version": "0.16.0",
+  "release_page": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/tag/v0.16.0",
+  "downloads": {
+    "macos": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.16.0/No%20Hitter%20v0.16.0%20macOS%20Universal.dmg",
+    "windows_x86_64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.16.0/No%20Hitter%20v0.16.0%20Windows%20x86_64.zip",
+    "windows_arm64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.16.0/No%20Hitter%20v0.16.0%20Windows%20ARM64.zip",
+    "linux_x86_64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.16.0/No%20Hitter%20v0.16.0%20Linux%20x86_64.tar.gz",
+    "linux_arm64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.16.0/No%20Hitter%20v0.16.0%20Linux%20ARM64.tar.gz"
+  }
+}

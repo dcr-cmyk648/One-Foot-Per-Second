@@ -1,4 +1,4 @@
-NO HITTER v0.15.1
+NO HITTER v0.16.0
 ALL-PLATFORMS RELEASE
 
 Choose the browser package or the native package matching the computer that
@@ -7,14 +7,14 @@ and the game does not install services or modify the registry.
 
 BROWSER
 
-"No Hitter v0.15.1 Browser.zip" is a static website. Upload its
+"No Hitter v0.16.0 Browser.zip" is a static website. Upload its
 contents unchanged to a static host with index.html at the web root, then share
 that URL. See WEB-README.txt in the browser package for local testing and save
 details. It cannot be run reliably by double-clicking index.html.
 
 MACOS — INTEL OR APPLE SILICON
 
-1. Open "No Hitter v0.15.1 macOS Universal.dmg".
+1. Open "No Hitter v0.16.0 macOS Universal.dmg".
 2. Drag No Hitter into Applications, or run it from the disk image.
 3. The build is ad-hoc signed but not Apple-notarized. On first launch,
    Control-click the app and choose Open. If macOS still blocks it, open
@@ -64,6 +64,19 @@ save as one_foot_per_second_save.backup.json. An unreadable or newer-schema save
 is protected from automatic overwrite until LOAD or an explicit typed RESET.
 Browser autosaves are local to that browser and site; use EXPORT before clearing
 site data, changing browsers, or changing devices.
+
+UPDATES
+
+Browser/Home Screen installs stay on the automatic Web update channel. Native
+macOS, Windows, and Linux builds check the official release manifest at startup
+and every five minutes while open. When a newer package is ready, the game offers
+EXPORT BACKUP, LATER, or a direct download for the current operating system.
+The replacement build reuses the same external save directory listed above.
+
+Native packages cannot safely replace their own running executable without
+commercial platform signing. Install the downloaded replacement over the old
+copy (or replace the portable folder); progress remains outside the app. For the
+most seamless app-like update experience, install the browser PWA instead.
 
 Offline catch-up simulates up to seven days. Strikeout XP begins at 1% of the
 open-game award and asymptotically approaches 75% with Scorebook Study. A return popup

@@ -167,7 +167,7 @@ func _run() -> void:
 		"The phone upgrade overlay should show the current effective speed"
 	)
 	_expect(main.mobile_upgrade_stat_labels.quality.text == "%.3f" % main.game.get_pitch_quality(), "The phone upgrade overlay should show current quality")
-	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7%", "The phone upgrade overlay should show the reduced current field-tap advance")
+	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7–5.7%", "The phone upgrade overlay should show both short- and long-timer field-tap limits")
 	var phone_training_row: Dictionary = main.training_buttons.velocity
 	_expect((phone_training_row.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone upgrade descriptions should remain draggable scroll regions")
 	_expect((phone_training_row.label as Label).text.contains("+0.75 ft/s Speed"), "Phone Training cards should show a succinct, exact next-rank gain")

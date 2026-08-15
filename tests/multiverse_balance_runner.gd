@@ -132,7 +132,9 @@ func _perform_story_or_strategy_reset() -> bool:
 
 func _has_unbought_genetics() -> bool:
 	for definition in Content.GENETIC_UPGRADES:
-		if int(game.genetic_levels.get(str(definition.id), 0)) < int(definition.max_level):
+		# Unbounded sinks are never a reason to reset forever before the eldritch
+		# push. This checkpoint asks only whether a finite genetic tool is missing.
+		if definition.has("max_level") and int(game.genetic_levels.get(str(definition.id), 0)) < int(definition.max_level):
 			return true
 	return false
 
@@ -140,13 +142,13 @@ func _purchase_meta_upgrades() -> void:
 	var genetic_priority := [
 		"fast_twitch_everything", "compound_pitching_eye", "ancestral_memory",
 		"extra_arms", "parallel_pitching_lobes", "compressed_strike_genome", "prehensile_outfield",
-		"elastic_ucl_colony", "ball_gland",
+		"elastic_ucl_colony", "ball_gland", "autonomic_clicking_finger",
 		"inherited_scorebook", "migratory_instinct", "autonomic_coach", "predator_scouting", "autonomic_wardrobe", "symbiotic_wardrobe",
 	]
 	var eldritch_priority := [
 		"mirror_clones", "non_euclidean_bullpen", "portal_outfield", "velocity_without_distance", "time_compression",
 		"eyes_behind_moon", "mercy_is_euclidean", "causal_seams",
-		"memory_of_flesh",
+		"memory_of_flesh", "hands_beyond_the_mouse",
 	]
 	var bought := true
 	while bought:

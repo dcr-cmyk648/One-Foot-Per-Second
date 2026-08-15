@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0 — The idle game learned to click itself
+
+- Made field input duration-aware. A fresh one-second phase still advances by 1.7%, a fresh ten-second phase advances by exactly 0.5 seconds, and the extra long-wait percentage approaches a bounded four-point bonus. Manual and automatic taps share the existing 50% budget for every recovery, flight, and lineup phase.
+- Added repeatable **Autonomic Clicking Finger** genetic ranks: the first rank creates one auto-clicker, and further ranks improve its clicks per second logarithmically without a hard rank cap. Repeatable eldritch **Hands From Beyond the Mouse** ranks add clickers that inherit that genetic speed.
+- Included automatic tapping in foreground play, estimated XP rates, active-time audits, and offline aggregate simulation while keeping manual-tap achievements manual.
+- Added a native release checker for macOS, Windows, and Linux. Installed builds check the Pages-hosted stable manifest at startup and every five minutes, recommend exporting a backup, preserve the shared external save directory, and open the exact official package for their OS and architecture.
+- Added generated release/update metadata so browser, Pages, Sites, GitHub Release downloads, package instructions, game version, and save schema remain synchronized. Save schema 23 records automatic-click lifetime accounting and preserves unbounded prestige ranks.
+
 ## 0.15.2 — Buy the number, not the horizon
 
 - Replaced every repeatable Training card's eventual “approaches” target with the calculated effect of its next rank. The short line now reports the real change to the effective stat currently shown in the interface, including active BODY, Facility, equipment, cap, and diminishing-return effects; reductions use an explicit minus sign.
