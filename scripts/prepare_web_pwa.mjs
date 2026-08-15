@@ -45,7 +45,10 @@ await writeFile(manifestPath, JSON.stringify(manifest));
 const repository = "dcr-cmyk648/One-Foot-Per-Second";
 const tag = `v${version}`;
 const assetBase = `https://github.com/${repository}/releases/download/${tag}`;
-const assetUrl = (name) => `${assetBase}/${encodeURIComponent(name)}`;
+// GitHub Release asset uploads normalize spaces in filenames to dots. Generate
+// the public name GitHub actually serves instead of a plausible-but-missing
+// percent-encoded local filename.
+const assetUrl = (name) => `${assetBase}/${encodeURIComponent(name.replaceAll(" ", "."))}`;
 const updateManifest = {
   schema: 1,
   channel: "stable",

@@ -77,7 +77,8 @@ if ! /usr/bin/grep -q '"index\.wasm"' "${OFPS_WEB_BUILD_DIR}/index.html" \
   exit 1
 fi
 if ! /usr/bin/grep -q "\"version\": \"${OFPS_VERSION}\"" "${OFPS_WEB_BUILD_DIR}/update-manifest.json" \
-		|| ! /usr/bin/grep -q 'github.com/dcr-cmyk648/One-Foot-Per-Second/releases' "${OFPS_WEB_BUILD_DIR}/update-manifest.json"; then
+		|| ! /usr/bin/grep -q 'github.com/dcr-cmyk648/One-Foot-Per-Second/releases' "${OFPS_WEB_BUILD_DIR}/update-manifest.json" \
+		|| ! /usr/bin/grep -Fq "No.Hitter.v${OFPS_VERSION}.macOS.Universal.dmg" "${OFPS_WEB_BUILD_DIR}/update-manifest.json"; then
 	echo "Web export is missing current native-update metadata." >&2
 	exit 1
 fi
