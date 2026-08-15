@@ -959,8 +959,8 @@ const TRAINING := [
 		"growth": 1.18,
 		"required_level": 0,
 		"stats": ["speed"],
-		"description": "Base speed +0.75 ft/s.",
-		"details": "Each rank adds 0.75 ft/s to base speed. Human bodies still obey the current age-and-league velocity limit; equipment may exceed it slightly.",
+		"description": "Speed approaches the current body limit.",
+		"details": "Each rank adds a raw 0.75 ft/s before BODY and Facility multipliers. Effective speed remains linear through 85% of the current body limit, then bends smoothly toward that limit without a hard final rank. Equipment may exceed it slightly.",
 	},
 	{
 		"id": "command",

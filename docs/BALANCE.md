@@ -1,4 +1,4 @@
-# No Hitter — v0.16.0 Balance Audit
+# No Hitter — v0.16.1 Balance Audit
 
 ## Outcome
 
@@ -100,7 +100,7 @@ The current greedy no-loot audit uses 15 genetic and eldritch resets before its 
 
 Human air drag is deterministic per released shell and range. Plate speed uses `v_plate=v_release×e^(−kd)` and physical travel integrates that deceleration exactly; the untouched opening Wiffle Ball uses zero drag to preserve the literal title joke. Purchased lightweight balls lose visibly more speed than regulation leather, while alien and eldritch vacuum fields use zero drag. Release speed, plate speed, drag coefficient, range, and duration are immutable once a ball leaves the hand.
 
-Speed purchases stop at the current body's cap. The ordinary button says only `Base speed +0.75 ft/s`; the cap and its spoiler-light hint appear only after the player actually reaches it and tries to buy more.
+Speed Training always retains another exponentially priced rank. Raw speed is unchanged through 85% of the current body's cap, then a continuous exponential curve approaches the cap without crossing it or switching the purchase off. The card reports the exact effective next-rank change, so BODY and Facility multipliers remain visible in the decision.
 
 ## Cost and content cadence
 
@@ -112,10 +112,10 @@ Ordinary Training has one clear purchase per displayed base stat:
 
 | Training | Unlock level | Effect per rank | Cost growth | Limit |
 |---|---:|---|---:|---:|
-| Speed Training | 1 | base speed +0.75 ft/s | ×1.18 | current body |
+| Speed Training | 1 | raw speed +0.75 ft/s; asymptotic above 85% of body limit | ×1.18 | none |
 | Command Drills | 2 | base quality +0.018 | ×1.18 | none |
 | Field Hustle | 3 | remaining gap to 4% ×0.92 | ×1.62 | none |
-| Recovery Drills | 4 | remaining gap to 0.48/s ×0.90 | ×1.42 | none |
+| Recovery Drills | 4 | remaining gap to 0.48/s ×0.90; human total soft-caps from 0.60 toward 0.72/s | ×1.42 | none |
 | Scorebook Study | 5 | remaining gap to 75% ×0.94 | ×1.55 | none |
 | Long-Toss Mechanics | 6 | remaining distance threat ×0.94 | ×1.58 | none |
 | Lineup Hustle | 8 | remaining gap to 1.25s ×0.90 | ×1.82 | none |
@@ -134,7 +134,7 @@ Active field taps begin at 1.7% on a timer of one second or less. Duration adds 
 
 The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits the genetic rate. Aggregate/offline cycle math applies the same duration curve and 50% phase floor, so automation never eliminates the idle half even at extreme ranks.
 
-Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers; a parallel human project lane ranges from 500 XP to 3.2 trillion XP so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, and Facility each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
+Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers; a parallel human project lane ranges from 500 XP to 3.2 trillion XP so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, Facility, and BODY each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
 Opponent mastery is authored as completed-count equivalents rather than one global exponential. Human targets begin at 5.6 ordinary strikeouts and rise to roughly 55 at the MLB Champion; the former curve ended above 1,200. Alien targets begin at 50 uncompressed counts and rise with their four-to-nine-Strike rules; eldritch targets rise more sharply because one clone volley can contribute many called Strikes. Every called Strike still awards one count-share immediately. Late-human threat anchors rise more aggressively, so the ladder's resistance comes from earning rare strikeouts against better batters rather than repeating an already-solved matchup. Opponent rewards grow by `×1.80` per level so each rarer completed count carries the savings value formerly spread across many routine outs. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, matchup adaptation, and the start of logarithmic farming bonuses. Auto-scout evaluates the expected XP-per-second model across unlocked opponents at their assigned ranges.
 

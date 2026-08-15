@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.1 — The body learned to negotiate
+
+- Replaced Speed Training's hard `BODY LIMIT REACHED` stop with an unlimited asymptotic curve. Raw gains remain familiar through 85% of the current body limit, then each finite rank closes a smaller share of the remaining gap while the card continues to show its exact effective gain.
+- Replaced the human Recovery hard clamp with a smooth `0.60/s`–`0.72/s` body curve, preventing strong BODY/Facility builds from turning Recovery Drills into a displayed `0/s` non-purchase.
+- Added compact normalized `1eN` formatting for nonzero values too small or large for their ordinary row, including repeatable Training deltas.
+- Added a saved Hide Purchased control to BODY. It filters completed age stages and applied physical modifiers while retaining unfinished entries and spoiler gating.
+- Let the browser header subtitle consume its available width, wrap without ellipsis, and render at a larger desktop size. Responsive desktop and phone audits cover the new header and BODY behavior.
+- Re-audited the deterministic no-loot economy: the optimal first human lifetime reaches the alien exhibition in about 12 hours 30 minutes, while the full multiverse reaches its first cosmic victory in about 13 days 15 hours. Save schema remains 23, so existing progress loads directly.
+
 ## 0.16.0 — The idle game learned to click itself
 
 - Made field input duration-aware. A fresh one-second phase still advances by 1.7%, a fresh ten-second phase advances by exactly 0.5 seconds, and the extra long-wait percentage approaches a bounded four-point bonus. Manual and automatic taps share the existing 50% budget for every recovery, flight, and lineup phase.

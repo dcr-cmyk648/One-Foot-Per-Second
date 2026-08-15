@@ -1950,6 +1950,7 @@ func _build_header(parent: Control) -> void:
 	header_row.add_theme_constant_override("separation", 20)
 	header_panel.add_child(header_row)
 	header_title_stack = VBoxContainer.new()
+	header_title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(header_title_stack)
 	header_title = Label.new()
 	header_title.text = "NO HITTER"
@@ -1959,6 +1960,8 @@ func _build_header(parent: Control) -> void:
 	header_subtitle = Label.new()
 	header_subtitle.text = "A baseball game about a regular ol’ toddler"
 	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	header_subtitle.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	header_subtitle.clip_text = false
 	header_subtitle.add_theme_font_size_override("font_size", 13)
 	header_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
 	header_title_stack.add_child(header_subtitle)
@@ -2369,14 +2372,15 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	body_container.add_theme_constant_override("separation", 0 if mobile_layout else (8 if dense_wide else 10))
 	header_row.add_theme_constant_override("separation", 7 if mobile_layout else (12 if dense_wide else 20))
 	header_title.add_theme_font_size_override("font_size", 18 if mobile_layout else (21 if dense_wide else 24))
-	header_title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL if mobile_layout else Control.SIZE_FILL
+	header_title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_title_stack.custom_minimum_size.x = 175.0 if mobile_layout else (280.0 if dense_wide else 360.0)
-	header_spacer.visible = not mobile_layout
+	header_spacer.visible = false
 	header_subtitle.visible = true
-	header_subtitle.custom_minimum_size.x = 175.0 if mobile_layout else 0.0
-	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if mobile_layout else TextServer.AUTOWRAP_OFF
-	header_subtitle.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	header_subtitle.add_theme_font_size_override("font_size", 10 if mobile_layout else (11 if dense_wide else 12))
+	header_subtitle.custom_minimum_size.x = 0.0
+	header_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	header_subtitle.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	header_subtitle.clip_text = false
+	header_subtitle.add_theme_font_size_override("font_size", 10 if mobile_layout else (13 if dense_wide else 14))
 	for index in header_metric_stacks.size():
 		header_metric_stacks[index].custom_minimum_size.x = 64.0 if mobile_layout else (84.0 if dense_wide else 108.0)
 		header_metric_headings[index].add_theme_font_size_override("font_size", 9 if mobile_layout else (10 if dense_wide else 11))
@@ -3962,6 +3966,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	body_growth_status_label.add_theme_font_size_override("font_size", 12)
 	body_growth_status_label.add_theme_color_override("font_color", COLOR_MUTED)
 	human_growth_section.add_child(body_growth_status_label)
+	_build_catalog_hide_toggle(human_growth_section, "body")
 	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
 		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
 		var entry := _upgrade_row(_definition_tooltip(definition, ["speed", "quality", "recovery"]))
@@ -5476,18 +5481,14 @@ func _refresh_power_comparison() -> void:
 
 func _format_training_delta_number(value: float) -> String:
 	var magnitude := absf(value)
-	if magnitude <= 0.000000000001:
+	if magnitude == 0.0:
 		return "0"
+	if magnitude < 0.001 or magnitude >= 1.0e15:
+		return BaseballGameState.format_scientific(magnitude, 3)
 	if magnitude >= 1000.0:
 		return BaseballGameState.format_number(magnitude, 2)
 	var decimals := 0
-	if magnitude < 0.000001:
-		return "%.2e" % magnitude
-	elif magnitude < 0.0001:
-		decimals = 6
-	elif magnitude < 0.001:
-		decimals = 5
-	elif magnitude < 0.01:
+	if magnitude < 0.01:
 		decimals = 4
 	elif magnitude < 0.1:
 		decimals = 3
@@ -5504,7 +5505,7 @@ func _format_training_delta_number(value: float) -> String:
 
 func _format_signed_training_delta(value: float, scale: float = 1.0) -> String:
 	var scaled := value * scale
-	if absf(scaled) <= 0.000000000001:
+	if scaled == 0.0:
 		return "0"
 	return "%s%s" % ["+" if scaled > 0.0 else "−", _format_training_delta_number(scaled)]
 
@@ -5558,14 +5559,6 @@ func _refresh_purchase_buttons() -> void:
 		var entry: Dictionary = training_buttons[id]
 		if game.highest_unlocked < int(definition.get("required_level", 0)):
 			_set_catalog_lock(entry, definition)
-		elif id == "velocity" and game.is_velocity_body_capped():
-			_set_upgrade_row(
-				entry,
-				"%s  •  RANK %d\nBODY LIMIT REACHED" % [definition.name, rank],
-				false,
-				str(Content.STAT_HELP.speed),
-				"DETAILS"
-			)
 		elif definition.has("max_level") and rank >= int(definition.max_level):
 			_set_upgrade_row(
 				entry,
@@ -5824,8 +5817,14 @@ func _refresh_rebirth_buttons() -> void:
 		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
 		var id := str(definition.id)
 		var entry: Dictionary = body_growth_buttons[id]
+		var growth_owned := stage_index <= game.body_growth_level
+		_set_upgrade_row_visible(entry, not (
+			growth_owned and bool(game.catalog_hide_purchased.body)
+		))
+		if not _upgrade_row_is_visible(entry):
+			continue
 		var tooltip := _definition_tooltip(definition, ["speed", "quality", "recovery"])
-		if stage_index <= game.body_growth_level:
+		if growth_owned:
 			_set_upgrade_row(
 				entry,
 				"%s\n%s" % [definition.name, definition.description],
@@ -5851,8 +5850,14 @@ func _refresh_rebirth_buttons() -> void:
 		var definition: Dictionary = definition_value
 		var id := str(definition.id)
 		var entry: Dictionary = body_modifier_buttons[id]
+		var modifier_owned := game.has_body_modifier(id)
+		_set_upgrade_row_visible(entry, not (
+			modifier_owned and bool(game.catalog_hide_purchased.body)
+		))
+		if not _upgrade_row_is_visible(entry):
+			continue
 		var tooltip := _definition_tooltip(definition)
-		if game.has_body_modifier(id):
+		if modifier_owned:
 			_set_upgrade_row(
 				entry,
 				"%s\n%s" % [definition.name, definition.description],
@@ -6216,9 +6221,6 @@ func _move_farther() -> void:
 	_refresh_interface()
 
 func _buy_training(id: String) -> void:
-	if id == "velocity" and game.is_velocity_body_capped():
-		_show_body_limit_dialog()
-		return
 	game.buy_training(id)
 	_refresh_interface()
 
@@ -6313,6 +6315,8 @@ func _toggle_automation(enabled: bool, id: String) -> void:
 func _toggle_catalog_hide_purchased(hidden: bool, catalog_id: String) -> void:
 	if game.set_catalog_hide_purchased(catalog_id, hidden):
 		_refresh_purchase_buttons()
+		if catalog_id == "body":
+			_refresh_rebirth_buttons()
 
 func _toggle_hide_achieved(hidden: bool) -> void:
 	game.achievement_hide_achieved = hidden

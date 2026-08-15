@@ -64,7 +64,7 @@ func _audit_encounter_profiles() -> void:
 	human.highest_unlocked = Content.HUMAN_FINAL_INDEX
 	human.current_opponent = Content.HUMAN_FINAL_INDEX
 	_print_profile("Human cap vs Bambino Rex", human)
-	_expect(absf(human.get_velocity_fps() - BaseballGameState.HUMAN_SPEED_CAP_FPS) < 0.01, "First human completion is not capped at 211.6 mph")
+	_expect(human.get_velocity_fps() <= BaseballGameState.HUMAN_SPEED_CAP_FPS and human.get_velocity_fps() >= BaseballGameState.HUMAN_SPEED_CAP_FPS * 0.999, "First human completion does not asymptotically enter the 115 mph trial range")
 	_expect(human.get_strikes_required() == 3, "The human final does not retain three strikes")
 
 	var alien := GameStateScript.new()

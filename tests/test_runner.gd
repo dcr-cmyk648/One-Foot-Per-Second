@@ -262,11 +262,13 @@ func _test_achievements() -> void:
 	_expect(game.has_achievement("speed_mach_12"), "A completed secret achievement should unlock")
 	_expect(game.is_achievement_information_revealed(Content.achievement_by_id("speed_mach_12")), "Completed secret achievements should reveal their details")
 	game.set_catalog_hide_purchased("pitch", true)
+	game.set_catalog_hide_purchased("body", true)
 	game.achievement_hide_achieved = true
 	var restored: BaseballGameState = GameStateScript.new()
 	restored.apply_save_data(game.to_save_data())
 	_expect(restored.unlocked_achievements == game.unlocked_achievements, "Achievements should survive save round-trips")
 	_expect(bool(restored.catalog_hide_purchased.pitch), "Per-tab purchased filters should survive save round-trips")
+	_expect(bool(restored.catalog_hide_purchased.body), "The BODY purchased filter should survive save round-trips")
 	_expect(restored.achievement_hide_achieved, "The Hide Achieved preference should survive save round-trips")
 	_expect_close(restored.lifetime_max_pitch_speed_fps, game.lifetime_max_pitch_speed_fps, "Achievement peak-speed history should survive saves")
 	game.free()
@@ -383,7 +385,7 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	game.highest_unlocked = Content.HUMAN_FINAL_INDEX
 	game.purchased_milestones = ["regulation_ball", "weighted_balls"]
 	game.purchased_body_modifiers = ["steroids"]
-	_expect_close(game.get_velocity_fps(), BaseballGameState.HUMAN_SPEED_CAP_FPS, "Unmodified biology must stop at the authored 115 mph human limit")
+	_expect(game.get_velocity_fps() <= BaseballGameState.HUMAN_SPEED_CAP_FPS and game.get_velocity_fps() >= BaseballGameState.HUMAN_SPEED_CAP_FPS * 0.999, "Trained human biology should asymptotically reach the authored 115 mph trial range")
 	game.training_levels.recovery = 10000
 	game.purchased_milestones.clear()
 	for milestone in Content.MILESTONES:
@@ -402,12 +404,12 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	game.genetic_rebirths = 1
 	game.training_levels.velocity = 1000
 	game.genetic_levels.fast_twitch_everything = 6
-	_expect_close(game.get_velocity_fps(), BaseballGameState.ALIEN_SPEED_CAP_FPS, "Genetic bodies must stop at Mach 12")
+	_expect(game.get_velocity_fps() <= BaseballGameState.ALIEN_SPEED_CAP_FPS and game.get_velocity_fps() >= BaseballGameState.ALIEN_SPEED_CAP_FPS * 0.999, "Genetic bodies should asymptotically approach Mach 12")
 	game.eldritch_offer_unlocked = true
 	game.eldritch_ascensions = 1
 	game.eldritch_levels.velocity_without_distance = 4
 	game.training_levels.velocity = 2000
-	_expect_close(game.get_velocity_fps(), BaseballGameState.SPEED_OF_LIGHT_FPS, "Eldritch pitching must stop at exactly 1c")
+	_expect(game.get_velocity_fps() <= BaseballGameState.SPEED_OF_LIGHT_FPS and game.get_velocity_fps() >= BaseballGameState.SPEED_OF_LIGHT_FPS * 0.999, "Eldritch pitching should asymptotically approach 1c closely enough for causality baseball")
 	_expect(BaseballGameState.format_speed(game.get_velocity_fps()).ends_with("c"), "Relativistic speed should use c notation")
 	game.free()
 
@@ -1050,8 +1052,8 @@ func _test_strikeout_loot_and_equipment() -> void:
 	cap_game.eldritch_levels.velocity_without_distance = 4
 	for milestone_definition in Content.MILESTONES:
 		cap_game.purchased_milestones.append(str(milestone_definition.id))
-	_expect_close(cap_game.get_body_velocity_fps(), BaseballGameState.SPEED_OF_LIGHT_FPS, "The final body should still stop at 1c")
-	_expect_close(cap_game.get_velocity_fps(), BaseballGameState.SPEED_OF_LIGHT_FPS * 1.15, "Equipment should provide a small, optional post-body-cap overage")
+	_expect(cap_game.get_body_velocity_fps() <= BaseballGameState.SPEED_OF_LIGHT_FPS and cap_game.get_body_velocity_fps() >= BaseballGameState.SPEED_OF_LIGHT_FPS * 0.999, "The final body should asymptotically approach 1c")
+	_expect_close(cap_game.get_velocity_fps(), cap_game.get_body_velocity_fps() * 1.15, "Equipment should provide a small, optional post-body-cap overage")
 	cap_game.eldritch_levels.mirror_clones = 2
 	_expect_close(cap_game.get_equipment_inheritance_factor(), 0.25, "Four unlinked pitchers should each receive one quarter of the original's gear bonus")
 	_expect_close(float(cap_game.get_equipment_bonuses().speed_bonus), 0.15 / 4.0, "Unlinked clone gear should dilute the capped bonus")
@@ -1583,6 +1585,18 @@ func _test_progression_and_purchases() -> void:
 		"A diminishing Training preview should calculate that specific rank rather than its eventual target"
 	)
 	_expect(int(delta_game.training_levels.recovery) == stored_recovery_rank, "Previewing a Training rank must never purchase or mutate it")
+	for milestone_value in Content.MILESTONES:
+		var milestone: Dictionary = milestone_value
+		if int(milestone.required_level) <= Content.HUMAN_FINAL_INDEX:
+			delta_game.purchased_milestones.append(str(milestone.id))
+	delta_game._invalidate_milestone_effect_cache()
+	delta_game.body_growth_level = Content.BODY_GROWTH_STAGES.size() - 1
+	for modifier_value in Content.BODY_MODIFIERS:
+		var modifier: Dictionary = modifier_value
+		delta_game.purchased_body_modifiers.append(str(modifier.id))
+	var body_limited_recovery_effect := delta_game.get_training_next_rank_effect("recovery")
+	_expect(delta_game.get_recovery_rate() < BaseballGameState.HUMAN_BODY_RECOVERY_LIMIT, "Finite human Recovery should approach rather than hard-hit its body ceiling")
+	_expect(float(body_limited_recovery_effect.delta) > 0.0, "Recovery Drills should never show a fake zero caused by a hard body clamp")
 	var frustration_effect := delta_game.get_training_next_rank_effect("frustration_training")
 	_expect_close(
 		float(frustration_effect.delta),
@@ -1605,6 +1619,15 @@ func _test_progression_and_purchases() -> void:
 	var initial_speed := game.get_velocity_fps()
 	_expect(game.buy_training("velocity"), "Velocity training should purchase")
 	_expect_close(game.get_velocity_fps(), initial_speed + BaseballGameState.VELOCITY_PER_RANK_FPS, "Velocity training should add 0.75 ft/s to the base")
+	var speed_curve: BaseballGameState = GameStateScript.new()
+	speed_curve.xp = BaseballGameState.MAX_NUMBER
+	speed_curve.training_levels.velocity = 30
+	var near_limit_speed := speed_curve.get_body_velocity_fps()
+	var near_limit_effect := speed_curve.get_training_next_rank_effect("velocity")
+	_expect(near_limit_speed < speed_curve.get_velocity_cap_fps(), "Finite Speed Training should approach rather than hit the current body limit")
+	_expect(float(near_limit_effect.delta) > 0.0 and float(near_limit_effect.delta) < BaseballGameState.VELOCITY_PER_RANK_FPS, "Speed Training should keep a smaller positive next rank near the body limit")
+	_expect(speed_curve.get_training_cost("velocity") < BaseballGameState.MAX_NUMBER and speed_curve.buy_training("velocity"), "Speed Training should remain purchasable near the body limit")
+	speed_curve.free()
 	_expect(BaseballGameState.format_cost(game.get_training_cost("velocity")).find(".") == -1, "Displayed costs should have no decimals")
 	_expect(BaseballGameState.format_cost(18.0) == "20", "Costs should round upward readably")
 	_expect(BaseballGameState.format_cost(240.0) == "300", "Hundreds should round to one significant digit")
@@ -1616,6 +1639,8 @@ func _test_progression_and_purchases() -> void:
 	_expect(BaseballGameState.format_xp_total(1600000.0) == "1.6M", "Million-scale XP should visibly change between adjacent whole millions")
 	_expect(BaseballGameState.format_xp_total(999500.0) == "1M", "Rounded XP suffixes should normalize at unit boundaries")
 	_expect(BaseballGameState.format_xp_total(9.95e15) == "9.95e15", "Scientific XP should retain three useful digits")
+	_expect(BaseballGameState.format_scientific(0.0000000012, 3) == "1.2e-9", "Scientific formatting should use compact classic 1eN notation without padded exponents")
+	_expect(BaseballGameState.format_number(0.0004, 2) == "4e-4", "Small nonzero values should not round down to a displayed zero")
 	_expect(game.buy_pitch("four_seam"), "The four-seam should purchase")
 	game.highest_unlocked = maxi(game.highest_unlocked, 11)
 	game.training_levels.offline_efficiency = 0
@@ -2022,7 +2047,7 @@ func _test_cosmic_completion_and_magnitude() -> void:
 		game.purchased_milestones.append(str(definition.id))
 	for definition in Content.BALL_UPGRADES:
 		game.purchased_ball_upgrades.append(str(definition.id))
-	_expect_close(game.get_velocity_fps(), BaseballGameState.SPEED_OF_LIGHT_FPS, "Final velocity should be exactly light speed")
+	_expect(game.get_velocity_fps() <= BaseballGameState.SPEED_OF_LIGHT_FPS and game.get_velocity_fps() >= BaseballGameState.SPEED_OF_LIGHT_FPS * 0.999, "Final velocity should asymptotically enter the 1c trial range")
 	_expect(not game.is_speed_gate_blocked(), "A 1c pitch should penetrate Octathulhu's causality armor")
 	var rate := game.get_pitch_rate()
 	_expect(game.get_volley_size() == 2048, "Maximum arms, clones, time layers, and capacity should produce 2,048 simultaneous balls")

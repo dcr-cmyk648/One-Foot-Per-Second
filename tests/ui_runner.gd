@@ -102,6 +102,9 @@ func _run() -> void:
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
 	_expect(main.upgrade_tabs.find_child("ACHIEVE", false, false) != null, "Achievements should have their own tab")
 	_expect(main.header_title.text == "NO HITTER", "The visible game title should use the new name")
+	_expect(main.header_title_stack.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "The browser title copy should receive unused header width")
+	_expect(main.header_subtitle.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and main.header_subtitle.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "The browser subtitle should wrap instead of truncating milestone copy")
+	_expect(main.header_subtitle.get_theme_font_size("font_size") >= 13, "The browser subtitle should remain comfortably readable")
 	_expect(main.achievement_cards.size() == Content.ACHIEVEMENTS.size(), "The achievement tab should render every catalog slot")
 	_expect(main.achievement_hide_achieved_toggle != null, "Achievements should provide their own Hide Achieved filter")
 	var first_achievement_card: Dictionary = main.achievement_cards.first_pitch
@@ -123,11 +126,24 @@ func _run() -> void:
 	main.game.unlocked_achievements.erase("first_pitch")
 	main.game.achievement_revision += 1
 	main._refresh_achievement_tab(true)
-	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Every one-time purchase catalog should have its own Hide Purchased toggle")
+	_expect(main.catalog_hide_purchased_toggles.size() == 4, "Every one-time purchase catalog should have its own Hide Purchased toggle")
 	main._toggle_catalog_hide_purchased(true, "pitch")
 	_expect(not (main.pitch_buttons.dead_fish.container as Control).visible, "Hide Purchased should remove learned pitches from only their catalog")
 	_expect((main.pitch_buttons.knuckleball.container as Control).visible, "Hide Purchased should retain locked and available pitch entries")
 	main._toggle_catalog_hide_purchased(false, "pitch")
+	main.game.body_growth_level = 1
+	main.game.purchased_body_modifiers.append("playground_conditioning")
+	main._refresh_interface()
+	main._toggle_catalog_hide_purchased(true, "body")
+	_expect(not (main.body_growth_buttons.preschooler.container as Control).visible, "BODY Hide Purchased should remove completed growth stages")
+	_expect((main.body_growth_buttons.grade_schooler.container as Control).visible, "BODY Hide Purchased should retain unfinished growth stages")
+	_expect(not (main.body_modifier_buttons.playground_conditioning.container as Control).visible, "BODY Hide Purchased should remove applied physical modifiers")
+	_expect((main.body_modifier_buttons.cardio_basics.container as Control).visible, "BODY Hide Purchased should retain unpurchased physical modifiers")
+	main._toggle_catalog_hide_purchased(false, "body")
+	_expect((main.body_growth_buttons.preschooler.container as Control).visible and (main.body_modifier_buttons.playground_conditioning.container as Control).visible, "Disabling BODY Hide Purchased should restore completed entries")
+	main.game.body_growth_level = 0
+	main.game.purchased_body_modifiers.erase("playground_conditioning")
+	main._refresh_interface()
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
 	_expect(main.field_stat_labels.size() == 7, "The live throw profile should contain only facts about the current or next pitch")
@@ -304,9 +320,10 @@ func _run() -> void:
 	var opening_training: Dictionary = main.training_buttons.velocity
 	_expect(opening_training.container is PanelContainer and not (opening_training.container is BaseButton), "Upgrade descriptions should live in passive scrollable cards")
 	_expect((opening_training.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Dragging an upgrade description should reach the ScrollContainer")
-	_expect((opening_training.container as Control).tooltip_text.contains("Each rank adds 0.75 ft/s"), "Desktop hover should expose the same unabridged Training explanation as mobile hold")
+	_expect((opening_training.container as Control).tooltip_text.contains("raw 0.75 ft/s"), "Desktop hover should expose the same unabridged Training explanation as mobile hold")
 	_expect((opening_training.label as Label).text.contains("+0.75 ft/s Speed"), "Training cards should show the exact effect of the next rank")
 	_expect((opening_training.container as Control).tooltip_text.contains("Next rank: +0.75 ft/s Speed."), "Desktop hover should include the same live next-rank calculation")
+	_expect(main._format_training_delta_number(0.00000000000012) == "1.2e-13", "Tiny nonzero Training gains should use compact scientific notation instead of displaying zero")
 	_expect(not (opening_training.label as Label).text.contains("•  1 XP"), "Training copy should not repeat a price already shown on its action button")
 	_expect((opening_training.button as Button).text.ends_with("XP") and (opening_training.button as Button).custom_minimum_size.y >= 44.0, "Each purchasable upgrade needs a separate touch-sized price control")
 	main.game.highest_unlocked = 3

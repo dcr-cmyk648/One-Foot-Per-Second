@@ -190,7 +190,7 @@ func _run() -> void:
 	main._update_upgrade_row_hold(MainScript.UPGRADE_ROW_HOLD_SECONDS + 0.01)
 	await process_frame
 	_expect(main.mobile_inspection_dialog.visible, "Holding passive phone upgrade text should open its full explanation")
-	_expect(main.mobile_inspection_dialog.dialog_text.contains("Each rank adds 0.75 ft/s"), "The phone upgrade explanation should show the unabridged effect")
+	_expect(main.mobile_inspection_dialog.dialog_text.contains("raw 0.75 ft/s"), "The phone upgrade explanation should show the unabridged effect")
 	main.mobile_inspection_dialog.hide()
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
@@ -220,7 +220,7 @@ func _run() -> void:
 	_expect(Vector2(portrait_entrance.offset).x > 0.0 and Vector2(portrait_entrance.offset).y > 0.0, "A portrait replacement should enter from the opposite lower-right side")
 	main.pitch_field.batter_phase = "active"
 	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
-	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Phone upgrade catalogs should retain every per-tab Hide Purchased control")
+	_expect(main.catalog_hide_purchased_toggles.size() == 4, "Phone upgrade catalogs should retain every per-tab Hide Purchased control")
 	for catalog_toggle in main.catalog_hide_purchased_toggles.values():
 		_expect((catalog_toggle as CheckButton).get_combined_minimum_size().y >= 44.0, "Phone Hide Purchased controls should remain touch-sized")
 	main.upgrade_tabs.current_tab = main.achievement_tab.get_index()

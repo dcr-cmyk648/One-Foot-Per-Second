@@ -41,6 +41,7 @@ const BASE_VELOCITY_FPS := 1.0
 # logarithmic quality contribution is strongest while the arm is slow, then
 # naturally gives way to Command as velocity becomes respectable.
 const VELOCITY_PER_RANK_FPS := 0.75
+const VELOCITY_SOFT_CAP_START_FRACTION := 0.85
 const QUALITY_PER_RANK := 0.018
 const BASE_RECOVERY_RATE := 0.25
 const RECOVERY_TRAINING_LIMIT := 0.48
@@ -49,6 +50,7 @@ const RECOVERY_REMAINING_PER_RANK := 0.90
 # wind-up ceiling before the small optional equipment sidegrade is applied.
 # A complete mundane build therefore still takes at least 1.39 seconds to reset.
 const HUMAN_BODY_RECOVERY_LIMIT := 0.72
+const HUMAN_RECOVERY_SOFT_CAP_START := 0.60
 const LINEUP_MIN_SECONDS := 1.25
 const LINEUP_REMAINING_PER_RANK := 0.90
 const HIT_DELAY_MIN_FACTOR := 0.35
@@ -246,6 +248,7 @@ var catalog_hide_purchased := {
 	"pitch": false,
 	"ball": false,
 	"facility": false,
+	"body": false,
 }
 var achievement_hide_achieved := false
 var milestone_effect_cache_count := -1
@@ -711,7 +714,7 @@ func get_speed_gate_status_text(opponent_index: int = current_opponent) -> Strin
 		return ""
 	match opponent_index:
 		Content.HUMAN_FINAL_INDEX:
-			return "VELOCITY TRIAL • Reach the human limit: %s mph." % format_number(HUMAN_SPEED_CAP_MPH, 0)
+			return "VELOCITY TRIAL • Approach the human limit: %s mph." % format_number(HUMAN_SPEED_CAP_MPH, 0)
 		Content.ALIEN_FINAL_INDEX:
 			return "INTERSTELLAR LICENSE • Reach Mach 3."
 		Content.FINAL_BOSS_INDEX:
@@ -812,6 +815,7 @@ func reset_fresh() -> void:
 		"pitch": false,
 		"ball": false,
 		"facility": false,
+		"body": false,
 	}
 	achievement_hide_achieved = false
 	_invalidate_milestone_effect_cache()
@@ -2985,6 +2989,15 @@ func buy_body_modifier(id: String) -> bool:
 	check_achievements()
 	return true
 
+static func _asymptotic_upper_limit(value: float, limit: float, soft_cap_start: float) -> float:
+	# Preserve the authored stat exactly below the knee, then bend smoothly into
+	# its physical ceiling. The value and first derivative are continuous at the
+	# knee, and no finite purchase is rejected as a hard maximum.
+	if value <= soft_cap_start or limit <= soft_cap_start:
+		return minf(value, limit)
+	var remaining_span := limit - soft_cap_start
+	return limit - remaining_span * exp(-(value - soft_cap_start) / remaining_span)
+
 func get_body_velocity_fps() -> float:
 	var velocity := get_trained_base_velocity_fps()
 	if has_divine_blessing("let_there_be_fastballs"):
@@ -2993,7 +3006,12 @@ func get_body_velocity_fps() -> float:
 	velocity *= get_milestone_effect_multiplier("speed")
 	velocity *= pow(1.80, int(genetic_levels.fast_twitch_everything))
 	velocity *= pow(12.0, int(eldritch_levels.velocity_without_distance))
-	return minf(velocity, get_velocity_cap_fps())
+	var body_limit := get_velocity_cap_fps()
+	return _asymptotic_upper_limit(
+		velocity,
+		body_limit,
+		body_limit * VELOCITY_SOFT_CAP_START_FRACTION
+	)
 
 func get_trained_base_velocity_fps() -> float:
 	return BASE_VELOCITY_FPS + float(maxi(int(training_levels.get("velocity", 0)), 0)) * VELOCITY_PER_RANK_FPS
@@ -3085,7 +3103,11 @@ func get_recovery_rate() -> float:
 	rate *= get_body_growth_effect_multiplier("recovery")
 	rate *= get_milestone_effect_multiplier("recovery")
 	if genetic_rebirths <= 0:
-		rate = minf(rate, HUMAN_BODY_RECOVERY_LIMIT)
+		rate = _asymptotic_upper_limit(
+			rate,
+			HUMAN_BODY_RECOVERY_LIMIT,
+			HUMAN_RECOVERY_SOFT_CAP_START
+		)
 	rate *= pow(1.18, int(genetic_levels.elastic_ucl_colony))
 	rate *= 1.0 + float(get_equipment_bonuses().rate_bonus)
 	return minf(rate, MAX_PHYSICAL_PITCH_RATE)
@@ -3770,8 +3792,6 @@ func get_training_cost(id: String) -> float:
 		return MAX_NUMBER
 	if highest_unlocked < int(definition.get("required_level", 0)):
 		return MAX_NUMBER
-	if id == "velocity" and is_velocity_body_capped():
-		return MAX_NUMBER
 	if definition.has("max_level") and int(training_levels[id]) >= int(definition.max_level):
 		return MAX_NUMBER
 	return rounded_cost(minf(
@@ -3786,8 +3806,6 @@ func buy_training(id: String) -> bool:
 	if definition.is_empty():
 		return false
 	if highest_unlocked < int(definition.get("required_level", 0)):
-		return false
-	if id == "velocity" and is_velocity_body_capped():
 		return false
 	if definition.has("max_level") and int(training_levels[id]) >= int(definition.max_level):
 		return false
@@ -5051,12 +5069,35 @@ static func format_cost(value: float) -> String:
 		exponent += 1
 	return "%de%d" % [mantissa, exponent]
 
+static func format_scientific(value: float, significant_digits: int = 3) -> String:
+	if is_nan(value):
+		return "NaN"
+	if is_inf(value) or absf(value) >= MAX_NUMBER:
+		return "-1e280+" if value < 0.0 else "1e280+"
+	if value == 0.0:
+		return "0"
+	var absolute := absf(value)
+	var exponent := int(floor(log(absolute) / log(10.0)))
+	var mantissa := absolute / pow(10.0, exponent)
+	var decimal_places := maxi(significant_digits - 1, 0)
+	var rounded_mantissa := snappedf(mantissa, pow(10.0, -decimal_places))
+	if rounded_mantissa >= 10.0:
+		rounded_mantissa /= 10.0
+		exponent += 1
+	var rendered := ("%." + str(decimal_places) + "f") % rounded_mantissa
+	while "." in rendered and rendered.ends_with("0"):
+		rendered = rendered.trim_suffix("0")
+	rendered = rendered.trim_suffix(".")
+	return "%s%se%d" % ["-" if value < 0.0 else "", rendered, exponent]
+
 static func format_number(value: float, decimals: int = 2) -> String:
 	if is_nan(value):
 		return "NaN"
 	if is_inf(value) or value >= MAX_NUMBER:
 		return "1e280+"
 	var absolute := absf(value)
+	if absolute > 0.0 and decimals > 0 and absolute < 0.5 * pow(10.0, -decimals):
+		return format_scientific(value, maxi(decimals + 1, 2))
 	if absolute < 1000.0:
 		if decimals <= 0:
 			return "%.0f" % value
@@ -5078,14 +5119,7 @@ static func format_number(value: float, decimals: int = 2) -> String:
 				suffix_index += 1
 			return "%s%.0f%s" % ["-" if value < 0.0 else "", scaled, suffixes[suffix_index]]
 		return "%s%.2f%s" % ["-" if value < 0.0 else "", scaled, suffixes[suffix_index]]
-	var exponent := int(floor(log(absolute) / log(10.0)))
-	var mantissa := absolute / pow(10.0, exponent)
-	if decimals <= 0:
-		if round(mantissa) >= 10.0:
-			mantissa /= 10.0
-			exponent += 1
-		return "%s%.0fe%d" % ["-" if value < 0.0 else "", mantissa, exponent]
-	return "%s%.3fe%d" % ["-" if value < 0.0 else "", mantissa, exponent]
+	return format_scientific(value, 1 if decimals <= 0 else 4)
 
 static func format_xp_total(value: float) -> String:
 	# Fractions matter while the first point is being earned and whole XP remains
