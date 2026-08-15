@@ -334,7 +334,13 @@ func _run() -> void:
 	var recovery_summary: String = main._training_next_rank_summary("recovery")
 	_expect((main.training_buttons.recovery.label as Label).text.contains(recovery_summary), "A diminishing Training card should recalculate the exact next-rank gain")
 	_expect(not (main.training_buttons.recovery.label as Label).text.contains("approaches"), "Visible Training cards should not substitute an eventual target for the next purchase")
+	main.game.training_levels.velocity = 100000
+	main._refresh_interface()
+	var vanishing_speed_summary: String = main._training_next_rank_summary("velocity")
+	_expect(vanishing_speed_summary.contains("e-") and not vanishing_speed_summary.begins_with("0"), "A vanishing asymptotic Speed rank should use 1eN notation instead of saying zero")
+	_expect((main.training_buttons.velocity.button as Button).tooltip_text.contains("DIMINISHING RETURN"), "A rank below ten percent of fresh efficacy should turn its price into an explicit yellow warning")
 	main.game.highest_unlocked = 0
+	main.game.training_levels.velocity = 0
 	main.game.training_levels.recovery = 0
 	main._refresh_interface()
 	_audit_upgrade_order(main)
@@ -442,26 +448,52 @@ func _run() -> void:
 
 	main.game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
 	main.game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
-	main.game.alien_exhibition_seconds = BaseballGameState.EXHIBITION_SECONDS
+	main.game.alien_arrival_seen = false
+	main.game.alien_exhibition_grand_slams = 5
 	main._refresh_interface()
 	await process_frame
 	_expect(main.header_subtitle.text == "A baseball game about a toddler who found aliens", "Alien contact should update the subtitle using the current body")
+	_expect(main.alien_arrival_dialog.visible and main.alien_arrival_dialog.dialog_text.contains("cheering aliens"), "First alien contact should introduce the teleport, crowd, and commissioner without blocking gameplay")
+	main.alien_arrival_dialog.hide()
+	_expect(main.game.alien_arrival_seen, "The alien arrival scene should be consumed before it is shown")
+	main._refresh_interface()
+	_expect(main.alien_help_progress_panel.visible and int(main.alien_help_progress_bar.value) == 5, "The field should show a five-of-twelve humiliation meter before HELP exists")
+	_expect(not main.alien_help_button.visible, "HELP should remain hidden while the humiliation meter is incomplete")
+	_expect(is_equal_approx(main.alien_help_progress_panel.offset_top, main.alien_help_button.offset_top), "The humiliation meter should occupy HELP's eventual field position")
+	main.pitch_field._trigger_result_visual({
+		"outcome": Content.GRAND_SLAM_INDEX,
+		"holds_batter": true,
+		"story_taunt": "YOU'RE PATHETIC.",
+	})
+	_expect(main.pitch_field.result_popups.size() == 2, "A scripted alien Grand Slam should display both the outcome and a separate taunt")
+	_expect(str(main.pitch_field.result_popups[1].text) == "YOU'RE PATHETIC.", "The alien's taunt should appear verbatim above the batter")
 	main._show_title_screen(false)
 	_expect(main.title_art._visible_era() == 1 and main.title_progress_label.text.contains("LEVEL 31"), "Reached alien play should update the title art without revealing later eras")
 	main._leave_title_screen(false)
+	main.game.alien_exhibition_grand_slams = BaseballGameState.ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+	main.game.alien_exhibition_seconds = BaseballGameState.EXHIBITION_SECONDS
+	main.game.run_xp = BaseballGameState.DNA_XP_THRESHOLD * 1000.0
+	main._refresh_interface()
 	_expect(main.alien_help_button.visible and main.alien_help_button.text == "HELP", "A witnessed impossible inning should quietly reveal the red HELP action")
+	_expect(not main.alien_help_progress_panel.visible, "HELP should replace—not overlap—the completed humiliation meter")
 	_expect(not main.genetic_section.visible and not main.rebirth_story_label.text.contains("genetic"), "The impossible exhibition must not spoil its solution before HELP is clicked")
+	_expect(main.era_label.text.begins_with("LEVEL 31") and not main.era_label.text.contains("/"), "Alien contact should retain the current-level-only header")
 	main._accept_alien_help()
 	await process_frame
 	_expect(main.alien_help_dialog.visible and main.alien_help_dialog.dialog_text.contains("Come with me if you want to… be really good at baseball"), "HELP should reveal the portal stranger's Time Machine scene")
-	main.alien_help_dialog.hide()
 	_expect(main.game.genetic_offer_unlocked and not main.alien_help_button.visible, "Accepting portal help should persistently reveal Time Travel and dismiss HELP")
+	main.alien_help_dialog.get_ok_button().pressed.emit()
+	await process_frame
+	_expect(main.game.lifetime_genetic_rebirths == 1 and main.game.dna == 10, "Entering the first portal should immediately perform the promised genetic rebirth")
+	_expect(main.game.current_opponent == 0 and main.game.body_growth_level == 0, "The first portal should visibly return the player to toddler baseball")
+	_expect(main.genetic_rebirth_explanation_dialog.visible and main.genetic_rebirth_explanation_dialog.dialog_text.contains("You gained 10 DNA"), "The automatic rebirth should explain the toddler reset and DNA award")
+	_expect(main.genetic_rebirth_explanation_dialog.dialog_text.contains("All prestige upgrades are retained"), "The first-rebirth explanation should state the general retention rule succinctly")
+	main.genetic_rebirth_explanation_dialog.hide()
 	_expect(main.prestige_header_stack.visible, "Genetic offer did not reveal DNA")
 	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer should remain available through BODY")
 	_expect(main.genetic_section.visible, "Genetic offer did not reveal mutations")
 	_expect(not main.eldritch_section.visible, "Genetic offer prematurely reveals eldritch upgrades")
 	_expect(not main.divine_section.visible, "Genetic offer prematurely reveals divine rewards")
-	_expect(main.era_label.text.begins_with("LEVEL 31") and not main.era_label.text.contains("/"), "Alien contact should retain the current-level-only header")
 	_expect(main.guide_label.text.contains("DNA"), "Genetic reveal did not expand the Guide")
 	_expect(not main.guide_label.text.contains("Arcana"), "Genetic Guide prematurely reveals Arcana")
 	_expect(not main.inventory_slot_buttons.relic.disabled and main.inventory_slot_buttons.relic.text == "R", "Finishing human baseball should reveal the Relic square")

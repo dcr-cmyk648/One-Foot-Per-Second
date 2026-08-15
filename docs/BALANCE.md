@@ -1,4 +1,4 @@
-# No Hitter — v0.16.2 Balance Audit
+# No Hitter — v0.16.3 Balance Audit
 
 ## Outcome
 
@@ -6,12 +6,12 @@ The complete campaign is long but finite, every prestige layer changes the strat
 
 | Milestone | Approximate active-production time |
 |---|---:|
-| Human baseball cleared | 12 h 30 m |
-| Portal HELP becomes available | 12 h 35 m |
+| Human baseball cleared | 11 h 45 m |
+| Portal HELP becomes available | about 11 h 46 m |
 | Complete human development | 115 mph; 0.72 recoveries/s |
 | First cosmic victory | 13 d 15 h |
 
-These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances the first witnessed alien minute. Offline strikeout XP and called-Strike mastery both begin at 1% of their open-game awards, and Scorebook Study approaches 75% with diminishing returns.
+These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances Xylophax's witnessed humiliation meter. Offline strikeout XP and called-Strike mastery both begin at 1% of their open-game awards, and Scorebook Study approaches 75% with diminishing returns.
 
 Automation is purchased as bounded capacity rather than an all-or-nothing skip. Each genetic Migratory Baseball Instinct rank licenses one of the 29 human destinations; each eldritch Interstellar Road-Trip Itinerary rank licenses one of the 10 alien destinations. Autonomic Coaching buys one independently chosen repeatable-stat license per rank, while the later Front Office purchases whole one-time catalogs only when their individual switches are enabled. No automation performs a prestige reset or bypasses an unwitnessed story gate.
 
@@ -130,9 +130,9 @@ Ordinary Training has one clear purchase per displayed base stat:
 
 Only Speed begins unlocked; the other 14 axes appear gradually. Every displayed base stat has one repeatable Training purchase. Distinct operations intentionally stack across systems: Training raises the additive base or approaches a transparent asymptote, while one-time Facilities and BODY choices multiply the completed stat.
 
-Active field taps begin at 1.7% on a timer of one second or less. Duration adds a saturating bonus: a fresh ten-second wait advances by exactly 0.5 seconds per tap, and even an arbitrarily long timer gains at most four additional percentage points. Repeatable Field Hustle independently raises the base toward 4%. A quarter-second moving burst rate leaves roughly four taps per second or less untouched, then applies a smooth inverse-hypotenuse reduction above that grace rate. This makes very fast manual and automatic input approach finite sustained throughput instead of scaling linearly. Manual and automatic taps still share a 50% budget per recovery, flight, or lineup phase; the authoritative timer and visible meter remain synchronized.
+Active field taps begin at 1.7% on a timer of one second or less. Duration adds a saturating bonus: a fresh ten-second wait advances by exactly 0.5 seconds per tap, and even an arbitrarily long timer gains at most four additional percentage points. Repeatable Field Hustle independently raises the base toward 4%. A quarter-second moving burst rate leaves roughly four taps per second or less untouched, then applies a smooth inverse-hypotenuse reduction above that grace rate. This makes very fast manual and automatic input approach finite sustained throughput instead of scaling linearly. Separate same-timer diminishing returns multiply each advance by the share of the original timer that input has not already supplied. There is no fixed 50% wall: the effect approaches completion smoothly while the authoritative timer and visible meter remain synchronized.
 
-The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum and raises burst tolerance from the base `8/s` to `8 × (1 + 0.50 × log2(r + 1))/s`. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits both genetic values. Aggregate/offline cycle math applies the same duration curve, sustained-fatigue estimate, and 50% phase floor, so automation never eliminates the idle half even at extreme ranks.
+The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum and raises burst tolerance from the base `8/s` to `8 × (1 + 0.50 × log2(r + 1))/s`. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits both genetic values. Aggregate/offline cycle math solves the same duration curve, sustained-fatigue estimate, and same-timer asymptote used by the foreground field.
 
 Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers; a parallel human project lane ranges from 500 XP to 3.2 trillion XP so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, Facility, and BODY each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
@@ -162,7 +162,7 @@ The automated suite explicitly checks that:
 - the pitch and on-deck meters reflect their authoritative cooldowns;
 - each purchased body age affects speed, quality, recovery, subtitle, loadout, and rendered size while every reset begins as a toddler;
 - the toddler human-league clear unlocks only when no age has been purchased;
-- Xylophax remains 100% Grand Slam under arbitrary stats and reveals HELP only after a witnessed minute, never from offline time;
+- Xylophax remains at the plate with 100% Grand Slams under arbitrary stats, taunts after each one, fills HELP's twelve-hit meter only from witnessed impacts, and never advances from offline time;
 - all eight outcome cards remain compact and expose detail through tooltips;
 - every exact and bulk loot drop copies a player-wearable slot and rarity visible on the defeated batter; mastery may favor better worn gear but cannot invent an unworn rarity;
 - human opponents progress through Human Common–Unique and end fully Unique; alien and eldritch opponents expand the possible wardrobe with five new family tiers each while retaining older-family possibilities;

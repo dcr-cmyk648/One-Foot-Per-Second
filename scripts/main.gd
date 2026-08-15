@@ -189,6 +189,13 @@ var native_update_notified_version := ""
 var native_update_download_url := ""
 var alien_help_dialog: AcceptDialog
 var alien_help_button: Button
+var alien_help_progress_panel: PanelContainer
+var alien_help_progress_bar: ProgressBar
+var alien_help_progress_label: Label
+var alien_arrival_dialog: AcceptDialog
+var genetic_rebirth_explanation_dialog: AcceptDialog
+var alien_story_popup_pending := false
+var first_genetic_offer_prompted_this_session := false
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
 var pending_import_returns_from_title := false
@@ -1720,6 +1727,7 @@ func _leave_title_screen(show_pending_offline := true) -> void:
 		pending_title_offline_summary.clear()
 		_show_offline_progress(summary, prefix)
 	_refresh_interface()
+	call_deferred("_maybe_show_alien_story")
 
 func _refresh_title_screen() -> void:
 	if title_screen == null or game == null:
@@ -2109,7 +2117,7 @@ func _build_mobile_navigation(parent: Control) -> void:
 	parent.add_child(mobile_nav)
 	var entries := [
 		["UPGRADES", "Upgrades", func() -> void: _show_mobile_overlay(upgrade_panel, "UPGRADES")],
-		["STATUS", "Stats, ball, pitches, body, and owned upgrades", func() -> void: _show_mobile_overlay(equipment_sidebar, "STATUS")],
+		["LOADOUT", "Current stats, ball, pitches, body, and owned upgrades", func() -> void: _show_mobile_overlay(equipment_sidebar, "LOADOUT")],
 		["LOG", "Recent game events", func() -> void: _show_mobile_overlay(event_log_panel, "EVENT LOG")],
 		["SAVES", "Save, export, load, or reset this run", func() -> void: _show_mobile_overlay(save_stack, "SAVES & TRANSFER")],
 	]
@@ -2413,8 +2421,8 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	event_log_panel.visible = not mobile_layout
 	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (350.0 if dense_wide else 370.0)
 	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (220.0 if dense_wide else 250.0)
-	equipment_sidebar_heading.text = "STATUS & LOADOUT" if mobile_layout else "LOADOUT"
-	equipment_stats_section.visible = mobile_layout
+	equipment_sidebar_heading.text = "LOADOUT"
+	equipment_stats_section.visible = true
 	mobile_upgrade_stats_panel.visible = mobile_layout
 	for catalog_toggle in catalog_hide_purchased_toggles.values():
 		(catalog_toggle as CheckButton).custom_minimum_size.y = 44.0 if mobile_layout else 0.0
@@ -2451,8 +2459,8 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	else:
 		previous_button.icon = null
 		next_button.icon = null
-		previous_button.text = "< PREVIOUS BATTER"
-		next_button.text = "NEXT BATTER >"
+		previous_button.text = "< PREVIOUS LEVEL"
+		next_button.text = "NEXT LEVEL >"
 	opponent_label.add_theme_font_size_override("font_size", 18 if mobile_layout else (21 if dense_wide else 25))
 	quirk_label.add_theme_font_size_override("font_size", 11 if mobile_layout else (12 if dense_wide else 14))
 	era_label.add_theme_font_size_override("font_size", 10 if mobile_layout else (11 if dense_wide else 13))
@@ -2534,7 +2542,7 @@ func _build_play_area(parent: Control) -> void:
 	opponent_row.add_theme_constant_override("separation", 12)
 	play_stack.add_child(opponent_row)
 	previous_button = Button.new()
-	previous_button.text = "< PREVIOUS BATTER"
+	previous_button.text = "< PREVIOUS LEVEL"
 	previous_button.custom_minimum_size.x = 140.0
 	previous_button.pressed.connect(_previous_opponent)
 	opponent_row.add_child(previous_button)
@@ -2555,7 +2563,7 @@ func _build_play_area(parent: Control) -> void:
 	opponent_stack.add_child(quirk_label)
 	_enable_mobile_inspection(quirk_label, "Batter details")
 	next_button = Button.new()
-	next_button.text = "NEXT BATTER >"
+	next_button.text = "NEXT LEVEL >"
 	next_button.custom_minimum_size.x = 140.0
 	next_button.pressed.connect(_next_opponent)
 	opponent_row.add_child(next_button)
@@ -2721,7 +2729,7 @@ func _build_equipment_sidebar(parent: Control) -> void:
 	sidebar.add_child(equipment_sidebar_heading)
 	equipment_stats_section = VBoxContainer.new()
 	equipment_stats_section.name = "StatusStatSection"
-	equipment_stats_section.visible = false
+	equipment_stats_section.visible = true
 	equipment_stats_section.add_theme_constant_override("separation", 2)
 	sidebar.add_child(equipment_stats_section)
 	var stats_heading := Label.new()
@@ -2792,6 +2800,44 @@ func _build_status_stat_list(parent: Control) -> void:
 		status_stat_labels[stat_id] = value_label
 
 func _build_alien_help_button(parent: Control) -> void:
+	alien_help_progress_panel = PanelContainer.new()
+	alien_help_progress_panel.name = "AlienHelpProgress"
+	alien_help_progress_panel.visible = false
+	alien_help_progress_panel.z_index = 49
+	alien_help_progress_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	alien_help_progress_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	alien_help_progress_panel.offset_left = -82.0
+	alien_help_progress_panel.offset_right = 82.0
+	alien_help_progress_panel.offset_top = 10.0
+	alien_help_progress_panel.offset_bottom = 56.0
+	var meter_style := _compact_panel_style(8.0, 5.0, 7)
+	meter_style.bg_color = Color("250d19")
+	meter_style.border_color = Color("7f3047")
+	alien_help_progress_panel.add_theme_stylebox_override("panel", meter_style)
+	parent.add_child(alien_help_progress_panel)
+	var meter_stack := VBoxContainer.new()
+	meter_stack.add_theme_constant_override("separation", 3)
+	alien_help_progress_panel.add_child(meter_stack)
+	alien_help_progress_label = Label.new()
+	alien_help_progress_label.text = "HUMILIATION 0 / %d" % BaseballGameState.ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+	alien_help_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	alien_help_progress_label.add_theme_font_size_override("font_size", 10)
+	alien_help_progress_label.add_theme_color_override("font_color", Color("ff9dad"))
+	meter_stack.add_child(alien_help_progress_label)
+	alien_help_progress_bar = ProgressBar.new()
+	alien_help_progress_bar.show_percentage = false
+	alien_help_progress_bar.min_value = 0.0
+	alien_help_progress_bar.max_value = float(BaseballGameState.ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED)
+	alien_help_progress_bar.custom_minimum_size = Vector2(0.0, 8.0)
+	var humiliation_fill := StyleBoxFlat.new()
+	humiliation_fill.bg_color = COLOR_BAD
+	humiliation_fill.corner_radius_top_left = 3
+	humiliation_fill.corner_radius_top_right = 3
+	humiliation_fill.corner_radius_bottom_left = 3
+	humiliation_fill.corner_radius_bottom_right = 3
+	alien_help_progress_bar.add_theme_stylebox_override("fill", humiliation_fill)
+	meter_stack.add_child(alien_help_progress_bar)
+
 	alien_help_button = Button.new()
 	alien_help_button.name = "AlienHelpButton"
 	alien_help_button.text = "HELP"
@@ -3594,7 +3640,7 @@ func _trash_selected_loot_item() -> void:
 
 func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(0.0, 86.0)
+	card.custom_minimum_size = Vector2(0.0, 96.0)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(card)
 	var stack := VBoxContainer.new()
@@ -3607,7 +3653,9 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	stack.add_child(heading_label)
 	var value_label := Label.new()
 	value_label.add_theme_font_size_override("font_size", 14)
-	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	value_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	value_label.clip_text = false
 	if id != "pitch":
 		_enable_mobile_inspection(value_label, heading)
 	stack.add_child(value_label)
@@ -4308,16 +4356,18 @@ func _set_upgrade_row(
 	text: String,
 	disabled: bool,
 	tooltip: String,
-	action_text := "BUY"
+	action_text := "BUY",
+	diminishing_warning := false
 ) -> void:
 	var container := entry.container as PanelContainer
 	var label := entry.label as Label
 	var button := entry.button as Button
-	var signature := "%s\u001f%s\u001f%s\u001f%s" % [
+	var signature := "%s\u001f%s\u001f%s\u001f%s\u001f%s" % [
 		text,
 		str(disabled),
 		tooltip,
 		action_text,
+		str(diminishing_warning),
 	]
 	if str(container.get_meta("upgrade_row_signature", "")) == signature:
 		return
@@ -4337,7 +4387,17 @@ func _set_upgrade_row(
 	button.text = action_text
 	button.disabled = disabled
 	button.self_modulate = Color(1.0, 1.0, 1.0, 0.58 if disabled else 1.0)
-	button.tooltip_text = tooltip
+	if diminishing_warning:
+		button.add_theme_color_override("font_color", COLOR_GOLD)
+		button.add_theme_color_override("font_disabled_color", Color(COLOR_GOLD, 0.82))
+		button.tooltip_text = (
+			"DIMINISHING RETURN: this rank provides 10% or less of a fresh rank's effect.\n\n"
+			+ tooltip
+		)
+	else:
+		button.remove_theme_color_override("font_color")
+		button.remove_theme_color_override("font_disabled_color")
+		button.tooltip_text = tooltip
 
 func _set_upgrade_row_visible(entry: Dictionary, visible: bool) -> void:
 	var container := entry.container as Control
@@ -4387,14 +4447,26 @@ func _build_confirmation_dialog() -> void:
 	add_child(body_limit_dialog)
 	genetic_confirmation = ConfirmationDialog.new()
 	genetic_confirmation.title = "Be born again, but with more baseball?"
+	genetic_confirmation.dialog_autowrap = true
+	genetic_confirmation.min_size = Vector2i(320, 250)
+	genetic_confirmation.get_ok_button().custom_minimum_size.y = 44.0
+	genetic_confirmation.get_cancel_button().custom_minimum_size.y = 44.0
 	genetic_confirmation.confirmed.connect(_confirm_genetic_rebirth)
 	add_child(genetic_confirmation)
 	eldritch_confirmation = ConfirmationDialog.new()
 	eldritch_confirmation.title = "Destroy this reality?"
+	eldritch_confirmation.dialog_autowrap = true
+	eldritch_confirmation.min_size = Vector2i(320, 250)
+	eldritch_confirmation.get_ok_button().custom_minimum_size.y = 44.0
+	eldritch_confirmation.get_cancel_button().custom_minimum_size.y = 44.0
 	eldritch_confirmation.confirmed.connect(_confirm_eldritch_ascension)
 	add_child(eldritch_confirmation)
 	divine_confirmation = ConfirmationDialog.new()
 	divine_confirmation.title = "Do it all again?"
+	divine_confirmation.dialog_autowrap = true
+	divine_confirmation.min_size = Vector2i(320, 270)
+	divine_confirmation.get_ok_button().custom_minimum_size.y = 44.0
+	divine_confirmation.get_cancel_button().custom_minimum_size.y = 44.0
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
 
@@ -4435,6 +4507,21 @@ func _build_native_update_confirmation() -> void:
 	add_child(native_update_confirmation)
 
 func _build_alien_help_dialog() -> void:
+	alien_arrival_dialog = AcceptDialog.new()
+	alien_arrival_dialog.name = "AlienArrivalDialog"
+	alien_arrival_dialog.title = "SO YOU THINK YOU'RE HOT STUFF"
+	alien_arrival_dialog.dialog_autowrap = true
+	alien_arrival_dialog.min_size = Vector2i(320, 270)
+	alien_arrival_dialog.dialog_text = (
+		"The stadium folds inside out. You, the mound, and several confused hot-dog vendors "
+		+ "are teleported beneath a sky full of cheering aliens.\n\n"
+		+ "Their commissioner, Xylophax, steps to the plate. The Power display appears to be "
+		+ "laughing at you."
+	)
+	alien_arrival_dialog.get_ok_button().text = "PITCH ANYWAY"
+	alien_arrival_dialog.get_ok_button().custom_minimum_size.y = 44.0
+	add_child(alien_arrival_dialog)
+
 	alien_help_dialog = AcceptDialog.new()
 	alien_help_dialog.name = "AlienHelpDialog"
 	alien_help_dialog.title = "A MAN STEPS OUT OF A PORTAL"
@@ -4444,11 +4531,23 @@ func _build_alien_help_dialog() -> void:
 		"He watches Xylophax turn another perfect pitch into an unavoidable Grand Slam. "
 		+ "Then he lowers his sunglasses.\n\n"
 		+ "‘Come with me if you want to… be really good at baseball.’\n\n"
-		+ "He has a Time Machine and an alarming prenatal genetics waiver. Time Travel is now "
-		+ "permanently available in BODY whenever this body has earned enough XP."
+		+ "He has a Time Machine and an alarming prenatal genetics waiver. Getting into the "
+		+ "portal will restart this life immediately."
 	)
 	alien_help_dialog.get_ok_button().text = "GET IN THE PORTAL"
+	alien_help_dialog.get_ok_button().custom_minimum_size.y = 44.0
+	alien_help_dialog.confirmed.connect(_complete_first_genetic_rebirth)
 	add_child(alien_help_dialog)
+
+	genetic_rebirth_explanation_dialog = AcceptDialog.new()
+	genetic_rebirth_explanation_dialog.name = "GeneticRebirthExplanationDialog"
+	genetic_rebirth_explanation_dialog.title = "WELCOME BACK, TINY"
+	genetic_rebirth_explanation_dialog.dialog_autowrap = true
+	genetic_rebirth_explanation_dialog.min_size = Vector2i(320, 285)
+	genetic_rebirth_explanation_dialog.get_ok_button().text = "OPEN BODY"
+	genetic_rebirth_explanation_dialog.get_ok_button().custom_minimum_size.y = 44.0
+	genetic_rebirth_explanation_dialog.confirmed.connect(_open_body_after_first_rebirth)
+	add_child(genetic_rebirth_explanation_dialog)
 
 func _build_offline_progress_dialog() -> void:
 	offline_progress_dialog = AcceptDialog.new()
@@ -4744,14 +4843,14 @@ func _refresh_guide_text(
 		(
 			"PITCH FLOW\n"
 			+ "• During human play, one pitch must resolve before recovery begins. The pitcher dial shows recovery; the plate dial shows the next batter.\n"
-			+ "• Tap open field to advance recovery, flight, or lineup. Long waits gain more time per tap. Ordinary tapping stays fresh; ultra-fast bursts briefly lose efficiency. All tapping together can provide at most half of one timer.\n"
+			+ "• Tap open field to advance recovery, flight, or lineup. Long waits gain more time per tap. Ordinary tapping stays fresh; ultra-fast bursts and repeated taps on one timer smoothly lose efficiency.\n"
 			+ "• Bad outcomes add Frustration: Grand Slams add most; Balls and Fouls barely add any. Its uncapped logarithmic quality bonus resets on a strikeout."
 		),
 		(
 			"GETTING STRONGER\n"
 			+ "• TRAIN is an uncapped incremental XP sink. PITCH, BALL, FACILITY, and BODY contain the larger one-time power jumps. Locked cards reveal only their requirement.\n"
 			+ "• Upgrade cards stay short: hover on desktop or hold the passive card text on phone for the exact formula. Swipe normally to scroll.\n"
-			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in STATUS; tap those rows on phone for definitions."
+			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in LOADOUT; tap those rows on phone for definitions."
 		),
 		(
 			"GEAR & ACHIEVEMENTS\n"
@@ -4920,28 +5019,41 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		game.current_opponent + 1,
 		opponent.era,
 	]
+	var alien_humiliation_active := (
+		game.is_alien_exhibition_blocked()
+		and not game.genetic_offer_unlocked
+		and not game.is_alien_help_available()
+	)
+	alien_help_progress_panel.visible = alien_humiliation_active
+	alien_help_progress_bar.value = float(game.alien_exhibition_grand_slams)
+	alien_help_progress_label.text = "HUMILIATION %d / %d" % [
+		game.alien_exhibition_grand_slams,
+		BaseballGameState.ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED,
+	]
+	if alien_help_progress_panel.visible:
+		alien_help_progress_panel.move_to_front()
 	alien_help_button.visible = game.is_alien_help_available()
 	if alien_help_button.visible:
 		alien_help_button.move_to_front()
 	previous_button.disabled = game.current_opponent <= 0
 	next_button.disabled = game.current_opponent >= game.highest_unlocked
-	previous_button.tooltip_text = "Select the previous unlocked batter. A released pitch keeps flying and will resolve against the selected batter."
-	next_button.tooltip_text = "Select the next unlocked batter. A released pitch keeps flying and will resolve against the selected batter."
+	previous_button.tooltip_text = "Select the previous unlocked level. A released pitch keeps flying and will resolve against that level's batter."
+	next_button.tooltip_text = "Select the next unlocked level. A released pitch keeps flying and will resolve against that level's batter."
 	if mobile_layout:
 		previous_button.text = ""
 		next_button.text = ""
 	else:
-		previous_button.text = "< PREVIOUS BATTER"
+		previous_button.text = "< PREVIOUS LEVEL"
 		if game.cosmos_conquered:
 			next_button.text = "DIVINE OFFER READY"
 		elif game.is_story_exhibition_blocked():
 			next_button.text = "REBIRTH REQUIRED" if game.is_story_offer_ready() else "EXHIBITION ACTIVE"
 		elif game.current_opponent < game.highest_unlocked:
-			next_button.text = "NEXT BATTER >"
+			next_button.text = "NEXT LEVEL >"
 		elif game.current_opponent == game.opponents.size() - 1:
 			next_button.text = "FINAL BOSS ACTIVE"
 		else:
-			next_button.text = "NEXT BATTER LOCKED"
+			next_button.text = "NEXT LEVEL LOCKED"
 	var distance := game.get_current_distance()
 	distance_label.text = (
 		"LEVEL RANGE  •  %s  •  XP ×%s  •  THREAT +%.2f" % [
@@ -4967,7 +5079,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 	) % mastery_quality_bonus
 	if game.is_alien_exhibition_blocked():
 		mastery_label.text = game.get_story_status_text()
-		mastery_bar.value = game.alien_exhibition_seconds / BaseballGameState.EXHIBITION_SECONDS * 100.0
+		mastery_bar.value = game.get_alien_exhibition_progress_ratio() * 100.0
 	elif game.is_eldritch_exhibition_blocked():
 		mastery_label.text = game.get_story_status_text()
 		mastery_bar.value = game.eldritch_exhibition_seconds / BaseballGameState.EXHIBITION_SECONDS * 100.0
@@ -5090,6 +5202,8 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		_refresh_stats(at_bat_metrics, estimated_xp_per_second)
 		if title_screen_active:
 			_refresh_title_screen()
+	if not title_screen_active:
+		call_deferred("_maybe_show_alien_story")
 
 func _refresh_field_stats() -> void:
 	if not field_stat_labels.is_empty():
@@ -5428,7 +5542,8 @@ func _refresh_opponent_loadout() -> void:
 	for entry_value in entries:
 		var entry: Dictionary = entry_value
 		var button := Button.new()
-		button.custom_minimum_size = Vector2(38.0, 30.0)
+		button.custom_minimum_size = Vector2(34.0, 26.0)
+		button.add_theme_font_size_override("font_size", 11)
 		button.focus_mode = Control.FOCUS_NONE
 		button.mouse_default_cursor_shape = Control.CURSOR_HELP
 		button.text = str(entry.get("letter", "?"))
@@ -5519,6 +5634,15 @@ func _format_signed_training_delta(value: float, scale: float = 1.0) -> String:
 		return "0"
 	return "%s%s" % ["+" if scaled > 0.0 else "−", _format_training_delta_number(scaled)]
 
+func _format_training_effect_delta(effect: Dictionary, scale: float = 1.0) -> String:
+	var delta := float(effect.get("delta", 0.0)) * scale
+	if delta != 0.0:
+		return _format_signed_training_delta(delta)
+	if effect.has("delta_log10") and scale != 0.0:
+		var scaled_log10 := float(effect.delta_log10) + log(absf(scale)) / log(10.0)
+		return "+%s" % BaseballGameState.format_scientific_from_log10(scaled_log10, 3)
+	return "0"
+
 func _training_next_rank_summary(id: String) -> String:
 	var effect := game.get_training_next_rank_effect(id)
 	if effect.is_empty():
@@ -5526,7 +5650,7 @@ func _training_next_rank_summary(id: String) -> String:
 	var delta := float(effect.delta)
 	match id:
 		"velocity":
-			return "%s ft/s Speed" % _format_signed_training_delta(delta)
+			return "%s ft/s Speed" % _format_training_effect_delta(effect)
 		"command":
 			return "%s Quality" % _format_signed_training_delta(delta)
 		"field_hustle":
@@ -5580,12 +5704,18 @@ func _refresh_purchase_buttons() -> void:
 		else:
 			var cost := game.get_training_cost(id)
 			var next_rank_summary := _training_next_rank_summary(id)
+			var marginal_efficiency := game.get_training_marginal_efficiency(id)
+			var diminishing_warning := marginal_efficiency <= 0.10 + 0.000001
 			_set_upgrade_row(
 				entry,
 				"%s  •  RANK %d\n%s" % [definition.name, rank, next_rank_summary],
 				game.xp < cost,
-				"Next rank: %s.\n\n%s" % [next_rank_summary, _definition_tooltip(definition)],
-				"%s XP" % BaseballGameState.format_cost(cost)
+				(
+					"Next rank: %s.\nCurrent marginal efficacy: %.2f%% of a fresh rank.\n\n%s"
+					% [next_rank_summary, marginal_efficiency * 100.0, _definition_tooltip(definition)]
+				),
+				"%s XP" % BaseballGameState.format_cost(cost),
+				diminishing_warning
 			)
 
 	var pitch_selection_probabilities := {}
@@ -5813,7 +5943,7 @@ func _refresh_rebirth_buttons() -> void:
 		elif game.is_alien_help_available():
 			story = "Xylophax cannot miss. Nothing you own changes the odds. Something red has appeared on the field."
 		else:
-			story = "Xylophax turns every pitch into an unavoidable Grand Slam. Nothing you own changes the odds. Keep watching."
+			story = "Xylophax stays at the plate and turns every pitch into an unavoidable Grand Slam. Each one fills the humiliation meter."
 	elif game.genetic_rebirths > 0:
 		story = "Body %d is legally human in several permissive jurisdictions. Beat the alien leagues at up to Mach 12." % (game.genetic_rebirths + 1)
 	if game.genetic_rebirths > 0 and not game.eldritch_offer_unlocked:
@@ -5921,7 +6051,7 @@ func _refresh_rebirth_buttons() -> void:
 
 	var potential_dna := game.get_potential_dna()
 	if not game.genetic_offer_unlocked:
-		genetic_reset_button.text = "GENETIC REBIRTH LOCKED\nReach Xylophax, witness one impossible minute, and find help."
+		genetic_reset_button.text = "GENETIC REBIRTH LOCKED\nReach Xylophax, endure the impossible exhibition, and find help."
 		genetic_reset_button.disabled = true
 	elif game.highest_unlocked < Content.ALIEN_EXHIBITION_INDEX:
 		genetic_reset_button.text = "GENETIC REBIRTH NOT READY\nReach Xylophax again; current body XP still determines the award."
@@ -6027,11 +6157,17 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	stat_labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
 	stat_labels.pitch_calling.text = "×%.3f" % game.get_pitch_calling_bias()
 	var live_tap_efficiency := game.get_field_tap_fatigue_multiplier()
-	stat_labels.field_tap.text = "%.1f%% short • %.1f%% at 10s • %.1f%% long limit • %.0f%% phase cap%s" % [
+	var phase_input_multiplier := clampf(
+		1.0 - game.field_tap_advanced_seconds
+		/ maxf(game.field_tap_phase_original_seconds, 0.000001),
+		0.0,
+		1.0
+	)
+	stat_labels.field_tap.text = "%.1f%% short • %.1f%% at 10s • %.1f%% long limit • current ×%.2f%s" % [
 		game.get_field_tap_fraction() * 100.0,
 		game.get_field_tap_fraction_for_duration(10.0) * 100.0,
 		game.get_field_tap_fraction_for_duration(1000000.0) * 100.0,
-		game.get_field_tap_phase_cap() * 100.0,
+		phase_input_multiplier,
 		(
 			" • burst %.0f%%" % (live_tap_efficiency * 100.0)
 			if live_tap_efficiency < 0.9995
@@ -6230,11 +6366,84 @@ func _next_opponent() -> void:
 func _accept_alien_help() -> void:
 	if not game.accept_alien_help():
 		return
+	first_genetic_offer_prompted_this_session = true
 	if not development_session and not game.save_writes_locked:
 		game.save_game()
 	var popup_size := Vector2i(350, 350) if mobile_layout else Vector2i(560, 300)
 	alien_help_dialog.popup_centered_clamped(popup_size, 0.92)
 	_refresh_interface()
+
+func _alien_story_dialog_is_visible() -> bool:
+	return (
+		(alien_arrival_dialog != null and alien_arrival_dialog.visible)
+		or (alien_help_dialog != null and alien_help_dialog.visible)
+		or (
+			genetic_rebirth_explanation_dialog != null
+			and genetic_rebirth_explanation_dialog.visible
+		)
+		or (offline_progress_dialog != null and offline_progress_dialog.visible)
+		or (browser_update_confirmation != null and browser_update_confirmation.visible)
+		or (native_update_confirmation != null and native_update_confirmation.visible)
+	)
+
+func _maybe_show_alien_story() -> void:
+	if (
+		game == null
+		or title_screen_active
+		or _alien_story_dialog_is_visible()
+	):
+		return
+	if game.should_show_alien_arrival():
+		game.mark_alien_arrival_seen()
+		if not development_session and not game.save_writes_locked:
+			game.save_game()
+		var arrival_size := Vector2i(350, 340) if mobile_layout else Vector2i(570, 300)
+		alien_arrival_dialog.popup_centered_clamped(arrival_size, 0.92)
+		return
+	# Save v23 could already have the offer unlocked without ever seeing the new
+	# automatic first-rebirth scene. Give those runs the same portal handoff once.
+	if (
+		game.current_opponent == Content.ALIEN_EXHIBITION_INDEX
+		and game.genetic_offer_unlocked
+		and game.lifetime_genetic_rebirths <= 0
+		and not first_genetic_offer_prompted_this_session
+	):
+		first_genetic_offer_prompted_this_session = true
+		var portal_size := Vector2i(350, 350) if mobile_layout else Vector2i(560, 300)
+		alien_help_dialog.popup_centered_clamped(portal_size, 0.92)
+
+func _complete_first_genetic_rebirth() -> void:
+	if game.lifetime_genetic_rebirths > 0:
+		return
+	var award := game.perform_genetic_rebirth()
+	if award <= 0:
+		genetic_rebirth_explanation_dialog.title = "THE TIME MACHINE NEEDS MORE BASEBALL"
+		genetic_rebirth_explanation_dialog.dialog_text = (
+			"This body has not accumulated enough lifetime pitching experience to survive the trip. "
+			+ "Earn more XP, then use REINCARNATE in BODY."
+		)
+	else:
+		pitch_field.reset_visual_state()
+		genetic_rebirth_explanation_dialog.title = "WELCOME BACK, TINY"
+		genetic_rebirth_explanation_dialog.dialog_text = (
+			"You wake up as a toddler again. Baseball chronology is apparently optional.\n\n"
+			+ "You gained %d DNA. Spend it in BODY on permanent genetic upgrades before growing "
+			+ "through the human leagues again. All prestige upgrades are retained on later "
+			+ "genetic rebirths."
+		) % award
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+	_refresh_interface()
+	var explanation_size := Vector2i(350, 380) if mobile_layout else Vector2i(590, 320)
+	genetic_rebirth_explanation_dialog.popup_centered_clamped(explanation_size, 0.92)
+
+func _open_body_after_first_rebirth() -> void:
+	if upgrade_tabs == null or rebirth_tab == null:
+		return
+	upgrade_tabs.current_tab = rebirth_tab.get_index()
+	_refresh_mobile_tab_navigation()
+	if mobile_layout:
+		_show_mobile_overlay(upgrade_panel, "UPGRADES  •  BODY")
 
 func _move_closer() -> void:
 	game.set_distance_index(game.selected_distance_index - 1)
@@ -6351,10 +6560,10 @@ func _request_genetic_rebirth() -> void:
 		return
 	genetic_confirmation.dialog_text = (
 		"This body becomes %d DNA. XP, training, pitches, facilities, opponent access, mastery, and the Locker reset. "
-		+ "Reverse Terminator Wardrobe rank %d keeps that many randomly selected equipped slots. "
-		+ "DNA, genetic enhancements, Arcana, eldritch magic, and divine rewards remain."
-	) % [game.get_potential_dna(), int(game.eldritch_levels.get("reverse_terminator", 0))]
-	genetic_confirmation.popup_centered()
+		+ "All prestige upgrades are retained."
+	) % game.get_potential_dna()
+	var popup_size := Vector2i(350, 330) if mobile_layout else Vector2i(580, 260)
+	genetic_confirmation.popup_centered_clamped(popup_size, 0.92)
 
 func _confirm_genetic_rebirth() -> void:
 	game.perform_genetic_rebirth()
@@ -6366,10 +6575,10 @@ func _request_eldritch_ascension() -> void:
 		return
 	eldritch_confirmation.dialog_text = (
 		"Destroy this reality for %d Arcana? This resets XP, levels, mastery, DNA, every genetic enhancement, "
-		+ "every ordinary purchase, and every item in the Locker. Reverse Terminator only works with genetic time travel. "
-		+ "Arcana, eldritch magic, and divine rewards remain."
+		+ "every ordinary purchase, and every item in the Locker. All prestige upgrades retained by this layer remain."
 	) % game.get_potential_arcana()
-	eldritch_confirmation.popup_centered()
+	var popup_size := Vector2i(350, 350) if mobile_layout else Vector2i(600, 275)
+	eldritch_confirmation.popup_centered_clamped(popup_size, 0.92)
 
 func _confirm_eldritch_ascension() -> void:
 	game.perform_eldritch_ascension()
@@ -6389,7 +6598,8 @@ func _request_divine_ascension(id: String) -> void:
 		"GOD: ‘Thanks for saving the universe. Wouldn’t the best reward be doing it all again?’\n\nAccept %s? God restores the original universe: XP, levels, DNA, Arcana, genetic enhancements, "
 		+ "eldritch magic, story encounters, and all equipment reset. Divine blessings, Halos, and lifetime statistics remain."
 	) % reward_name
-	divine_confirmation.popup_centered()
+	var popup_size := Vector2i(350, 390) if mobile_layout else Vector2i(640, 300)
+	divine_confirmation.popup_centered_clamped(popup_size, 0.92)
 
 func _confirm_divine_ascension() -> void:
 	if pending_divine_id.is_empty():

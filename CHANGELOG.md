@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.3 — The commissioner has notes
+
+- Rebuilt first contact with Xylophax as a visible humiliation sequence. The alien commissioner now stays at the plate, hits every pitch for a Grand Slam, taunts after every impact, and fills a twelve-hit meter in the exact field location that eventually becomes **HELP**. Offline time cannot advance it.
+- Added the full first-prestige handoff: an alien-stadium arrival scene, the unobtrusive HELP reveal, a portal stranger, automatic first genetic rebirth, and a toddler/DNA explanation. Prestige confirmation dialogs now use phone-safe sizing and state the general retention rule without prematurely explaining individual upgrades.
+- Made the scripted alien Power comparison dwarf even inherited overpowered saves, while keeping Power display math finite at extreme values.
+- Removed the arbitrary 50% per-timer tap wall. Manual and automatic input now lose effectiveness smoothly as they supply more of the same timer, in addition to the existing ultra-fast burst fatigue, and the aggregate timer solver uses the same curve.
+- Added a yellow price warning when an uncapped Training rank has fallen below 10% of its fresh-rank efficacy. Vanishing nonzero Speed and Recovery gains now retain compact `1eN` notation instead of displaying zero.
+- Kept all raw stats at the top of desktop and phone Loadout views, renamed batter navigation to Previous/Next Level, and preserved the compact field-first layout.
+- Reduced repetitive late-human mastery requirements by about 20%, shifted a small amount of cost into the premium one-time project lane, and guaranteed at least a 1% called-Strike chance in severely underprepared human matchups. The optimal no-loot first lifetime now reaches the alien boundary in about 11 hours 45 minutes at 115 mph and 0.72 recoveries per second.
+- Advanced the save schema to 24 for alien-arrival and humiliation progress. Version 23 exhibition progress migrates proportionally, all earlier migrations remain supported, and existing prestige histories retain the correct story state.
+
 ## 0.16.2 — The finger developed a union
 
 - Added short-burst tap fatigue. Ordinary tapping at roughly four taps per second or less stays at full strength, while ultra-fast manual or automatic bursts receive smooth diminishing returns instead of scaling directly with input spam.

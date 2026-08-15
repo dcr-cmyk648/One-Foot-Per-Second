@@ -355,11 +355,11 @@ func _run() -> void:
 	await process_frame
 	_expect(not main.locker_dialog.visible, "The in-content equipment Close button should dismiss the browser")
 
-	main._show_mobile_overlay(main.equipment_sidebar, "STATUS")
+	main._show_mobile_overlay(main.equipment_sidebar, "LOADOUT")
 	await process_frame
-	_expect(main.equipment_sidebar.get_parent() == main.mobile_overlay_content, "Status should open in the same phone overlay")
-	_expect(main.status_stat_labels.size() == 15 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Phone Status should show every trainable effective progression stat")
-	_expect(main.equipment_progression_heading.text == "OWNED FACILITIES", "Fresh Status should not imply unrevealed prestige systems")
+	_expect(main.equipment_sidebar.get_parent() == main.mobile_overlay_content, "Loadout should open in the same phone overlay")
+	_expect(main.status_stat_labels.size() == 15 and not (main.status_stat_labels.speed as Label).text.is_empty(), "Phone Loadout should show every trainable effective progression stat")
+	_expect(main.equipment_progression_heading.text == "OWNED FACILITIES", "Fresh Loadout should not imply unrevealed prestige systems")
 	main._close_mobile_overlay()
 	root.size = Vector2i(1179, 720)
 	main._set_mobile_layout(true, false, true)

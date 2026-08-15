@@ -181,8 +181,8 @@ const STAT_HELP := {
 	"calling": "Calling biases the random arsenal toward stronger learned pitch types without removing weaker ones.",
 	"distance": "Distance control reduces the added batter threat from the range assigned to the current opponent level.",
 	"offline": "Offline efficiency is the share of normal strikeout XP and called-Strike mastery deposited while the game is closed or suspended.",
-	"tap": "Tapping the open field advances the active recovery, flight, or lineup timer. Long waits get a larger percentage than short waits. A normal tapping rhythm stays fresh; ultra-fast bursts build quarter-second fatigue and yield diminishing returns. All taps together may supply at most half of one timer.",
-	"auto_tap": "Automatic clickers use the same duration-scaled Field Tap, rapid-tap fatigue, and 50% phase budget. Autonomic Clicking Finger ranks logarithmically improve both click speed and fatigue tolerance; Eldritch ranks add clickers.",
+	"tap": "Tapping the open field advances the active recovery, flight, or lineup timer. Long waits get a larger percentage than short waits. A normal tapping rhythm stays fresh; ultra-fast bursts build quarter-second fatigue, and every tap on the same timer leaves less work for the next one.",
+	"auto_tap": "Automatic clickers use the same duration scaling, rapid-tap fatigue, and same-timer diminishing returns as manual Field Taps. Autonomic Clicking Finger ranks logarithmically improve both click speed and fatigue tolerance; Eldritch ranks add clickers.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
 	"frustration": "Bad results build Frustration by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Its uncapped logarithmic quality bonus resets on a completed strikeout.",
@@ -2757,7 +2757,15 @@ static func opponents() -> Array[Dictionary]:
 		)
 		var completed_count_equivalents := 5.6 * pow(1.075, index)
 		if index >= 20 and index <= HUMAN_FINAL_INDEX:
-			completed_count_equivalents *= 1.0 + 0.02 * float(index - 19)
+			# The major-league ladder gets harder by matchup, not by demanding an
+			# extra pile of nearly identical successful counts. Its mastery target
+			# stays nearly flat relative to the base curve instead of receiving the
+			# former additional 2% compounding surcharge per late-human level.
+			completed_count_equivalents *= lerpf(
+				0.98,
+				0.96,
+				float(index - 20) / float(maxi(HUMAN_FINAL_INDEX - 20, 1))
+			)
 		if index > HUMAN_FINAL_INDEX and index <= ALIEN_FINAL_INDEX:
 			completed_count_equivalents = 50.0 * pow(1.13, index - ALIEN_EXHIBITION_INDEX)
 		elif index > ALIEN_FINAL_INDEX:

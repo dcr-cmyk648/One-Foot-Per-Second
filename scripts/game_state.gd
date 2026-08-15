@@ -12,13 +12,26 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 23
+const SAVE_VERSION := 24
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
 const MAX_NUMBER := 1.0e280
 const MAX_OFFLINE_SECONDS := 7.0 * 24.0 * 60.0 * 60.0
 const EXHIBITION_SECONDS := 60.0
+const ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED := 12
+const ALIEN_EXHIBITION_TAUNTS := [
+	"HA!",
+	"THAT WAS A PITCH?",
+	"YOU'RE PATHETIC.",
+	"MY BAT IS BORED.",
+	"DO HUMANS TRY?",
+	"IS THAT FULL SPEED?",
+	"CALL YOUR COACH.",
+	"I HAVE SEEN TEE-BALL.",
+	"THE CROWD PITIES YOU.",
+	"AGAIN.",
+]
 const FASTEST_RECORDED_PITCH_MPH := 105.8
 const HUMAN_SPEED_CAP_MPH := 115.0
 const HUMAN_SPEED_CAP_FPS := HUMAN_SPEED_CAP_MPH / 0.681818
@@ -36,6 +49,7 @@ const SPEED_OF_LIGHT_FPS := 983571056.0
 const DNA_XP_THRESHOLD := 1.0e10
 const STRIKEOUT_POINTS_PER_REQUIRED_STRIKE := 5.0
 const OPENING_STRIKEOUT_BASE_POINTS := 5.0
+const HUMAN_CALLED_STRIKE_FLOOR := 0.01
 const BASE_VELOCITY_FPS := 1.0
 # Speed is the inexpensive backbone of ordinary progression. Its built-in
 # logarithmic quality contribution is strongest while the arm is slow, then
@@ -66,7 +80,6 @@ const OFFLINE_REMAINING_PER_RANK := 0.94
 const BASE_FIELD_TAP_FRACTION := 1.0 / 60.0
 const FIELD_TAP_FRACTION_LIMIT := 0.04
 const FIELD_TAP_REMAINING_PER_RANK := 0.92
-const FIELD_TAP_PHASE_CAP := 0.50
 # Long waits should respond more generously to active play without turning short
 # late-game cycles into click spam. This curve adds exactly 3.333 percentage
 # points at ten seconds (a fresh tap therefore advances 0.5 s), then approaches
@@ -123,6 +136,24 @@ const DRAG_TRAINING_FACTOR_PER_RANK := 0.985
 const XP_TRAINING_PER_RANK := 0.01
 const FRUSTRATION_TRAINING_PER_RANK := 0.01
 const FRUSTRATION_OUTCOME_POINTS := [12.0, 8.0, 5.0, 3.0, 1.0, 0.10, 0.20, 0.0]
+const PREMIUM_HUMAN_MILESTONE_IDS := [
+	"neighborhood_pitching_tutor",
+	"backyard_mound_permit",
+	"travel_team_family_package",
+	"private_pitching_academy",
+	"biomechanics_weekend",
+	"varsity_development_endowment",
+	"sports_science_retainer",
+	"recruiting_consultancy",
+	"nil_pitch_lab",
+	"minor_league_complex",
+	"organization_analytics_department",
+	"mlb_performance_institute",
+	"pharmaceutical_defense_fund",
+	"world_series_pitching_campus",
+	"personal_hall_of_fame_wing",
+]
+const PREMIUM_HUMAN_MILESTONE_COST_MULTIPLIER := 1.10
 # Save v16 stored seconds on the old time-based curve. Keeping its reference
 # interval here lets migration preserve the exact earned quality bonus.
 const LEGACY_FRUSTRATION_INTERVAL_SECONDS := 15.0
@@ -185,6 +216,8 @@ var lifetime_arcana_earned := 0.0
 var genetic_offer_unlocked := false
 var eldritch_offer_unlocked := false
 var alien_exhibition_seconds := 0.0
+var alien_exhibition_grand_slams := 0
+var alien_arrival_seen := false
 var eldritch_exhibition_seconds := 0.0
 var cosmos_conquered := false
 var body_growth_level := 0
@@ -697,8 +730,36 @@ func is_alien_help_available() -> bool:
 	return (
 		is_alien_exhibition_blocked()
 		and not genetic_offer_unlocked
-		and alien_exhibition_seconds >= EXHIBITION_SECONDS
+		and alien_exhibition_grand_slams >= ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
 	)
+
+func get_alien_exhibition_progress_ratio() -> float:
+	return clampf(
+		float(alien_exhibition_grand_slams)
+		/ float(maxi(ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED, 1)),
+		0.0,
+		1.0
+	)
+
+func get_alien_exhibition_taunt(grand_slam_number: int = alien_exhibition_grand_slams) -> String:
+	if ALIEN_EXHIBITION_TAUNTS.is_empty():
+		return "HA!"
+	return str(ALIEN_EXHIBITION_TAUNTS[
+		posmod(maxi(grand_slam_number, 1) - 1, ALIEN_EXHIBITION_TAUNTS.size())
+	])
+
+func should_show_alien_arrival() -> bool:
+	return (
+		current_opponent == Content.ALIEN_EXHIBITION_INDEX
+		and genetic_rebirths <= 0
+		and not alien_arrival_seen
+	)
+
+func mark_alien_arrival_seen() -> bool:
+	if not should_show_alien_arrival():
+		return false
+	alien_arrival_seen = true
+	return true
 
 func accept_alien_help() -> bool:
 	if not is_alien_help_available():
@@ -732,12 +793,10 @@ func get_speed_gate_status_text(opponent_index: int = current_opponent) -> Strin
 		_:
 			return ""
 
-func _advance_story_encounters(seconds: float, alien_witnessed: bool) -> void:
-	if is_alien_exhibition_blocked() and not genetic_offer_unlocked and alien_witnessed:
-		var previous_seconds := alien_exhibition_seconds
-		alien_exhibition_seconds = minf(alien_exhibition_seconds + maxf(seconds, 0.0), EXHIBITION_SECONDS)
-		if previous_seconds < EXHIBITION_SECONDS and alien_exhibition_seconds >= EXHIBITION_SECONDS:
-			progression_changed.emit("Something red has appeared near the impossible exhibition.")
+func _advance_story_encounters(seconds: float, _alien_witnessed: bool) -> void:
+	# The first alien lesson is advanced by visible Grand Slams at the plate, not
+	# by an invisible wall-clock countdown. The eldritch encounter deliberately
+	# keeps its time-based revelation because its whole joke is waiting on a god.
 	if is_eldritch_exhibition_blocked() and not eldritch_offer_unlocked:
 		eldritch_exhibition_seconds = minf(eldritch_exhibition_seconds + maxf(seconds, 0.0), EXHIBITION_SECONDS)
 		if eldritch_exhibition_seconds >= EXHIBITION_SECONDS:
@@ -753,7 +812,10 @@ func get_story_status_text() -> String:
 			return "TIME TRAVEL READY • Open BODY when you are ready to be born again."
 		if is_alien_help_available():
 			return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%"
-		return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100% • OBSERVE %ds" % int(ceil(EXHIBITION_SECONDS - alien_exhibition_seconds))
+		return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%% • HUMILIATION %d / %d" % [
+			alien_exhibition_grand_slams,
+			ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED,
+		]
 	if is_eldritch_exhibition_blocked():
 		if eldritch_offer_unlocked:
 			return "ELDRITCH OFFER READY • Open BODY and abandon this reality."
@@ -789,6 +851,8 @@ func reset_fresh() -> void:
 	genetic_offer_unlocked = false
 	eldritch_offer_unlocked = false
 	alien_exhibition_seconds = 0.0
+	alien_exhibition_grand_slams = 0
+	alien_arrival_seen = false
 	eldritch_exhibition_seconds = 0.0
 	cosmos_conquered = false
 	body_growth_level = 0
@@ -906,9 +970,6 @@ func get_field_tap_duration_bonus(timer_seconds: float) -> float:
 func get_field_tap_fraction_for_duration(timer_seconds: float) -> float:
 	return get_field_tap_fraction() + get_field_tap_duration_bonus(timer_seconds)
 
-func get_field_tap_phase_cap() -> float:
-	return FIELD_TAP_PHASE_CAP
-
 func get_field_tap_fatigue_tolerance_for_rank(rank: int) -> float:
 	rank = maxi(rank, 0)
 	return FIELD_TAP_FATIGUE_BASE_TOLERANCE * (
@@ -999,9 +1060,23 @@ func get_automatic_timer_seconds(timer_seconds: float) -> float:
 	var click_rate := get_effective_automatic_field_tap_rate()
 	if duration <= 0.0 or click_rate <= 0.0:
 		return duration
-	var seconds_per_click := duration * get_field_tap_fraction_for_duration(duration)
-	var accelerated := duration / (1.0 + click_rate * seconds_per_click)
-	return maxf(duration * (1.0 - FIELD_TAP_PHASE_CAP), accelerated)
+	# Each click advances a fraction of the part of this phase that input has not
+	# already supplied. Natural time and active input therefore meet smoothly:
+	# there is no arbitrary 50% wall, but repeated clicks asymptotically lose bite.
+	# Solve t + D(1-e^(-rft)) = D for the real time t spent in the phase.
+	var fraction := get_field_tap_fraction_for_duration(duration)
+	var lower := 0.0
+	var upper := duration
+	for _iteration in 40:
+		var candidate := (lower + upper) * 0.5
+		var input_advance := duration * (
+			1.0 - exp(-click_rate * fraction * candidate)
+		)
+		if candidate + input_advance >= duration:
+			upper = candidate
+		else:
+			lower = candidate
+	return upper
 
 func apply_field_tap(automatic := false) -> Dictionary:
 	var phase := ""
@@ -1028,9 +1103,10 @@ func apply_field_tap(automatic := false) -> Dictionary:
 		field_tap_phase_original_seconds = timer_total
 		field_tap_advanced_seconds = 0.0
 	var original := maxf(field_tap_phase_original_seconds, 0.000001)
-	var remaining_tap_budget := maxf(
-		original * FIELD_TAP_PHASE_CAP - field_tap_advanced_seconds,
-		0.0
+	var phase_multiplier := clampf(
+		1.0 - field_tap_advanced_seconds / original,
+		0.0,
+		1.0
 	)
 	var maximum_without_skipping_resolution := timer_remaining
 	if phase == "flight":
@@ -1040,15 +1116,15 @@ func apply_field_tap(automatic := false) -> Dictionary:
 	var fresh_tap_fraction := get_field_tap_fraction_for_duration(original)
 	var fatigue_multiplier := get_field_tap_fatigue_multiplier()
 	var advance_seconds := minf(
-		original * fresh_tap_fraction * fatigue_multiplier,
-		minf(remaining_tap_budget, maximum_without_skipping_resolution)
+		original * fresh_tap_fraction * fatigue_multiplier * phase_multiplier,
+		maximum_without_skipping_resolution
 	)
 	if advance_seconds <= 0.000001:
 		return {
 			"applied": false,
 			"phase": phase,
-			"reason": "idle_limit",
-			"cap": FIELD_TAP_PHASE_CAP,
+			"reason": "diminishing_return",
+			"phase_multiplier": phase_multiplier,
 		}
 
 	field_tap_advanced_seconds += advance_seconds
@@ -1083,11 +1159,11 @@ func apply_field_tap(automatic := false) -> Dictionary:
 		"fraction": advance_seconds / original,
 		"tap_fraction": advance_seconds / original,
 		"fresh_tap_fraction": fresh_tap_fraction,
+		"phase_multiplier": phase_multiplier,
 		"fatigue_multiplier": fatigue_multiplier,
 		"burst_rate": field_tap_burst_rate,
 		"fatigue_tolerance": get_field_tap_fatigue_tolerance(),
 		"timer_seconds": original,
-		"cap": FIELD_TAP_PHASE_CAP,
 	}
 
 func _run_automatic_field_taps(elapsed: float) -> void:
@@ -1099,8 +1175,8 @@ func _run_automatic_field_taps(elapsed: float) -> void:
 	var clicks_due := mini(int(floor(automatic_field_tap_credit)), AUTO_CLICK_PROCESS_LIMIT)
 	if clicks_due <= 0:
 		return
-	# Scheduled clicks are consumed even when this phase has reached its shared
-	# 50% input budget. They never bank up into an instant burst on the next ball.
+	# Scheduled clicks are consumed even after their marginal effect becomes tiny.
+	# They never bank up into an instant burst on the next ball.
 	automatic_field_tap_credit -= float(clicks_due)
 	if automatic_field_tap_credit >= 1.0:
 		automatic_field_tap_credit = fmod(automatic_field_tap_credit, 1.0)
@@ -1397,7 +1473,12 @@ func _resolve_elapsed(
 				_complete_batter_replacement()
 		if remaining > 0.0 and not is_pitch_in_flight() and not is_story_offer_ready():
 			pitch_credit = 0.0
-			_resolve_aggregate_time(remaining, summary, stochastic)
+			_resolve_aggregate_time(
+				remaining,
+				summary,
+				stochastic,
+				offline_reward_multiplier >= 0.999999
+			)
 			_apply_resolution(summary, should_emit, offline_reward_multiplier)
 		return summary
 
@@ -1554,6 +1635,12 @@ func _apply_pitch_outcome(
 	var saved := false
 	var struck_out := false
 	var walked := false
+	var holds_batter := (
+		resolved_opponent == Content.ALIEN_EXHIBITION_INDEX
+		and genetic_rebirths <= 0
+		and outcome == Content.GRAND_SLAM_INDEX
+	)
+	var story_taunt := ""
 	if outcome < Content.HIT_OUTCOME_COUNT:
 		no_hitter_attempt_valid = false
 	if outcome == Content.STRIKE_INDEX:
@@ -1585,6 +1672,30 @@ func _apply_pitch_outcome(
 		)
 		if saved:
 			summary.saved_hits = float(summary.saved_hits) + float(resolved_balls)
+		elif holds_batter:
+			# Xylophax is not a normal plate appearance. He stays put, resets the
+			# count, and turns each humiliation into visible progress toward HELP.
+			plate_strikes = 0
+			plate_balls = 0
+			batter_cooldown_remaining = 0.0
+			batter_replacement_pending = false
+			consecutive_home_runs = mini(consecutive_home_runs + 1, 20)
+			var previous_grand_slams := alien_exhibition_grand_slams
+			alien_exhibition_grand_slams = mini(
+				alien_exhibition_grand_slams + 1,
+				ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+			)
+			alien_exhibition_seconds = (
+				get_alien_exhibition_progress_ratio() * EXHIBITION_SECONDS
+			)
+			story_taunt = get_alien_exhibition_taunt(alien_exhibition_grand_slams)
+			if (
+				previous_grand_slams < ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+				and alien_exhibition_grand_slams >= ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+			):
+				progression_changed.emit(
+					"Something red has appeared beside the impossible exhibition."
+				)
 		else:
 			plate_strikes = 0
 			plate_balls = 0
@@ -1635,17 +1746,38 @@ func _apply_pitch_outcome(
 			"ball_requirement": get_balls_required(),
 			"opponent_index": resolved_opponent,
 			"distance_index": resolved_distance,
-			"ball_count": resolved_balls,
-		})
+				"ball_count": resolved_balls,
+				"holds_batter": holds_batter,
+				"story_taunt": story_taunt,
+				"alien_exhibition_grand_slams": alien_exhibition_grand_slams,
+			})
 
-func _resolve_aggregate_time(seconds: float, summary: Dictionary, stochastic: bool) -> void:
+func _resolve_aggregate_time(
+	seconds: float,
+	summary: Dictionary,
+	stochastic: bool,
+	story_witnessed := true
+) -> void:
 	var metrics := get_at_bat_metrics()
+	var alien_story_hold := (
+		is_alien_exhibition_blocked()
+		and not genetic_offer_unlocked
+		and story_witnessed
+	)
 	lifetime_max_pitch_speed_fps = maxf(
 		lifetime_max_pitch_speed_fps,
 		get_representative_pitch_speed()
 	)
 	lifetime_max_distance_index = maxi(lifetime_max_distance_index, selected_distance_index)
-	var cycle_seconds := maxf(float(metrics.cycle_seconds), 0.000001)
+	var cycle_seconds := maxf(
+		(
+			get_automatic_timer_seconds(get_pitch_cooldown_seconds())
+			+ get_automatic_timer_seconds(get_resolved_flight_seconds())
+		)
+		if alien_story_hold
+		else float(metrics.cycle_seconds),
+		0.000001
+	)
 	var cycles := minf(seconds / cycle_seconds, MAX_NUMBER)
 	var active_volleys := minf(cycles * float(metrics.active_volleys), MAX_NUMBER)
 	var active_pitches := minf(cycles * float(metrics.active_pitches), MAX_NUMBER)
@@ -1675,19 +1807,32 @@ func _resolve_aggregate_time(seconds: float, summary: Dictionary, stochastic: bo
 	)
 	# Aggregate simulation ends between volleys. Live play never enters this path.
 	var requirement := get_strikes_required()
-	plate_strikes = (
-		int(floor(active_volleys * (
-			float(probabilities[Content.STRIKE_INDEX])
-			+ float(probabilities[Content.FOUL_INDEX]) * 0.5
-		)))
-		* get_volley_size()
-	) % maxi(requirement, 1)
-	plate_balls = int(floor(active_volleys * float(probabilities[Content.BALL_INDEX]))) % maxi(get_balls_required(), 1)
-	batter_cooldown_remaining = 0.0
-	_clear_pitch_cycle()
-	if cycles >= 1.0:
-		batter_replacement_pending = true
-		_complete_batter_replacement()
+	if alien_story_hold:
+		var witnessed_grand_slams := mini(
+			int(floor(active_volleys)),
+			ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED - alien_exhibition_grand_slams
+		)
+		alien_exhibition_grand_slams += maxi(witnessed_grand_slams, 0)
+		alien_exhibition_seconds = get_alien_exhibition_progress_ratio() * EXHIBITION_SECONDS
+		plate_strikes = 0
+		plate_balls = 0
+		batter_cooldown_remaining = 0.0
+		batter_replacement_pending = false
+		_clear_pitch_cycle()
+	else:
+		plate_strikes = (
+			int(floor(active_volleys * (
+				float(probabilities[Content.STRIKE_INDEX])
+				+ float(probabilities[Content.FOUL_INDEX]) * 0.5
+			)))
+			* get_volley_size()
+		) % maxi(requirement, 1)
+		plate_balls = int(floor(active_volleys * float(probabilities[Content.BALL_INDEX]))) % maxi(get_balls_required(), 1)
+		batter_cooldown_remaining = 0.0
+		_clear_pitch_cycle()
+		if cycles >= 1.0:
+			batter_replacement_pending = true
+			_complete_batter_replacement()
 	var visual_outcome := _sample_outcome(probabilities)
 	var visual_saved := false
 	var visual_strikeout := false
@@ -2541,6 +2686,26 @@ func get_outcome_probabilities_for_pitch(
 			result[Content.FOUL_INDEX] = float(result[Content.FOUL_INDEX]) + excess * 0.45
 			result[Content.BALL_INDEX] = float(result[Content.BALL_INDEX]) + excess * 0.35
 			result[4] = float(result[4]) + excess * 0.20
+		# A badly underprepared human matchup may be miserable, but it is never a
+		# fake choice with a rounding-error chance to advance. Preserve the punishing
+		# contact distribution while moving only enough fair contact into called
+		# Strikes to maintain an honest one-percent floor. Post-human opponents have
+		# no such mercy.
+		var strike_deficit := maxf(
+			HUMAN_CALLED_STRIKE_FLOOR - float(result[Content.STRIKE_INDEX]),
+			0.0
+		)
+		if strike_deficit > 0.0:
+			var fair_contact := 0.0
+			for hit_index in Content.HIT_OUTCOME_COUNT:
+				fair_contact += float(result[hit_index])
+			var retained_contact_ratio := maxf(
+				(fair_contact - strike_deficit) / maxf(fair_contact, 0.000001),
+				0.0
+			)
+			for hit_index in Content.HIT_OUTCOME_COUNT:
+				result[hit_index] = float(result[hit_index]) * retained_contact_ratio
+			result[Content.STRIKE_INDEX] = HUMAN_CALLED_STRIKE_FLOOR
 	return result
 
 func get_outcome_probabilities(opponent_index: int = current_opponent) -> Array[float]:
@@ -3520,7 +3685,9 @@ func get_player_power_rating(opponent_index: int = current_opponent) -> float:
 		+ log(1.0 + get_recovery_rate() / BASE_RECOVERY_RATE) / log(2.0) * 0.18
 		+ log(1.0 + BASE_BATTER_TURNOVER_SECONDS / maxf(get_base_batter_turnover_seconds(), 0.001)) / log(2.0) * 0.12
 	)
-	return minf(MAX_NUMBER, 100.0 * pow(2.0, maxf(matchup_quality + support, -8.0) / 2.0))
+	# Keep display-only Power below the shared numeric ceiling so scripted bosses
+	# can still visibly exceed even malformed or very old overpowered saves.
+	return minf(MAX_NUMBER / 1000000.0, 100.0 * pow(2.0, maxf(matchup_quality + support, -8.0) / 2.0))
 
 func get_opponent_power_rating(opponent_index: int = current_opponent) -> float:
 	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
@@ -3529,7 +3696,16 @@ func get_opponent_power_rating(opponent_index: int = current_opponent) -> float:
 		log(float(get_base_strikes_required(bounded)) / 3.0 + 1.0) / log(2.0) * 0.24
 		+ log(5.0 / float(get_balls_required(bounded)) + 1.0) / log(2.0) * 0.12
 	)
-	return minf(MAX_NUMBER, 100.0 * pow(2.0, maxf(resistance + rule_pressure, -8.0) / 2.0))
+	var rating := minf(
+		MAX_NUMBER,
+		100.0 * pow(2.0, maxf(resistance + rule_pressure, -8.0) / 2.0)
+	)
+	if bounded == Content.ALIEN_EXHIBITION_INDEX and genetic_rebirths <= 0:
+		# The opening alien is a scripted, literally unwinnable mismatch. Its Power
+		# bar should communicate that joke instead of understating it with the normal
+		# league formula—especially for inherited saves with absurd human stats.
+		rating = maxf(rating, minf(get_player_power_rating(bounded) * 1000.0, MAX_NUMBER))
+	return rating
 
 func get_current_opponent() -> Dictionary:
 	return opponents[current_opponent]
@@ -3815,13 +3991,57 @@ func get_offline_xp_efficiency() -> float:
 		OFFLINE_XP_EFFICIENCY_LIMIT - BASE_OFFLINE_XP_EFFICIENCY
 	) * pow(OFFLINE_REMAINING_PER_RANK, float(rank))
 
+func _get_velocity_pre_cap_multiplier() -> float:
+	var multiplier := 10.0 if has_divine_blessing("let_there_be_fastballs") else 1.0
+	multiplier *= get_body_growth_effect_multiplier("speed")
+	multiplier *= get_milestone_effect_multiplier("speed")
+	multiplier *= pow(1.80, int(genetic_levels.fast_twitch_everything))
+	multiplier *= pow(12.0, int(eldritch_levels.velocity_without_distance))
+	return minf(multiplier, MAX_NUMBER)
+
+func _get_velocity_training_delta_log10_for_rank(rank: int) -> float:
+	# Subtracting two numbers that are both one floating-point step below a body
+	# limit eventually rounds to zero. Work in log space on the exact exponential
+	# tail so the UI can still report the real (vanishingly small) next gain.
+	var multiplier := maxf(_get_velocity_pre_cap_multiplier(), 0.000001)
+	var body_limit := maxf(get_velocity_cap_fps(), 0.000001)
+	var knee := body_limit * VELOCITY_SOFT_CAP_START_FRACTION
+	var span := maxf(body_limit - knee, 0.000001)
+	var raw_before := (
+		BASE_VELOCITY_FPS + float(maxi(rank, 0)) * VELOCITY_PER_RANK_FPS
+	) * multiplier
+	var raw_step := VELOCITY_PER_RANK_FPS * multiplier
+	var gear_multiplier := maxf(1.0 + float(get_equipment_bonuses().speed_bonus), 0.000001)
+	if raw_before < knee:
+		var mapped_before := minf(raw_before, body_limit)
+		var mapped_after := _asymptotic_upper_limit(
+			raw_before + raw_step,
+			body_limit,
+			knee
+		)
+		var direct_delta := maxf((mapped_after - mapped_before) * gear_multiplier, 0.0)
+		if direct_delta > 0.0:
+			return log(direct_delta) / log(10.0)
+	# Above the knee, delta = span*e^-distance*(1-e^-step). Keeping the
+	# multiplication in logarithms avoids underflow even on fantastical old saves.
+	var one_minus_step_tail := 1.0 - exp(-raw_step / span)
+	if one_minus_step_tail <= 0.0:
+		return -MAX_NUMBER
+	var natural_log_delta := (
+		log(span)
+		- maxf(raw_before - knee, 0.0) / span
+		+ log(one_minus_step_tail)
+		+ log(gear_multiplier)
+	)
+	return natural_log_delta / log(10.0)
+
 func _get_training_effect_value(id: String) -> float:
 	# These are the same effective values shown in CURRENT STATS. Keeping the
 	# mapping here lets every client describe a rank by its real, current impact
 	# instead of repeating an asymptotic target that may be many ranks away.
 	match id:
 		"velocity":
-			return get_representative_pitch_speed()
+			return get_velocity_fps()
 		"command":
 			return get_pitch_quality()
 		"field_hustle":
@@ -3861,21 +4081,55 @@ func _get_training_effect_value(id: String) -> float:
 			)
 	return 0.0
 
-func get_training_next_rank_effect(id: String) -> Dictionary:
+func _get_training_next_rank_effect_at_rank(id: String, current_rank: int) -> Dictionary:
 	if not training_levels.has(id):
 		return {}
 	var stored_rank = training_levels[id]
-	var current_rank := maxi(int(stored_rank), 0)
+	current_rank = maxi(current_rank, 0)
+	training_levels[id] = current_rank
 	var before := _get_training_effect_value(id)
 	training_levels[id] = current_rank + 1
 	var after := _get_training_effect_value(id)
 	training_levels[id] = stored_rank
-	return {
+	var delta := after - before
+	var result := {
 		"rank": current_rank + 1,
 		"before": before,
 		"after": after,
-		"delta": after - before,
+		"delta": delta,
 	}
+	if id == "velocity":
+		var delta_log10 := _get_velocity_training_delta_log10_for_rank(current_rank)
+		result["delta_log10"] = delta_log10
+		if delta_log10 > -300.0 and delta_log10 < 280.0:
+			result.delta = pow(10.0, delta_log10)
+		elif delta_log10 <= -300.0:
+			# The display uses delta_log10; keeping delta at zero honestly reflects
+			# that this change is below the runtime's representable precision.
+			result.delta = 0.0
+	return result
+
+func get_training_next_rank_effect(id: String) -> Dictionary:
+	if not training_levels.has(id):
+		return {}
+	var current_rank := maxi(int(training_levels[id]), 0)
+	var result := _get_training_next_rank_effect_at_rank(id, current_rank)
+	var fresh := _get_training_next_rank_effect_at_rank(id, 0)
+	var efficiency := 1.0
+	if id == "velocity" and result.has("delta_log10") and fresh.has("delta_log10"):
+		efficiency = clampf(pow(
+			10.0,
+			clampf(float(result.delta_log10) - float(fresh.delta_log10), -300.0, 0.0)
+		), 0.0, 1.0)
+	else:
+		var fresh_delta := absf(float(fresh.get("delta", 0.0)))
+		if fresh_delta > 0.0:
+			efficiency = clampf(absf(float(result.get("delta", 0.0))) / fresh_delta, 0.0, 1.0)
+	result["marginal_efficiency"] = efficiency
+	return result
+
+func get_training_marginal_efficiency(id: String) -> float:
+	return float(get_training_next_rank_effect(id).get("marginal_efficiency", 1.0))
 
 func get_training_cost(id: String) -> float:
 	var definition := Content.training_by_id(id)
@@ -4027,7 +4281,15 @@ func get_milestone_cost(id: String) -> float:
 	var definition := Content.milestone_by_id(id)
 	if definition.is_empty():
 		return MAX_NUMBER
-	return rounded_cost(float(definition.cost))
+	var premium_multiplier := (
+		PREMIUM_HUMAN_MILESTONE_COST_MULTIPLIER
+		if id in PREMIUM_HUMAN_MILESTONE_IDS
+		else 1.0
+	)
+	return rounded_cost(
+		float(definition.cost)
+		* premium_multiplier
+	)
 
 func buy_milestone(id: String) -> bool:
 	if not can_buy_milestone(id):
@@ -4324,6 +4586,8 @@ func perform_genetic_rebirth() -> int:
 	lifetime_genetic_rebirths += 1
 	genetic_offer_unlocked = true
 	alien_exhibition_seconds = EXHIBITION_SECONDS
+	alien_exhibition_grand_slams = ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+	alien_arrival_seen = true
 	var retained_slots := _prepare_genetic_time_travel_loot()
 	_reset_body_progress()
 	var wardrobe_message := " All loot was left in the future."
@@ -4351,6 +4615,8 @@ func perform_eldritch_ascension() -> int:
 	_reset_auto_training_stats()
 	genetic_offer_unlocked = true
 	alien_exhibition_seconds = EXHIBITION_SECONDS
+	alien_exhibition_grand_slams = ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+	alien_arrival_seen = true
 	eldritch_offer_unlocked = true
 	eldritch_exhibition_seconds = EXHIBITION_SECONDS
 	auto_farm_enabled = false
@@ -4392,6 +4658,8 @@ func perform_divine_ascension(id: String) -> bool:
 	genetic_offer_unlocked = true
 	eldritch_offer_unlocked = true
 	alien_exhibition_seconds = EXHIBITION_SECONDS
+	alien_exhibition_grand_slams = ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+	alien_arrival_seen = true
 	eldritch_exhibition_seconds = EXHIBITION_SECONDS
 	auto_advance_enabled = false
 	auto_farm_enabled = false
@@ -4652,6 +4920,8 @@ func to_save_data() -> Dictionary:
 		"genetic_offer_unlocked": genetic_offer_unlocked,
 		"eldritch_offer_unlocked": eldritch_offer_unlocked,
 		"alien_exhibition_seconds": alien_exhibition_seconds,
+		"alien_exhibition_grand_slams": alien_exhibition_grand_slams,
+		"alien_arrival_seen": alien_arrival_seen,
 		"eldritch_exhibition_seconds": eldritch_exhibition_seconds,
 		"cosmos_conquered": cosmos_conquered,
 		"body_growth_level": body_growth_level,
@@ -4758,6 +5028,33 @@ func apply_save_data(data: Dictionary) -> void:
 	genetic_offer_unlocked = bool(data.get("genetic_offer_unlocked", highest_unlocked >= Content.ALIEN_EXHIBITION_INDEX))
 	eldritch_offer_unlocked = bool(data.get("eldritch_offer_unlocked", highest_unlocked >= Content.ELDRITCH_EXHIBITION_INDEX))
 	alien_exhibition_seconds = clampf(float(data.get("alien_exhibition_seconds", EXHIBITION_SECONDS if genetic_offer_unlocked else 0.0)), 0.0, EXHIBITION_SECONDS)
+	if saved_version >= 24:
+		alien_exhibition_grand_slams = clampi(
+			int(data.get("alien_exhibition_grand_slams", 0)),
+			0,
+			ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+		)
+		alien_arrival_seen = bool(data.get(
+			"alien_arrival_seen",
+			genetic_rebirths > 0 or lifetime_genetic_rebirths > 0
+		))
+	else:
+		alien_exhibition_grand_slams = (
+			ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+			if genetic_offer_unlocked
+			else clampi(
+				int(round(
+					alien_exhibition_seconds / EXHIBITION_SECONDS
+					* float(ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED)
+				)),
+				0,
+				ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
+			)
+		)
+		# A pre-v24 player parked at the first impossible opponent has not seen the
+		# new arrival scene. Everyone who already time-traveled keeps that history.
+		alien_arrival_seen = genetic_rebirths > 0 or lifetime_genetic_rebirths > 0
+	alien_exhibition_seconds = get_alien_exhibition_progress_ratio() * EXHIBITION_SECONDS
 	eldritch_exhibition_seconds = clampf(float(data.get("eldritch_exhibition_seconds", EXHIBITION_SECONDS if eldritch_offer_unlocked else 0.0)), 0.0, EXHIBITION_SECONDS)
 	cosmos_conquered = bool(data.get("cosmos_conquered", false))
 	# v15 and earlier never recorded enough per-universe history to prove a
@@ -5184,6 +5481,27 @@ static func format_scientific(value: float, significant_digits: int = 3) -> Stri
 		rendered = rendered.trim_suffix("0")
 	rendered = rendered.trim_suffix(".")
 	return "%s%se%d" % ["-" if value < 0.0 else "", rendered, exponent]
+
+static func format_scientific_from_log10(
+	log10_absolute_value: float,
+	significant_digits: int = 3
+) -> String:
+	if is_nan(log10_absolute_value):
+		return "NaN"
+	if is_inf(log10_absolute_value):
+		return "0" if log10_absolute_value < 0.0 else "1e280+"
+	var exponent := int(floor(log10_absolute_value))
+	var mantissa := pow(10.0, log10_absolute_value - float(exponent))
+	var decimal_places := maxi(significant_digits - 1, 0)
+	var rounded_mantissa := snappedf(mantissa, pow(10.0, -decimal_places))
+	if rounded_mantissa >= 10.0:
+		rounded_mantissa /= 10.0
+		exponent += 1
+	var rendered := ("%." + str(decimal_places) + "f") % rounded_mantissa
+	while "." in rendered and rendered.ends_with("0"):
+		rendered = rendered.trim_suffix("0")
+	rendered = rendered.trim_suffix(".")
+	return "%se%d" % [rendered, exponent]
 
 static func format_number(value: float, decimals: int = 2) -> String:
 	if is_nan(value):

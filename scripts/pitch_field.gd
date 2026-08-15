@@ -158,7 +158,7 @@ func _ready() -> void:
 		clone_visual_capacity = WEB_MAX_CLONE_VISUALS
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	tooltip_text = "Tap the open field to advance the active timer. Taps can supply at most half of each timer."
+	tooltip_text = "Tap the open field to advance the active timer. Repeated input on one timer smoothly loses effectiveness."
 	clip_contents = true
 	_setup_ball_stream()
 	_setup_range_arrows()
@@ -970,6 +970,8 @@ func _notify_exact_pitch_events(pitch_events: Array, elapsed_seconds: float) -> 
 	return launched
 
 func _pitch_event_is_terminal(event: Dictionary) -> bool:
+	if bool(event.get("holds_batter", false)):
+		return false
 	var outcome := clampi(
 		int(event.get("outcome", Content.STRIKE_INDEX)),
 		0,
@@ -1028,6 +1030,9 @@ func _schedule_pitch_result(event: Dictionary, delay: float) -> void:
 		"plate_ball_count": int(event.get("plate_ball_count", visual_ball_count)),
 		"strike_requirement": int(event.get("strike_requirement", get_strike_limit())),
 		"ball_requirement": int(event.get("ball_requirement", get_ball_limit())),
+		"ball_count": maxi(int(event.get("ball_count", 1)), 1),
+		"holds_batter": bool(event.get("holds_batter", false)),
+		"story_taunt": str(event.get("story_taunt", "")),
 	})
 
 func _claim_representative_result_slot() -> bool:
@@ -1099,6 +1104,7 @@ func _trigger_result_visual(result: Dictionary) -> void:
 	var salvo := float(result.get("salvo", _get_salvo_strength()))
 	var ball_count := maxi(int(result.get("ball_count", 1)), 1)
 	var saved := bool(result.get("saved", false)) and outcome < Content.HIT_OUTCOME_COUNT and outcome != Content.GRAND_SLAM_INDEX
+	var holds_batter := bool(result.get("holds_batter", false))
 	var authoritative_result := result.has("strikeout")
 	impact_color = Content.OUTCOME_COLORS[outcome]
 	impact_strength = 1.0
@@ -1132,7 +1138,7 @@ func _trigger_result_visual(result: Dictionary) -> void:
 		elif saved:
 			if authoritative_result:
 				visual_strike_count = int(result.get("strike_count", visual_strike_count))
-		else:
+		elif not holds_batter:
 			ends_batter = true
 		if ends_batter:
 			batter_end_pending = true
@@ -1148,6 +1154,17 @@ func _trigger_result_visual(result: Dictionary) -> void:
 		"age": 0.0,
 		"duration": 1.35,
 	})
+	var story_taunt := str(result.get("story_taunt", "")).strip_edges()
+	if not story_taunt.is_empty():
+		result_popups.append({
+			"outcome": outcome,
+			"text": story_taunt,
+			"age": 0.0,
+			"duration": 1.65,
+			"vertical_offset": -27.0,
+			"font_size": 15,
+			"color": Color("f6e56f"),
+		})
 	batter_call_displayed.emit(result_text, Content.OUTCOME_COLORS[outcome])
 	var return_count := mini(ball_count, return_ball_capacity)
 	for ball_index in return_count:
@@ -2013,10 +2030,14 @@ func _draw_result_popups() -> void:
 		var fade := 1.0 - smoothstep(0.64, 1.0, progress)
 		var rise := progress * 34.0
 		var outcome := int(popup.outcome)
-		var color: Color = Content.OUTCOME_COLORS[outcome]
-		var baseline := _get_batter_position() + Vector2(-117.0, -58.0 - rise)
-		draw_string(font, baseline + Vector2(2.0, 2.0), str(popup.text), HORIZONTAL_ALIGNMENT_CENTER, 235.0, 20, Color(0.0, 0.0, 0.0, fade * 0.85))
-		draw_string(font, baseline, str(popup.text), HORIZONTAL_ALIGNMENT_CENTER, 235.0, 20, Color(color, fade))
+		var color: Color = Color(popup.get("color", Content.OUTCOME_COLORS[outcome]))
+		var font_size := int(popup.get("font_size", 20))
+		var baseline := _get_batter_position() + Vector2(
+			-117.0,
+			-58.0 - rise + float(popup.get("vertical_offset", 0.0))
+		)
+		draw_string(font, baseline + Vector2(2.0, 2.0), str(popup.text), HORIZONTAL_ALIGNMENT_CENTER, 235.0, font_size, Color(0.0, 0.0, 0.0, fade * 0.85))
+		draw_string(font, baseline, str(popup.text), HORIZONTAL_ALIGNMENT_CENTER, 235.0, font_size, Color(color, fade))
 
 func _draw_loot_popups() -> void:
 	var font := ThemeDB.fallback_font

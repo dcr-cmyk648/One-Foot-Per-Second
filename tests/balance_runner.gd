@@ -52,7 +52,7 @@ func _initialize() -> void:
 				human_clear_time = elapsed
 	_purchase_available_content()
 	print(
-		"Human leagues cleared after %s; Xylophax's one-minute exhibition ended at %s; %d purchases; speed=%s; %s pitches/sec; potential DNA=%d; training=%s"
+		"Human leagues cleared after %s; Xylophax's humiliation meter filled at %s; %d purchases; speed=%s; %s pitches/sec; potential DNA=%d; training=%s"
 		% [
 			_format_clock(human_clear_time),
 			_format_clock(elapsed),
@@ -68,6 +68,8 @@ func _initialize() -> void:
 	quit(0 if succeeded else 1)
 
 func _simulation_step() -> float:
+	if game != null and game.is_alien_exhibition_blocked():
+		return 0.25
 	if elapsed < 2.0 * 60.0 * 60.0:
 		return 30.0
 	if elapsed < 24.0 * 60.0 * 60.0:

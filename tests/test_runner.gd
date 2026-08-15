@@ -379,6 +379,15 @@ func _test_initial_balance_and_velocity_layers() -> void:
 	_expect(midgame_strike_rate < 0.65, "Repeatable Command alone must not create a 100% called-Strike rate in human baseball")
 	_expect(midgame_strikeout_rate > 0.01 and midgame_strikeout_rate < 0.85, "A no-prestige midgame at-bat should remain plausible without becoming guaranteed or vanishingly rare")
 	midgame.free()
+	var underprepared_human: BaseballGameState = GameStateScript.new()
+	underprepared_human.highest_unlocked = Content.HUMAN_FINAL_INDEX - 1
+	underprepared_human.current_opponent = Content.HUMAN_FINAL_INDEX - 1
+	_expect(
+		float(underprepared_human.get_outcome_probabilities()[Content.STRIKE_INDEX])
+		>= BaseballGameState.HUMAN_CALLED_STRIKE_FLOOR,
+		"Even a catastrophically underprepared human matchup should retain at least a one-percent called-Strike chance"
+	)
+	underprepared_human.free()
 
 	game.training_levels.velocity = 1000
 	game.current_opponent = Content.HUMAN_FINAL_INDEX
@@ -564,24 +573,25 @@ func _test_field_tapping() -> void:
 	_expect_close(game.pitch_credit, opening_fraction, "A recovery tap should add its duration-scaled release credit")
 	var second_burst_tap := game.apply_field_tap()
 	var third_burst_tap := game.apply_field_tap()
-	_expect_close(float(second_burst_tap.seconds), float(first_tap.seconds), "A tiny two-tap burst should remain inside the normal-tapping grace rate")
+	_expect(float(second_burst_tap.seconds) < float(first_tap.seconds), "A second tap on the same timer should already reflect its smaller remaining share")
 	_expect(float(third_burst_tap.seconds) < float(first_tap.seconds), "Ultra-fast repeated taps should immediately begin yielding diminishing returns")
 	_expect(float(third_burst_tap.fatigue_multiplier) < 1.0, "A diminished tap should disclose its burst-fatigue multiplier")
 	game.field_tap_burst_rate = 0.0
 	game.field_tap_advanced_seconds = float(first_tap.seconds)
 	game.pitch_credit = opening_fraction
-	for _tap in 29:
+	for _tap in 89:
 		game._decay_field_tap_fatigue(0.25)
 		game.apply_field_tap()
-	_expect_close(game.pitch_credit, BaseballGameState.FIELD_TAP_PHASE_CAP, "Tapping may provide exactly half of one timer")
-	var capped_tap := game.apply_field_tap()
-	_expect(not bool(capped_tap.get("applied", false)) and str(capped_tap.get("reason", "")) == "idle_limit", "The idle half of a timer must never be tappable")
+	_expect(game.pitch_credit > 0.50 and game.pitch_credit < 1.0, "Repeated patient taps should pass the former half-timer wall but approach completion smoothly")
+	var late_tap := game.apply_field_tap()
+	_expect(bool(late_tap.get("applied", false)) and float(late_tap.seconds) < float(first_tap.seconds) * 0.50, "A late same-timer tap should remain useful with strongly diminished impact")
 
 	var ordinary_rhythm: BaseballGameState = GameStateScript.new()
 	var ordinary_first := ordinary_rhythm.apply_field_tap()
 	ordinary_rhythm._decay_field_tap_fatigue(0.25)
 	var ordinary_second := ordinary_rhythm.apply_field_tap()
-	_expect_close(float(ordinary_second.seconds), float(ordinary_first.seconds), "A normal four-or-fewer-taps-per-second rhythm should remain effectively untouched")
+	_expect_close(float(ordinary_second.fatigue_multiplier), 1.0, "A normal four-or-fewer-taps-per-second rhythm should remain free of burst fatigue")
+	_expect(float(ordinary_second.seconds) < float(ordinary_first.seconds), "Same-timer diminishing returns should remain distinct from burst fatigue")
 	var tired_rate := 24.0
 	var unmodified_fatigue := ordinary_rhythm.get_field_tap_fatigue_multiplier_for_burst_rate(tired_rate, 0)
 	var genetic_fatigue := ordinary_rhythm.get_field_tap_fatigue_multiplier_for_burst_rate(tired_rate, 10)
@@ -644,7 +654,7 @@ func _test_field_tapping() -> void:
 	_expect(automatic.get_effective_automatic_field_tap_rate() > 0.0, "Tap decay should diminish automation rather than disable it")
 	var natural_cycle := automatic.get_pitch_cooldown_seconds()
 	var automatic_cycle := automatic.get_automatic_timer_seconds(natural_cycle)
-	_expect(automatic_cycle < natural_cycle and automatic_cycle >= natural_cycle * 0.50, "Automatic clicks should accelerate timers without crossing the shared half-idle budget")
+	_expect(automatic_cycle < natural_cycle and automatic_cycle > 0.0, "Automatic clicks should accelerate timers without an arbitrary hard floor or an instantaneous timer")
 	automatic.free()
 	field.free()
 	game.free()
@@ -1653,6 +1663,10 @@ func _test_progression_and_purchases() -> void:
 	_expect(near_limit_speed < speed_curve.get_velocity_cap_fps(), "Finite Speed Training should approach rather than hit the current body limit")
 	_expect(float(near_limit_effect.delta) > 0.0 and float(near_limit_effect.delta) < BaseballGameState.VELOCITY_PER_RANK_FPS, "Speed Training should keep a smaller positive next rank near the body limit")
 	_expect(speed_curve.get_training_cost("velocity") < BaseballGameState.MAX_NUMBER and speed_curve.buy_training("velocity"), "Speed Training should remain purchasable near the body limit")
+	speed_curve.training_levels.velocity = 100000
+	var vanishing_speed_effect := speed_curve.get_training_next_rank_effect("velocity")
+	_expect(float(vanishing_speed_effect.get("delta_log10", 0.0)) < -10.0, "Vanishing Speed gains should retain an exact log-space magnitude after ordinary subtraction underflows")
+	_expect(float(vanishing_speed_effect.marginal_efficiency) <= 0.10, "A deeply asymptotic Speed rank should be marked below ten percent of fresh efficacy")
 	speed_curve.free()
 	_expect(BaseballGameState.format_cost(game.get_training_cost("velocity")).find(".") == -1, "Displayed costs should have no decimals")
 	_expect(BaseballGameState.format_cost(18.0) == "20", "Costs should round upward readably")
@@ -1667,6 +1681,12 @@ func _test_progression_and_purchases() -> void:
 	_expect(BaseballGameState.format_xp_total(9.95e15) == "9.95e15", "Scientific XP should retain three useful digits")
 	_expect(BaseballGameState.format_scientific(0.0000000012, 3) == "1.2e-9", "Scientific formatting should use compact classic 1eN notation without padded exponents")
 	_expect(BaseballGameState.format_number(0.0004, 2) == "4e-4", "Small nonzero values should not round down to a displayed zero")
+	var premium_definition := Content.milestone_by_id("neighborhood_pitching_tutor")
+	_expect(
+		game.get_milestone_cost("neighborhood_pitching_tutor")
+		> float(premium_definition.cost),
+		"Premium human projects should be more expensive savings targets than their original authored prices"
+	)
 	_expect(game.buy_pitch("four_seam"), "The four-seam should purchase")
 	game.highest_unlocked = maxi(game.highest_unlocked, 11)
 	game.training_levels.offline_efficiency = 0
@@ -1800,17 +1820,29 @@ func _test_story_exhibitions_and_reset_boundaries() -> void:
 	game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
 	game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
 	_expect(game.is_alien_exhibition_blocked(), "The first alien exhibition should be unwinnable")
+	_expect(game.should_show_alien_arrival(), "First contact should request its one-time alien-arrival scene")
+	_expect(game.mark_alien_arrival_seen() and not game.should_show_alien_arrival(), "Acknowledging first contact should persistently consume the arrival scene")
 	_expect(game.get_outcome_probabilities() == [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "Xylophax should hit 100% Grand Slams before the offer")
 	game.simulate_offline(600.0)
-	_expect_close(game.alien_exhibition_seconds, 0.0, "The player must personally witness the alien exhibition; offline time cannot advance it")
+	_expect(game.alien_exhibition_grand_slams == 0, "The player must personally witness the alien exhibition; offline time cannot advance it")
 	game.opponent_mastery[Content.ALIEN_EXHIBITION_INDEX] = 1.0e20
 	game.frustration_points = 1.0e20
 	game.training_levels.command = 1000000
 	_expect(game.get_outcome_probabilities() == [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "Stats, mastery, and Frustration must not create a hidden lottery at the scripted alien wall")
-	game.simulate_active_time(59.0)
-	_expect(not game.is_alien_help_available() and not game.genetic_offer_unlocked, "HELP should not appear before the witnessed minute is complete")
-	game.simulate_active_time(1.0)
-	_expect(game.is_alien_help_available(), "A witnessed minute should reveal the unobtrusive HELP action")
+	for grand_slam_number in BaseballGameState.ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED - 1:
+		var humiliation_summary := game._empty_resolution_summary()
+		game._apply_pitch_outcome(humiliation_summary, Content.GRAND_SLAM_INDEX)
+		var event: Dictionary = humiliation_summary.pitch_events.back()
+		_expect(bool(event.holds_batter), "The first alien boss should remain at the plate after every scripted Grand Slam")
+		_expect(not str(event.story_taunt).is_empty(), "Every scripted Grand Slam should carry a visible alien taunt")
+		_expect(not game.batter_replacement_pending and game.batter_cooldown_remaining == 0.0, "Xylophax's humiliation loop must not start ordinary batter replacement")
+		_expect(game.alien_exhibition_grand_slams == grand_slam_number + 1, "Each witnessed Grand Slam should advance the humiliation meter exactly once")
+	_expect(not game.is_alien_help_available() and not game.genetic_offer_unlocked, "HELP should not appear before the humiliation meter is complete")
+	var final_humiliation := game._empty_resolution_summary()
+	game._apply_pitch_outcome(final_humiliation, Content.GRAND_SLAM_INDEX)
+	_expect(game.is_alien_help_available(), "The final witnessed Grand Slam should reveal the unobtrusive HELP action")
+	_expect_close(game.get_alien_exhibition_progress_ratio(), 1.0, "The HELP reveal should coincide with a full humiliation meter")
+	_expect(game.get_opponent_power_rating() >= game.get_player_power_rating() * 999.0, "The scripted alien mismatch should dominate the Power display even for an inherited overpowered save")
 	_expect(not game.genetic_offer_unlocked, "The Time Machine must wait for the player to notice and click HELP")
 	_expect(game.accept_alien_help(), "Clicking HELP should accept the portal stranger's offer")
 	_expect(game.genetic_offer_unlocked and not game.is_alien_help_available(), "The accepted HELP scene should permanently unlock Time Travel and dismiss itself")
@@ -1914,6 +1946,8 @@ func _test_save_round_trip_and_migration() -> void:
 	original.reality_dna_earned = 456.0
 	original.genetic_offer_unlocked = true
 	original.eldritch_offer_unlocked = true
+	original.alien_exhibition_grand_slams = 9
+	original.alien_arrival_seen = true
 	original.training_levels.velocity = 9
 	original.training_levels.field_hustle = 4
 	original.training_levels.turnover = 7
@@ -1957,6 +1991,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(int(restored.training_levels.turnover) == 7, "Batter-cooldown training should survive saves")
 	_expect(int(restored.training_levels.field_hustle) == 4, "Field-tap training should survive saves")
 	_expect_close(restored.get_offline_xp_efficiency(), original.get_offline_xp_efficiency(), "Offline-efficiency training should survive saves")
+	_expect(restored.alien_exhibition_grand_slams == 9 and restored.alien_arrival_seen, "Alien humiliation and arrival state should survive saves")
 
 	var early_v13: BaseballGameState = GameStateScript.new()
 	early_v13.apply_save_data({
@@ -1984,6 +2019,16 @@ func _test_save_round_trip_and_migration() -> void:
 	})
 	_expect(version_seventeen.body_growth_level == 7, "Pre-growth saves should infer an age appropriate to their campaign level")
 	_expect(not version_seventeen.human_league_completed_as_toddler, "Migration must never invent the secret toddler clear")
+	var version_twenty_three: BaseballGameState = GameStateScript.new()
+	version_twenty_three.apply_save_data({
+		"version": 23,
+		"highest_unlocked": Content.ALIEN_EXHIBITION_INDEX,
+		"current_opponent": Content.ALIEN_EXHIBITION_INDEX,
+		"genetic_offer_unlocked": false,
+		"alien_exhibition_seconds": 30.0,
+	})
+	_expect(version_twenty_three.alien_exhibition_grand_slams == 6, "v23's witnessed exhibition time should migrate proportionally into the humiliation meter")
+	_expect(not version_twenty_three.alien_arrival_seen, "A pre-v24 first-contact save should receive the new alien arrival scene")
 
 	var legacy_data := {
 		"version": 5,
@@ -2050,6 +2095,7 @@ func _test_save_round_trip_and_migration() -> void:
 	early_v13.free()
 	version_sixteen.free()
 	version_seventeen.free()
+	version_twenty_three.free()
 
 func _test_cosmic_completion_and_magnitude() -> void:
 	var game: BaseballGameState = GameStateScript.new()
