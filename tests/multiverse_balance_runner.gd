@@ -2,9 +2,9 @@ extends SceneTree
 
 const Content = preload("res://scripts/content.gd")
 const GameStateScript = preload("res://scripts/game_state.gd")
-# The audited route currently finishes around day 49.25. A 75-day ceiling keeps
-# enough variance for balance edits while still catching a serious regression.
-const MAX_SECONDS := 75.0 * 24.0 * 60.0 * 60.0
+# The audited route currently finishes around day 11.625. A 30-day ceiling keeps
+# generous variance for balance edits while still catching a serious regression.
+const MAX_SECONDS := 30.0 * 24.0 * 60.0 * 60.0
 
 var game: BaseballGameState
 var elapsed := 0.0

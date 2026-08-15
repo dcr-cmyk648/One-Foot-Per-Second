@@ -2,14 +2,14 @@
 
 A top-down baseball idle game about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the playable **v0.15.0 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
+This repository contains the playable **v0.15.1 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
 
 ## Share or install on another computer
 
 Upload this single file to Google Drive (or any ordinary file host):
 
 ```text
-release/No Hitter v0.15.0 All Platforms.zip
+release/No Hitter v0.15.1 All Platforms.zip
 ```
 
 It contains a static browser-site ZIP, a Universal Mac DMG, separate Intel/AMD and ARM Windows ZIPs, separate Intel/AMD and ARM Linux archives, source code, instructions, a platform manifest, and SHA-256 checksums. Recipients can play from an uploaded browser build or choose the native package matching their computer. Godot is not needed to play.
@@ -26,7 +26,7 @@ The native packages are portable builds, not store submissions. The Mac app is a
 
 ## Play in a browser
 
-`release/No Hitter v0.15.0/No Hitter v0.15.0 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database or application server. On iPhone, its INSTALL menu explains Safari's Add to Home Screen flow; on Android, it opens the native install prompt when Chrome makes one available and otherwise gives the matching menu steps. Installed phone versions remain on the same five-minute Web update channel. While the game is visible, supported browsers also request a screen wake lock and reacquire it after returning to the tab. Visibility, page-hide/show, freeze, and resume events are recorded outside the frozen game loop, so returning from an iOS suspension reliably converts the wall-clock gap into offline progress even when Safari reports one giant frame. A running tab offers a reviewable update with separate Export, Later, and Update actions, flushes the primary/rollback save mirrors, and falls back cleanly if activation stalls. The title-screen Resume picker and the in-game SAVES menu both expose an autosave plus three device-local manual slots on desktop and phone; portable Export/Import remains the cross-device path. On iOS, selecting an exported backup directly from the Files picker can use Google Drive when the Drive provider is enabled in Files; a Web app cannot silently browse a private Drive account without a separately configured Google OAuth application.
+`release/No Hitter v0.15.1/No Hitter v0.15.1 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database or application server. On iPhone, its INSTALL menu explains Safari's Add to Home Screen flow; on Android, it opens the native install prompt when Chrome makes one available and otherwise gives the matching menu steps. Installed phone versions remain on the same five-minute Web update channel. While the game is visible, supported browsers also request a screen wake lock and reacquire it after returning to the tab. Visibility, page-hide/show, freeze, and resume events are recorded outside the frozen game loop, so returning from an iOS suspension reliably converts the wall-clock gap into offline progress even when Safari reports one giant frame. A running tab offers a reviewable update with separate Export, Later, and Update actions, flushes the primary/rollback save mirrors, and falls back cleanly if activation stalls. The title-screen Resume picker and the in-game SAVES menu both expose an autosave plus three device-local manual slots on desktop and phone; portable Export/Import remains the cross-device path. On iOS, selecting an exported backup directly from the Files picker can use Google Drive when the Drive provider is enabled in Files; a Web app cannot silently browse a private Drive account without a separately configured Google OAuth application.
 
 To build only the browser package, or serve the current build locally:
 
@@ -55,7 +55,7 @@ Commit the refreshed `web/` directory whenever gameplay source changes. The comp
 
 ## Play on macOS
 
-1. Open `release/No Hitter v0.15.0 macOS Universal.dmg`.
+1. Open `release/No Hitter v0.15.1 macOS Universal.dmg`.
 2. Drag **No Hitter.app** to Applications, or run it from the disk image.
 3. If macOS asks for confirmation, Control-click the app, choose **Open**, and confirm.
 
@@ -125,7 +125,7 @@ Every released projectile snapshots its pitch type, source, exact randomized rel
 
 The camera begins at an extra-close three-foot view. Character rings have a separate close-range ceiling so neither player covers home plate; the ball and environment retain the stronger zoom. Pitcher and batter share the same point-and-ring graphic language, and the fresh toddler pitcher remains about 50% larger than the opposing toddler for readability. Purchased age and physical BODY modifiers—not ordinary stat pumping—control mortal marker size; post-human bodies, arms, clones, and time layers can later expand the formation toward the intended absurd ceiling. Batter size remains class- and era-specific, from small children through huge aliens and gods, and both sides share the same distance perspective. The pitching arm is a short bat-like rectangle that drives forward, and the ball leaves from its exact tip. Level progression moves the mound and zooms out automatically so later formations and contextually huge opponents remain legible. Departed batters clear toward the upper-right and replacements enter from the lower-left. Human leagues use muted grass; later environments change only when their campaign layers are revealed. The title screen turns the app-icon matchup into a large animated hero with dedicated portrait and landscape framing; its opponent, projectile count, and environment still change only with the farthest discovered era and never preview aliens, the void, or divine baseball early.
 
-The 1600×1000 installed interface opens maximized with a 1280×800 desktop minimum. On a portrait browser viewport, the field turns vertically so the pitcher is below the batter; desktop sidebars become touch-sized Upgrades, Status, Log, and Saves overlays, and outcome cards wrap into two rows. Upgrade overlays retain the live XP balance and use explicit 44-pixel controls around a large current-section card. Mound movement becomes a stacked up/down control to the pitcher's right, and the equipment browser uses an in-content Close action that stays clear of iOS window chrome. Update warnings use phone-bounded copy and actions. This responsive layer changes presentation only. Future campaign currencies, statistics, upgrade lists, and Guide text remain hidden until their corresponding story reveal.
+The 1600×1000 installed interface opens maximized with a 1280×800 desktop minimum. On a portrait browser viewport, the field turns vertically so the pitcher is below the batter; desktop sidebars become touch-sized Upgrades, Status, Log, and Saves overlays, and outcome cards wrap into two rows. Upgrade overlays retain the live XP balance and use explicit 44-pixel controls around a large current-section card. Repeatable cards keep a short effect line and a separate price action; desktop hover or a stationary phone hold reveals the exact formula, while a swipe cancels inspection and scrolls normally. Mound movement becomes a stacked up/down control to the pitcher's right, and the equipment browser uses an in-content Close action that stays clear of iOS window chrome. Update warnings use phone-bounded copy and actions. This responsive layer changes presentation only. Future campaign currencies, statistics, upgrade lists, and Guide text remain hidden until their corresponding story reveal.
 
 ## Run from source
 
@@ -155,7 +155,7 @@ godot --headless --path . --script res://tests/mobile_ui_runner.gd -- --fresh
 
 The regression suite covers all eight outcomes, strikeout-only XP, per-Strike mastery, matchup adaptation, outcome-weighted logarithmic Frustration, granular body aging and modifiers, the toddler-only league clear, Foul and Ball counts, both witnessed HELP transitions, the 31-pitch automatic arsenal, immutable release/plate-speed/drag snapshots, the release/flight/impact state machine, one-live-ball human rules, post-human 2,048-ball volleys, level-assigned regulation ranges, constant-speed misses, empty-plate suppression, both visible timers, deterministic high-variety naming, visible enemy loadouts, all 15 rarity tiers, exact slot/rarity drop provenance in foreground and bulk play, Power sorting, no-auto-equip drops, equipment caps, starred 10-item pruning, Scrap, post-cap mastery farming, all 109 achievement IDs, prestige automation, God Prestige, secret No Hitter validation, scroll-safe controls, save-schema migration and rollback recovery, cross-platform manual slots, spoiler-gated title art, iOS suspension recovery, cosmic completion, and seven-day aggregate simulation. Desktop and portrait interface audits also exercise every reveal layer, Help disclosure, hover/hold comparison, touch targets, catalog filtering, update bounds, save slots, and lossless responsive-layout transitions.
 
-The deterministic aggressive auto-buyer benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. In v0.15.0, the first human lifetime reaches the alien exhibition after roughly 11 hours 15 minutes and the complete multi-reset audit reaches cosmic victory after roughly 34 days 6 hours. The full audit is documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
+The deterministic aggressive auto-buyer benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. In v0.15.1, the first human lifetime reaches the alien exhibition after roughly 11 hours and the complete multi-reset audit reaches cosmic victory after roughly 11 days 15 hours. The full audit is documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Save data
 

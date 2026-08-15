@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.1 — The scouting report fits on the phone
+
+- Shortened every repeatable Training summary and removed the duplicated XP cost from its passive card text; the separate price button remains the only purchase action. Diminishing axes now say what stat they approach instead of leading with “remaining gap” notation.
+- Added scroll-safe upgrade inspection parity. Desktop hover and a stationary 0.55-second hold on mobile card text show the complete mathematical explanation and related stat definition; an eight-pixel drag cancels inspection so ordinary list scrolling remains native.
+- Replaced exponential opponent-mastery repetition with authored completed-count targets. The MLB Champion now asks for roughly 55 ordinary strikeout-equivalents instead of more than 1,200, every called Strike still advances the bar, and post-human targets account for their larger live counts and volleys.
+- Shifted late-campaign resistance into tougher batter matchups and made each rarer frontier strikeout more valuable. The deterministic no-loot audit clears human baseball in about 11 hours and reaches the first cosmic victory in about 11 days 15 hours without requiring equipment.
+- Added mobile/desktop UI regressions for concise cards, separated price actions, full hover/hold details, drag cancellation, and bounded mastery targets across all 45 levels. Save schema remains 22, so existing progress loads without migration.
+
 ## 0.15.0 — The batter is wearing the loot table
 
 - Rebuilt the human campaign around a roughly 12-hour first clear and recognizable baseball anchors. Thirteen authored ranges now pass through tee-ball, youth, intermediate, high-school/college, and 60-foot-6-inch regulation distance; no-equipment human development finishes at 115 mph and recovery remains below `0.72/s`.

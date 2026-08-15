@@ -222,7 +222,7 @@ const LOOT_SUFFIXES := {
 # reaches at each era boundary. This keeps new classes competitive instead of
 # letting uncapped idle-game income turn the whole ladder into automatic
 # strikes. The final anchor is Octathulhu rather than a tenth era.
-const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 5.5, 9.5, 13.0, 17.0, 21.0, 28.0, 52.0, 72.0, 100.0]
+const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 6.0, 10.5, 15.2, 20.4, 31.0, 41.0, 59.0, 81.0, 110.0]
 
 const DISTANCE_TIERS := [
 	{"name": "PRESCHOOL POINT-BLANK", "label": "3 ft", "feet": 3.0, "required_level": 0, "xp_multiplier": 1.0, "difficulty": 0.0},
@@ -959,6 +959,7 @@ const TRAINING := [
 		"required_level": 0,
 		"stats": ["speed"],
 		"description": "Base speed +0.75 ft/s.",
+		"details": "Each rank adds 0.75 ft/s to base speed. Human bodies still obey the current age-and-league velocity limit; equipment may exceed it slightly.",
 	},
 	{
 		"id": "command",
@@ -968,6 +969,7 @@ const TRAINING := [
 		"required_level": 1,
 		"stats": ["quality"],
 		"description": "Base quality +0.018.",
+		"details": "Each rank adds 0.018 base Quality. Quality shifts results away from dangerous contact and toward Strikes.",
 	},
 	{
 		"id": "field_hustle",
@@ -976,7 +978,8 @@ const TRAINING := [
 		"growth": 1.62,
 		"required_level": 2,
 		"stats": ["tap"],
-		"description": "Remaining gap to 4% ×0.92.",
+		"description": "Field tap approaches 4%.",
+		"details": "Each rank removes 8% of the gap between the current Field Tap and 4%. Gains diminish forever; there is no hard rank limit.",
 	},
 	{
 		"id": "recovery",
@@ -985,7 +988,8 @@ const TRAINING := [
 		"growth": 1.42,
 		"required_level": 3,
 		"stats": ["recovery"],
-		"description": "Remaining gap to 0.48/s ×0.90.",
+		"description": "Recovery approaches 0.48/s.",
+		"details": "Each rank removes 10% of the gap between base Recovery and 0.48 wind-ups per second. Separate BODY and Facility multipliers apply afterward.",
 	},
 	{
 		"id": "offline_efficiency",
@@ -994,7 +998,8 @@ const TRAINING := [
 		"growth": 1.55,
 		"required_level": 4,
 		"stats": ["offline"],
-		"description": "Remaining gap to 75% ×0.94.",
+		"description": "Offline XP approaches 75%.",
+		"details": "Each rank removes 6% of the gap between current Offline XP efficiency and 75%. This changes XP earned while the game is away; simulation progress still continues normally.",
 	},
 	{
 		"id": "distance_control",
@@ -1003,7 +1008,8 @@ const TRAINING := [
 		"growth": 1.58,
 		"required_level": 5,
 		"stats": ["distance"],
-		"description": "Remaining distance threat ×0.94.",
+		"description": "Distance threat ×0.94.",
+		"details": "Each rank removes 6% of the remaining level-range threat above its 40% floor. It does not change the opponent's assigned distance or its XP multiplier.",
 	},
 	{
 		"id": "turnover",
@@ -1012,7 +1018,8 @@ const TRAINING := [
 		"growth": 1.82,
 		"required_level": 7,
 		"stats": ["lineup"],
-		"description": "Remaining gap to 1.25s ×0.90.",
+		"description": "Lineup time approaches 1.25s.",
+		"details": "Each rank removes 10% of the gap between the base three-second lineup change and 1.25 seconds. This applies after every completed plate appearance.",
 	},
 	{
 		"id": "hit_recovery",
@@ -1021,7 +1028,8 @@ const TRAINING := [
 		"growth": 1.82,
 		"required_level": 9,
 		"stats": ["hit_delay"],
-		"description": "Remaining hit-delay gap to ×0.35 ×0.90.",
+		"description": "Hit delay approaches ×0.35.",
+		"details": "Each rank removes 10% of the gap between the fair-hit delay multiplier and ×0.35. It shortens only the extra delay caused by hits, not the universal lineup change.",
 	},
 	{
 		"id": "pitch_calling",
@@ -1030,7 +1038,8 @@ const TRAINING := [
 		"growth": 1.72,
 		"required_level": 11,
 		"stats": ["calling"],
-		"description": "Best-option bias +0.85 × ln(rank + 1).",
+		"description": "Better-pitch bias +0.85 ln(rank + 1).",
+		"details": "Total automatic-selection bias is +0.85 × ln(rank + 1). Higher ranks increasingly favor stronger learned pitches without removing weaker pitches from the arsenal.",
 	},
 	{
 		"id": "payload_training",
@@ -1040,6 +1049,7 @@ const TRAINING := [
 		"required_level": 12,
 		"stats": ["payload"],
 		"description": "Base payload +0.01×.",
+		"details": "Each rank adds 0.01× to base Payload. Payload multiplies strikeout XP without creating extra visual balls.",
 	},
 	{
 		"id": "mastery_training",
@@ -1048,7 +1058,8 @@ const TRAINING := [
 		"growth": 1.78,
 		"required_level": 13,
 		"stats": ["mastery"],
-		"description": "Base mastery gain +0.015×.",
+		"description": "Base mastery +0.015×.",
+		"details": "Each rank adds 0.015× to mastery gained from every called Strike. Mastery advances that opponent and logarithmically improves future odds against them.",
 	},
 	{
 		"id": "drag_training",
@@ -1058,6 +1069,7 @@ const TRAINING := [
 		"required_level": 14,
 		"stats": ["drag"],
 		"description": "Air drag ×0.985.",
+		"details": "Each rank multiplies human-league air drag by 0.985. Lower drag preserves more of a released ball's speed before it reaches the plate.",
 	},
 	{
 		"id": "xp_training",
@@ -1066,7 +1078,8 @@ const TRAINING := [
 		"growth": 1.84,
 		"required_level": 16,
 		"stats": ["xp"],
-		"description": "Base strikeout XP +0.01×.",
+		"description": "Strikeout XP +0.01×.",
+		"details": "Each rank adds 0.01× to the base strikeout XP multiplier. Individual Strikes still award mastery only; XP arrives when the count is completed.",
 	},
 	{
 		"id": "loot_training",
@@ -1075,7 +1088,8 @@ const TRAINING := [
 		"growth": 1.88,
 		"required_level": 18,
 		"stats": ["loot"],
-		"description": "Remaining gap to 100% loot chance ×0.995.",
+		"description": "Loot chance approaches 100%.",
+		"details": "Each rank removes 0.5% of the remaining gap between strikeout loot chance and 100%. Drops still follow the defeated batter's visible equipment slots and rarities.",
 	},
 	{
 		"id": "frustration_training",
@@ -1084,7 +1098,8 @@ const TRAINING := [
 		"growth": 1.92,
 		"required_level": 20,
 		"stats": ["frustration"],
-		"description": "Frustration quality per doubling +1%.",
+		"description": "Frustration bonus +1% per doubling.",
+		"details": "Each rank raises the Quality gained per doubling of Frustration by 1%. Frustration grows from bad outcomes, scales logarithmically without a cap, and resets on a strikeout.",
 	},
 ]
 
@@ -2717,17 +2732,33 @@ static func opponents() -> Array[Dictionary]:
 			distance = 120.0
 		elif era_index == 8:
 			distance = 300.0
-		# Per-Strike mastery and adaptive matchup odds smooth out unlucky openings.
-		# A modest twelve-percent requirement increase keeps the broad campaign pace
-		# near the original strikeout-only curve without erasing that improvement.
-		var mastery_required := 28.0 * pow(1.25, index)
+		# Per-Strike mastery keeps every called Strike useful, while authored targets
+		# describe a readable number of completed-count equivalents instead of an
+		# exponential pile of nearly identical strikeouts. Later opponents carry more
+		# of the campaign's resistance in their matchup difficulty and longer counts.
+		var strikeout_bounty := minf(
+			float(BASE_STRIKES_REQUIRED[index]) * 5.0,
+			5.0 + float(index)
+		)
+		var completed_count_equivalents := 5.6 * pow(1.075, index)
+		if index >= 20 and index <= HUMAN_FINAL_INDEX:
+			completed_count_equivalents *= 1.0 + 0.02 * float(index - 19)
+		if index > HUMAN_FINAL_INDEX and index <= ALIEN_FINAL_INDEX:
+			completed_count_equivalents = 50.0 * pow(1.13, index - ALIEN_EXHIBITION_INDEX)
+		elif index > ALIEN_FINAL_INDEX:
+			completed_count_equivalents = 160.0 * pow(1.30, index - ELDRITCH_EXHIBITION_INDEX)
+		var mastery_required := strikeout_bounty * completed_count_equivalents
 		result.append({
 			"id": "opponent_%02d" % (index + 1),
 			"name": OPPONENT_NAMES[index],
 			"era": ERA_NAMES[era_index],
 			"era_index": era_index,
 			"difficulty": _opponent_difficulty_for_index(index),
-			"reward": pow(1.55, index),
+			# Fewer repeated strikeouts now gate each level, so each successful
+			# frontier count carries more of that level's former total income.
+			# This preserves the savings/build cadence while making a difficult
+			# strikeout feel materially valuable instead of merely one of thousands.
+			"reward": pow(1.80, index),
 			"mastery_required": mastery_required,
 			"distance": distance,
 			"quirk": OPPONENT_QUIRKS[index],

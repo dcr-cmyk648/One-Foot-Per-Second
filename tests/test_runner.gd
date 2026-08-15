@@ -111,6 +111,8 @@ func _test_content() -> void:
 	for definition in Content.TRAINING:
 		training_ids.append(str(definition.id))
 	_expect(training_ids == ["velocity", "command", "field_hustle", "recovery", "offline_efficiency", "distance_control", "turnover", "hit_recovery", "pitch_calling", "payload_training", "mastery_training", "drag_training", "xp_training", "loot_training", "frustration_training"], "Training should expose one clear purchase per base stat in unlock order")
+	_expect(not str(Content.TRAINING[2].description).contains("Remaining"), "Training cards should use concise plain-language summaries")
+	_expect(str(Content.TRAINING[2].details).contains("Each rank removes 8%"), "Training should retain an exact long-form explanation for hover and hold inspection")
 	_expect(Content.BALL_UPGRADES.size() == 26, "Expected twenty-six ball evolutions")
 	_expect(Content.MILESTONES.size() == 84, "BODY-only chemistry should leave eighty-four interstitial facilities and interventions")
 	_expect(Content.DISTANCE_TIERS.size() == 13, "Expected regulation age-group mounds followed by the 3-foot-to-galaxy ladder")

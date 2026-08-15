@@ -1,4 +1,4 @@
-# No Hitter — v0.15.0 Design
+# No Hitter — v0.15.1 Design
 
 ## Product shape
 
@@ -51,7 +51,7 @@ base strikeout XP
 × (1 + completed achievements × 0.01)
 ```
 
-When the game is closed or a browser tab is suspended, the same state machine runs for up to seven days but its strikeout XP is multiplied by the body's offline efficiency. That value begins at `0.01`; Scorebook Study adds `0.01` per rank and ordinarily caps at `0.25`. Mastery, counts, batter replacement, and loot still advance through the authoritative simulation. The first alien story clock is deliberately excluded because the player must witness it; later already-understood simulation remains idle-capable. Returning with any deposited XP opens a summary that names the time away, XP gained, efficiency used, strikeouts, and loot. Browser visibility/page lifecycle events are recorded outside the frozen Godot loop so a giant iOS resume delta is still classified as away time exactly once.
+When the game is closed or a browser tab is suspended, the same state machine runs for up to seven days but its strikeout XP is multiplied by the body's offline efficiency. That value begins at `0.01`; each Scorebook Study rank removes 6% of the remaining gap to `0.75`. Mastery, counts, batter replacement, and loot still advance through the authoritative simulation. The first alien story clock is deliberately excluded because the player must witness it; later already-understood simulation remains idle-capable. Returning with any deposited XP opens a summary that names the time away, XP gained, efficiency used, strikeouts, and loot. Browser visibility/page lifecycle events are recorded outside the frozen Godot loop so a giant iOS resume delta is still classified as away time exactly once.
 
 ## Outcome probabilities
 

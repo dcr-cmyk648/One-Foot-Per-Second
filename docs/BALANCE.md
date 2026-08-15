@@ -1,4 +1,4 @@
-# No Hitter — v0.15.0 Balance Audit
+# No Hitter — v0.15.1 Balance Audit
 
 ## Outcome
 
@@ -6,10 +6,10 @@ The complete campaign is long but finite, every prestige layer changes the strat
 
 | Milestone | Approximate active-production time |
 |---|---:|
-| Human baseball cleared | 11 h 15 m |
-| Portal HELP becomes available | 11 h 20 m |
+| Human baseball cleared | 11 h |
+| Portal HELP becomes available | 11 h 5 m |
 | Complete human development | 115 mph; 0.72 recoveries/s |
-| First cosmic victory | 34 d 6 h |
+| First cosmic victory | 11 d 15 h |
 
 These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances the first witnessed alien minute. Offline strikeout XP begins at 1% of the open-game payout and Scorebook Study approaches 75% with diminishing returns.
 
@@ -82,7 +82,7 @@ The 109 achievements are deliberately modest individually and additive rather th
 achievement XP multiplier = 1 + completed achievements × 0.01
 ```
 
-Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 109 produce `×2.09`. The multiplier applies alongside ball, opponent, prestige, level-assigned range, mastery, and equipment factors and survives every prestige reset. The no-loot runner reaches the human boundary in roughly 11 hours 15 minutes and first cosmic victory in 34 days 6 hours. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. **Puberty Has Entered the Bullpen** marks the Teenager body. **Wait… That’s Illegal** marks the first post-human pitch. The final No Hitter slot remains an extreme post-victory replay challenge rather than baseline progression: a God Prestige opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
+Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 109 produce `×2.09`. The multiplier applies alongside ball, opponent, prestige, level-assigned range, mastery, and equipment factors and survives every prestige reset. The no-loot runner reaches the human boundary in roughly 11 hours and first cosmic victory in 11 days 15 hours. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. **Puberty Has Entered the Bullpen** marks the Teenager body. **Wait… That’s Illegal** marks the first post-human pitch. The final No Hitter slot remains an extreme post-victory replay challenge rather than baseline progression: a God Prestige opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
 
 ## Complete reset cadence
 
@@ -134,7 +134,7 @@ Active field taps begin at 1.7% of the current foreground timer's starting durat
 
 Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers; a parallel human project lane ranges from 500 XP to 3.2 trillion XP so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, and Facility each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
 
-Authored opponent mastery rises as `28 × 1.25^index`, offsetting guaranteed per-Strike progress without removing its early smoothing, while reward rises faster. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, matchup adaptation, and the start of logarithmic farming bonuses. A frontier opponent is attractive only when its longer count, authored range, and higher failure downtime do not outweigh the reward. Auto-scout evaluates the same expected XP-per-second model across unlocked opponents at their assigned ranges.
+Opponent mastery is authored as completed-count equivalents rather than one global exponential. Human targets begin at 5.6 ordinary strikeouts and rise to roughly 55 at the MLB Champion; the former curve ended above 1,200. Alien targets begin at 50 uncompressed counts and rise with their four-to-nine-Strike rules; eldritch targets rise more sharply because one clone volley can contribute many called Strikes. Every called Strike still awards one count-share immediately. Late-human threat anchors rise more aggressively, so the ladder's resistance comes from earning rare strikeouts against better batters rather than repeating an already-solved matchup. Opponent rewards grow by `×1.80` per level so each rarer completed count carries the savings value formerly spread across many routine outs. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, matchup adaptation, and the start of logarithmic farming bonuses. Auto-scout evaluates the expected XP-per-second model across unlocked opponents at their assigned ranges.
 
 ## Renderer and simulation budget
 

@@ -45,6 +45,9 @@ func _audit_ladder() -> void:
 			_expect(Content.BASE_STRIKES_REQUIRED[index] == 3, "Human level %d does not use three strikes" % (index + 1))
 		if index > 0:
 			_expect(float(opponent.mastery_required) > float(opponents[index - 1].mastery_required), "Mastery does not rise at level %d" % (index + 1))
+	var human_final_counts := float(opponents[Content.HUMAN_FINAL_INDEX].mastery_required) / 15.0
+	_expect(human_final_counts < 60.0, "The final human opponent still demands an excessive number of completed-count equivalents")
+	_expect(float(opponents[Content.HUMAN_FINAL_INDEX].difficulty) > 35.0, "Late human progression should live in matchup difficulty rather than repetitive mastery volume")
 	_expect(Content.BASE_STRIKES_REQUIRED[30] == 4 and Content.BASE_STRIKES_REQUIRED[39] == 9, "Alien count curve changed unexpectedly")
 	_expect(Content.BASE_STRIKES_REQUIRED[40] == 12 and Content.BASE_STRIKES_REQUIRED[44] == 64, "Eldritch count curve changed unexpectedly")
 

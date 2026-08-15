@@ -29,6 +29,8 @@ const MOBILE_TAB_ARROW_TOUCH_SIZE := 44
 const MOBILE_PORTRAIT_FIELD_MIN_HEIGHT := 270.0
 const LOCKER_ITEM_HOLD_SECONDS := 0.55
 const LOCKER_ITEM_DRAG_CANCEL_DISTANCE := 8.0
+const UPGRADE_ROW_HOLD_SECONDS := 0.55
+const UPGRADE_ROW_DRAG_CANCEL_DISTANCE := 8.0
 
 var game: BaseballGameState
 var pitch_field
@@ -153,6 +155,10 @@ var locker_item_hold_targets: Array[Dictionary] = []
 var held_locker_item_id := ""
 var held_locker_item_elapsed := 0.0
 var held_locker_item_drag_distance := 0.0
+var upgrade_row_hold_targets: Array[Dictionary] = []
+var held_upgrade_row_control: Control
+var held_upgrade_row_elapsed := 0.0
+var held_upgrade_row_drag_distance := 0.0
 var last_loot_revision := -1
 var last_loot_ui_signature := ""
 var genetic_confirmation: ConfirmationDialog
@@ -330,6 +336,7 @@ func _process(delta: float) -> void:
 	if game == null:
 		return
 	_update_locker_item_hold(delta)
+	_update_upgrade_row_hold(delta)
 	if is_web_build:
 		_poll_browser_lifecycle(delta)
 		_update_browser_release_status(delta)
@@ -540,19 +547,32 @@ func _load_browser_slot(slot_index: int) -> void:
 func _input(event: InputEvent) -> void:
 	# Observe without consuming the event. The embedded ScrollContainer keeps its
 	# native drag behavior while a stationary touch can become an inspection.
-	if not mobile_layout or locker_dialog == null or not locker_dialog.visible:
+	if not mobile_layout:
 		_cancel_locker_item_hold()
+		_cancel_upgrade_row_hold()
 		return
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
-			_begin_locker_item_hold_at(touch.position)
+			if locker_dialog != null and locker_dialog.visible:
+				_cancel_upgrade_row_hold()
+				_begin_locker_item_hold_at(touch.position)
+			else:
+				_cancel_locker_item_hold()
+				_begin_upgrade_row_hold_at(touch.position)
 		else:
 			_cancel_locker_item_hold()
-	elif event is InputEventScreenDrag and not held_locker_item_id.is_empty():
-		held_locker_item_drag_distance += (event as InputEventScreenDrag).relative.length()
-		if held_locker_item_drag_distance > LOCKER_ITEM_DRAG_CANCEL_DISTANCE:
-			_cancel_locker_item_hold()
+			_cancel_upgrade_row_hold()
+	elif event is InputEventScreenDrag:
+		var distance := (event as InputEventScreenDrag).relative.length()
+		if not held_locker_item_id.is_empty():
+			held_locker_item_drag_distance += distance
+			if held_locker_item_drag_distance > LOCKER_ITEM_DRAG_CANCEL_DISTANCE:
+				_cancel_locker_item_hold()
+		if held_upgrade_row_control != null:
+			held_upgrade_row_drag_distance += distance
+			if held_upgrade_row_drag_distance > UPGRADE_ROW_DRAG_CANCEL_DISTANCE:
+				_cancel_upgrade_row_hold()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and game != null:
@@ -3270,6 +3290,44 @@ func _update_locker_item_hold(delta: float) -> void:
 	_cancel_locker_item_hold()
 	_open_loot_item_dialog(item_id)
 
+func _begin_upgrade_row_hold_at(position: Vector2) -> void:
+	_cancel_upgrade_row_hold()
+	for index in range(upgrade_row_hold_targets.size() - 1, -1, -1):
+		var entry: Dictionary = upgrade_row_hold_targets[index]
+		var target := entry.get("control") as Control
+		if target == null or not is_instance_valid(target) or not target.is_visible_in_tree():
+			continue
+		if not target.get_global_rect().has_point(position):
+			continue
+		if target.tooltip_text.strip_edges().is_empty():
+			return
+		held_upgrade_row_control = target
+		held_upgrade_row_elapsed = 0.0
+		held_upgrade_row_drag_distance = 0.0
+		return
+
+func _cancel_upgrade_row_hold() -> void:
+	held_upgrade_row_control = null
+	held_upgrade_row_elapsed = 0.0
+	held_upgrade_row_drag_distance = 0.0
+
+func _update_upgrade_row_hold(delta: float) -> void:
+	if held_upgrade_row_control == null:
+		return
+	if (
+		not mobile_layout
+		or not is_instance_valid(held_upgrade_row_control)
+		or not held_upgrade_row_control.is_visible_in_tree()
+	):
+		_cancel_upgrade_row_hold()
+		return
+	held_upgrade_row_elapsed += delta
+	if held_upgrade_row_elapsed < UPGRADE_ROW_HOLD_SECONDS:
+		return
+	var target := held_upgrade_row_control
+	_cancel_upgrade_row_hold()
+	_show_mobile_inspection_for_control(target)
+
 func _open_loot_item_dialog(item_id: String) -> void:
 	if game.get_loot_item(item_id).is_empty():
 		return
@@ -4101,6 +4159,10 @@ func _upgrade_row(description: String) -> Dictionary:
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.tooltip_text = description
 	row.add_child(label)
+	# The passive copy remains a native scroll surface. Global touch observation
+	# turns only a stationary hold into the same full explanation desktop gets on
+	# hover; the separate action button is never part of this hit target.
+	upgrade_row_hold_targets.append({"control": label})
 	var action := Button.new()
 	action.text = "BUY"
 	action.custom_minimum_size = Vector2(76.0, 44.0)
@@ -4141,6 +4203,10 @@ func _set_upgrade_row(
 	label.add_theme_color_override("font_color", COLOR_TEXT)
 	label.text = text
 	label.tooltip_text = tooltip
+	label.set_meta(
+		"mobile_inspection_title",
+		text.get_slice("\n", 0).get_slice("  •  ", 0).strip_edges()
+	)
 	container.tooltip_text = tooltip
 	button.text = action_text
 	button.disabled = disabled
@@ -4417,7 +4483,9 @@ func _definitions_by_unlock(source: Array) -> Array:
 	return result
 
 func _definition_tooltip(definition: Dictionary, fallback_stats: Array = []) -> String:
-	var lines: Array[String] = [str(definition.get("description", ""))]
+	var lines: Array[String] = [str(
+		definition.get("details", definition.get("description", ""))
+	)]
 	var stats: Array = definition.get("stats", fallback_stats)
 	for stat_value in stats:
 		var help := str(Content.STAT_HELP.get(str(stat_value), ""))
@@ -4533,7 +4601,8 @@ func _refresh_guide_text(
 		(
 			"GETTING STRONGER\n"
 			+ "• TRAIN is an uncapped incremental XP sink. PITCH, BALL, FACILITY, and BODY contain the larger one-time power jumps. Locked cards reveal only their requirement.\n"
-			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in STATUS. Hover on desktop or tap on phone for definitions."
+			+ "• Upgrade cards stay short: hover on desktop or hold the passive card text on phone for the exact formula. Swipe normally to scroll.\n"
+			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in STATUS; tap those rows on phone for definitions."
 		),
 		(
 			"GEAR & ACHIEVEMENTS\n"
@@ -5298,7 +5367,7 @@ func _refresh_purchase_buttons() -> void:
 			var cost := game.get_training_cost(id)
 			_set_upgrade_row(
 				entry,
-				"%s  •  RANK %d  •  %s XP\n%s" % [definition.name, rank, BaseballGameState.format_cost(cost), definition.description],
+				"%s  •  RANK %d\n%s" % [definition.name, rank, definition.description],
 				game.xp < cost,
 				_definition_tooltip(definition),
 				"%s XP" % BaseballGameState.format_cost(cost)

@@ -170,8 +170,26 @@ func _run() -> void:
 	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7%", "The phone upgrade overlay should show the reduced current field-tap advance")
 	var phone_training_row: Dictionary = main.training_buttons.velocity
 	_expect((phone_training_row.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone upgrade descriptions should remain draggable scroll regions")
+	_expect(not (phone_training_row.label as Label).text.contains("•  1 XP"), "The Training card should not repeat a price already shown on its action button")
 	_expect((phone_training_row.button as Button).text.ends_with("XP"), "Phone purchases should put the actual XP price on the action control")
 	_expect((phone_training_row.button as Button).get_combined_minimum_size().y >= 44.0, "Phone upgrade price controls should be touch-sized")
+	_expect(not str(Content.TRAINING[2].description).contains("Remaining"), "Compact Training copy should not lead with opaque remaining-gap language")
+	_expect(str(Content.TRAINING[2].details).contains("Each rank removes 8%"), "The full Field Hustle formula should remain available after its spoiler-safe lock opens")
+	var training_hold_press := InputEventScreenTouch.new()
+	training_hold_press.pressed = true
+	training_hold_press.position = (phone_training_row.label as Label).get_global_rect().get_center()
+	main._input(training_hold_press)
+	var training_hold_drag := InputEventScreenDrag.new()
+	training_hold_drag.relative = Vector2(0.0, MainScript.UPGRADE_ROW_DRAG_CANCEL_DISTANCE + 1.0)
+	main._input(training_hold_drag)
+	main._update_upgrade_row_hold(MainScript.UPGRADE_ROW_HOLD_SECONDS + 0.1)
+	_expect(not main.mobile_inspection_dialog.visible, "Scrolling a phone upgrade should cancel hold-to-inspect")
+	main._input(training_hold_press)
+	main._update_upgrade_row_hold(MainScript.UPGRADE_ROW_HOLD_SECONDS + 0.01)
+	await process_frame
+	_expect(main.mobile_inspection_dialog.visible, "Holding passive phone upgrade text should open its full explanation")
+	_expect(main.mobile_inspection_dialog.dialog_text.contains("Each rank adds 0.75 ft/s"), "The phone upgrade explanation should show the unabridged effect")
+	main.mobile_inspection_dialog.hide()
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
 		main.mobile_tab_next_button.get_combined_minimum_size().x >= 44.0

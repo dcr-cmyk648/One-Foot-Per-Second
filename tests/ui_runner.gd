@@ -291,6 +291,8 @@ func _run() -> void:
 	var opening_training: Dictionary = main.training_buttons.velocity
 	_expect(opening_training.container is PanelContainer and not (opening_training.container is BaseButton), "Upgrade descriptions should live in passive scrollable cards")
 	_expect((opening_training.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Dragging an upgrade description should reach the ScrollContainer")
+	_expect((opening_training.container as Control).tooltip_text.contains("Each rank adds 0.75 ft/s"), "Desktop hover should expose the same unabridged Training explanation as mobile hold")
+	_expect(not (opening_training.label as Label).text.contains("•  1 XP"), "Training copy should not repeat a price already shown on its action button")
 	_expect((opening_training.button as Button).text.ends_with("XP") and (opening_training.button as Button).custom_minimum_size.y >= 44.0, "Each purchasable upgrade needs a separate touch-sized price control")
 	_audit_upgrade_order(main)
 	main.game._add_loot_item({
