@@ -13,6 +13,7 @@ func _initialize() -> void:
 	_test_no_hitter_challenge()
 	_test_initial_balance_and_velocity_layers()
 	_test_body_growth()
+	_test_prestige_throwing_anatomy()
 	_test_pitch_phase_state_machine()
 	_test_live_field_contract()
 	_test_field_tapping()
@@ -119,6 +120,9 @@ func _test_content() -> void:
 	_expect(Content.SCALE_UPGRADES.is_empty(), "Physical scale must live in prestige layers, not ordinary XP")
 	_expect(Content.GENETIC_UPGRADES.size() == 16, "Expected sixteen genetic enhancements")
 	_expect(Content.ELDRITCH_UPGRADES.size() == 14, "Expected fourteen eldritch abilities")
+	_expect(str(Content.genetic_by_id("extra_arms").description).contains("maximum balls per throw ×2"), "The arm mutation should plainly include its automatic volley increase")
+	_expect(str(Content.genetic_by_id("parallel_pitching_lobes").description).contains("Recovery ×2"), "The repurposed lobe mutation should advertise its aggressive cadence boost")
+	_expect(str(Content.eldritch_by_id("time_compression").description).contains("Recovery ×2"), "Time Compression should accelerate pitch recovery as well as batter turnover")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
 	_expect(Content.ACHIEVEMENTS.size() == 109, "The achievement catalog should retain every distinct achievement")
 	var achievement_ids := {}
@@ -445,6 +449,31 @@ func _test_body_growth() -> void:
 	_expect_close(game.get_body_growth_quality_bonus(), 0.162, "Full adulthood should keep its moderate cumulative quality gain")
 	game._reset_body_progress()
 	_expect(game.body_growth_level == 0, "Time travel should restart the player as a toddler")
+	game.free()
+
+func _test_prestige_throwing_anatomy() -> void:
+	var game: BaseballGameState = GameStateScript.new()
+	game.genetic_offer_unlocked = true
+	game.genetic_rebirths = 1
+	var baseline_recovery := game.get_recovery_rate()
+	_expect(game.get_simultaneous_ball_cap() == 1, "A one-armed reborn pitcher should begin with one ball per throw")
+	game.genetic_levels.extra_arms = 1
+	_expect(game.get_arm_count() == 2.0, "The first arm mutation should produce two arms")
+	_expect(game.get_simultaneous_ball_cap() == 2 and game.get_volley_size() == 2, "Buying a second arm should automatically permit a two-ball throw")
+	game.genetic_levels.extra_arms = 3
+	_expect(game.get_simultaneous_ball_cap() == 8 and game.get_volley_size() == 8, "Every additional arm rank should directly expand the real volley")
+
+	game.genetic_levels.extra_arms = 0
+	game.genetic_levels.parallel_pitching_lobes = 1
+	_expect_close(game.get_recovery_rate(), baseline_recovery * BaseballGameState.ALTERNATING_LOBES_RECOVERY_PER_RANK, "Alternating Pitching Lobes should halve time between throws")
+	game.genetic_levels.parallel_pitching_lobes = 0
+	game.genetic_levels.elastic_ucl_colony = 1
+	_expect_close(game.get_recovery_rate(), baseline_recovery * BaseballGameState.ELASTIC_UCL_RECOVERY_PER_RANK, "Elastic UCL Colony should supply its aggressive Recovery multiplier")
+	game.genetic_levels.elastic_ucl_colony = 0
+	game.eldritch_offer_unlocked = true
+	game.eldritch_ascensions = 1
+	game.eldritch_levels.time_compression = 1
+	_expect_close(game.get_recovery_rate(), baseline_recovery * BaseballGameState.TIME_COMPRESSION_RECOVERY_PER_RANK, "Time Compression should also halve time between throws")
 	game.free()
 
 	var toddler_champion: BaseballGameState = GameStateScript.new()
@@ -1342,8 +1371,9 @@ func _test_projectile_snapshots() -> void:
 
 	game.genetic_levels.extra_arms = 1
 	game.genetic_rebirths = 1
-	game.genetic_levels.parallel_pitching_lobes = 1
+	game.genetic_levels.parallel_pitching_lobes = 0
 	field.configure_from_game(game)
+	_expect(game.get_volley_size() == 2, "A second arm should unlock a two-ball throw without a separate capacity purchase")
 	field.spawn_credit = 0.0
 	var volley_start := field.next_ball_slot
 	var volley_launched := field.notify_batch({
@@ -1360,6 +1390,10 @@ func _test_projectile_snapshots() -> void:
 	_expect(not left_arm_pitch.is_empty() and not right_arm_pitch.is_empty(), "Two arms should release a complete two-ball volley")
 	_expect_close(float(left_arm_pitch.spawn_time), float(right_arm_pitch.spawn_time), "Balls from one multi-arm throw should launch simultaneously")
 	_expect(not Vector2(left_arm_pitch.source).is_equal_approx(Vector2(right_arm_pitch.source)), "Each arm should release from its own hand")
+	_expect(float(left_arm_pitch.signed_curve) * float(right_arm_pitch.signed_curve) < 0.0, "The opening two-arm volley should split into opposite arcs")
+	_expect_close(absf(float(left_arm_pitch.signed_curve)), absf(float(right_arm_pitch.signed_curve)), "The opening pair should use a clean mirrored curve")
+	_expect(str(left_arm_pitch.pitch_id) == "dead_fish" and str(right_arm_pitch.pitch_id) == "dead_fish", "Every ball in one volley should use the same sampled pitch")
+	_expect(field.last_pitch_name == "DOUBLE DEAD-FISH LOB", "A two-ball release should announce the shared pitch with a DOUBLE prefix")
 	field.notify_batch({
 		"pitches": 2.0,
 		"elapsed_seconds": 0.1,

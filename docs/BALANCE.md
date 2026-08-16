@@ -1,4 +1,4 @@
-# No Hitter — v0.16.3 Balance Audit
+# No Hitter — v0.16.4 Balance Audit
 
 ## Outcome
 
@@ -9,7 +9,7 @@ The complete campaign is long but finite, every prestige layer changes the strat
 | Human baseball cleared | 11 h 45 m |
 | Portal HELP becomes available | about 11 h 46 m |
 | Complete human development | 115 mph; 0.72 recoveries/s |
-| First cosmic victory | 13 d 15 h |
+| First cosmic victory | 8 d 18 h |
 
 These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances Xylophax's witnessed humiliation meter. Offline strikeout XP and called-Strike mastery both begin at 1% of their open-game awards, and Scorebook Study approaches 75% with diminishing returns.
 
@@ -86,7 +86,7 @@ Ten achievements therefore produce `×1.10`, fifty produce `×1.50`, and all 109
 
 ## Complete reset cadence
 
-The current greedy no-loot audit uses 11 genetic and eldritch resets before its first cosmic victory. The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms, simultaneous-ball capacity, count compression, fielding, speed/quality, then automation. Eldritch priorities are clones and portals for count survival, capacity and time layers for the visual salvo, velocity for the final gate, and quality/mastery for huge counts.
+The current greedy no-loot audit uses 12 genetic and eldritch resets before its first cosmic victory. The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms—which now grant their own ball capacity—count compression, fielding, speed/quality, aggressive Recovery from Alternating Pitching Lobes and Elastic UCL Colony, then automation. Eldritch priorities are clones and portals for count survival, geometry and Time Compression for the visual salvo and cadence, velocity for the final gate, and quality/mastery for huge counts.
 
 ## Speed and rate calibration
 
@@ -140,7 +140,7 @@ Opponent mastery is authored as completed-count equivalents rather than one glob
 
 ## Renderer and simulation budget
 
-Human baseball is fixed at one unresolved ball. Post-human sources come from arms, clones, and time layers; separate capacity upgrades raise the usable volley to 2,048 balls. The native MultiMesh reserves 4,000 outbound balls, so every designed projectile renders one-for-one. The browser profile draws 512 outbound representatives before applying a visible weight, without changing the simulated volley or its rewards. Stars and visually dense return volleys are drawn in batches, with smaller browser-only cosmetic ceilings. On the development Mac's Radeon Pro 560X, the fresh native scene holds 60 FPS; a ten-second complete stress run spans 44–60 FPS across launch, impact, and return phases, with most samples at 58–60. A 20,000 balls/s physical-throughput ceiling keeps all economy values finite.
+Human baseball is fixed at one unresolved ball and its Recovery ceiling is unchanged. Post-human sources come from arms, clones, and time layers; arms automatically grant matching usable capacity, while eldritch geometry raises the complete volley to 2,048 balls. Alternating Pitching Lobes grants `Recovery ×2`, Elastic UCL Colony `×1.50`, and Time Compression `×2`, all downstream of the human ceiling. The native MultiMesh reserves 4,000 outbound balls, so every designed projectile renders one-for-one. The browser profile draws 512 outbound representatives before applying a visible weight, without changing the simulated volley or its rewards. Stars and visually dense return volleys are drawn in batches, with smaller browser-only cosmetic ceilings. On the development Mac's Radeon Pro 560X, the fresh native scene holds 60 FPS; a ten-second complete stress run spans 44–60 FPS across launch, impact, and return phases, with most samples at 58–60. A 20,000 balls/s physical-throughput ceiling keeps all economy values finite.
 
 At readable rates, projectile creation is driven only by authoritative release events. A release snapshots pitch type, exact speed, distance, duration, color, path, and source hand. Movement and upgrades cannot mutate it. No release occurs while the plate is empty or while the previous human pitch is unresolved, and returning a batter never creates a catch-up burst.
 

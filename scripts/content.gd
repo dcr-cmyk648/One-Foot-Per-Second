@@ -2484,15 +2484,15 @@ const GENETIC_UPGRADES := [
 		"base_cost": 3.0,
 		"growth": 5.0,
 		"max_level": 3,
-		"description": "Arms ×2; potential throwing sources ×2.",
+		"description": "Arms ×2; maximum balls per throw ×2.",
 	},
 	{
 		"id": "parallel_pitching_lobes",
-		"name": "Parallel Pitching Lobes",
+		"name": "Alternating Pitching Lobes",
 		"base_cost": 3.0,
 		"growth": 4.0,
 		"max_level": 3,
-		"description": "Maximum simultaneous balls ×2 (up to throwing sources).",
+		"description": "Recovery ×2; one brain half prepares the next throw.",
 	},
 	{
 		"id": "elastic_ucl_colony",
@@ -2500,7 +2500,7 @@ const GENETIC_UPGRADES := [
 		"base_cost": 3.0,
 		"growth": 4.0,
 		"max_level": 5,
-		"description": "Recovery ×1.18.",
+		"description": "Recovery ×1.50.",
 	},
 	{
 		"id": "ball_gland",
@@ -2598,7 +2598,7 @@ const ELDRITCH_UPGRADES := [
 		"base_cost": 2.0,
 		"growth": 5.0,
 		"max_level": 3,
-		"description": "Time layers ×2; potential throwing sources ×2; batter downtime ÷2.",
+		"description": "Time layers ×2; Recovery ×2; batter downtime ÷2.",
 	},
 	{
 		"id": "hands_beyond_the_mouse",

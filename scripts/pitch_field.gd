@@ -132,6 +132,7 @@ var volley_flight_duration := 0.0
 var volley_plate_position := Vector2.ZERO
 var last_pitch_id := "dead_fish"
 var last_pitch_name := "DEAD-FISH LOB"
+var last_pitch_volley_size := 1
 var last_pitch_speed_fps := 1.0
 var last_pitch_plate_speed_fps := 1.0
 var last_pitch_drag_loss_fraction := 0.0
@@ -213,6 +214,7 @@ func reset_visual_state() -> void:
 	removed_strike_icon = -1
 	last_pitch_id = "dead_fish"
 	last_pitch_name = "DEAD-FISH LOB"
+	last_pitch_volley_size = 1
 	last_pitch_speed_fps = 1.0
 	last_pitch_plate_speed_fps = 1.0
 	last_pitch_drag_loss_fraction = 0.0
@@ -534,7 +536,11 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 	if game.is_pitch_in_flight():
 		var pending_pitch := Content.pitch_by_id(game.pending_volley_pitch_id)
 		last_pitch_id = game.pending_volley_pitch_id
-		last_pitch_name = str(pending_pitch.get("name", "PITCH")).to_upper()
+		last_pitch_volley_size = maxi(game.pending_volley_size, 1)
+		last_pitch_name = format_pitch_call(
+			str(pending_pitch.get("name", "PITCH")),
+			last_pitch_volley_size
+		)
 		last_pitch_speed_fps = game.pending_volley_speed_fps
 		last_pitch_plate_speed_fps = game.pending_volley_plate_speed_fps
 		last_pitch_distance_index = game.pending_volley_distance_index
@@ -605,7 +611,14 @@ func _compress_travel_time(physical_seconds: float) -> float:
 		return clampf(physical_seconds, 0.16, 3.0)
 	return minf(3.0 + log(physical_seconds / 3.0) * 0.35, MAX_VISUAL_TRAVEL_SECONDS)
 
-func _spawn_pitch(backdate: float, flight_seconds := -1.0, color_override: Variant = null) -> void:
+func _spawn_pitch(
+	backdate: float,
+	flight_seconds := -1.0,
+	color_override: Variant = null,
+	volley_index := -1,
+	volley_count := 1,
+	pitch_id_override := ""
+) -> void:
 	var slot := next_ball_slot
 	next_ball_slot = (next_ball_slot + 1) % visual_ball_capacity
 	pitch_serial += 1
@@ -621,6 +634,22 @@ func _spawn_pitch(backdate: float, flight_seconds := -1.0, color_override: Varia
 	var curve_sign := -1.0 if pitch_serial % 2 == 0 else 1.0
 	var arc_strength := _get_salvo_strength()
 	var signed_curve := curve_sign * arc_strength * (0.45 + curve_seed * 0.55)
+	if volley_count > 1 and volley_index >= 0:
+		# A multi-arm release owns distinct lanes. In particular, the first
+		# two-ball mutation always produces a clean mirrored pair instead of two
+		# nearly coincident projectiles. Larger salvos alternate sides and spread
+		# outward with a small deterministic variation in curvature.
+		var pair_count := int(ceil(float(volley_count) * 0.5))
+		var pair_index := int(volley_index / 2)
+		var lane_fraction := float(pair_index + 1) / float(maxi(pair_count, 1))
+		curve_sign = -1.0 if volley_index % 2 == 0 else 1.0
+		var readable_floor := 0.09 * (0.55 + lane_fraction * 0.45)
+		var lane_strength := maxf(
+			arc_strength * (0.35 + lane_fraction * 0.65),
+			readable_floor
+		)
+		var variation := 1.0 if volley_count == 2 else 0.90 + curve_seed * 0.20
+		signed_curve = curve_sign * lane_strength * variation
 	var trail_length := _get_future_trail_length()
 	var projectile_scale := _get_ball_visual_scale()
 	var colors: Array = snapshot.pitch_colors
@@ -644,6 +673,9 @@ func _spawn_pitch(backdate: float, flight_seconds := -1.0, color_override: Varia
 		"spawn_time": spawn_at,
 		"duration": launch_duration,
 		"signed_curve": signed_curve,
+		"volley_index": volley_index,
+		"volley_count": volley_count,
+		"pitch_id": pitch_id_override,
 		"flight_length": flight_length,
 		"source": source,
 		"source_offset": source - mound,
@@ -888,7 +920,11 @@ func _notify_phase_events(pitch_events: Array, elapsed_seconds: float) -> int:
 				var pitch_definition := Content.pitch_by_id(pitch_id)
 				var exact_travel := maxf(float(event.get("flight_seconds", travel_time)), 0.001)
 				last_pitch_id = pitch_id
-				last_pitch_name = str(event.get("pitch_name", pitch_definition.get("name", "PITCH"))).to_upper()
+				last_pitch_volley_size = maxi(int(event.get("ball_count", 1)), 1)
+				last_pitch_name = format_pitch_call(
+					str(event.get("pitch_name", pitch_definition.get("name", "PITCH"))),
+					last_pitch_volley_size
+				)
 				last_pitch_speed_fps = maxf(float(event.get("pitch_speed_fps", snapshot.get("representative_pitch_speed", 1.0))), 0.000001)
 				last_pitch_plate_speed_fps = maxf(float(event.get("plate_speed_fps", last_pitch_speed_fps)), 0.000001)
 				last_pitch_drag_loss_fraction = clampf(
@@ -931,9 +967,38 @@ func _spawn_visual_volley(
 	)
 	var definition := Content.pitch_by_id(pitch_id)
 	var color_override: Variant = null if definition.is_empty() else Color(definition.color)
-	for _ball in render_count:
-		_spawn_pitch(backdate, flight_seconds, color_override)
+	for ball_index in render_count:
+		_spawn_pitch(
+			backdate,
+			flight_seconds,
+			color_override,
+			ball_index,
+			render_count,
+			pitch_id
+		)
 	return render_count
+
+static func format_pitch_call(pitch_name: String, ball_count: int) -> String:
+	var base_name := pitch_name.strip_edges().to_upper()
+	match maxi(ball_count, 1):
+		1:
+			return base_name
+		2:
+			return "DOUBLE %s" % base_name
+		3:
+			return "TRIPLE %s" % base_name
+		4:
+			return "QUADRUPLE %s" % base_name
+		5:
+			return "QUINTUPLE %s" % base_name
+		6:
+			return "SEXTUPLE %s" % base_name
+		7:
+			return "SEPTUPLE %s" % base_name
+		8:
+			return "OCTUPLE %s" % base_name
+		var count:
+			return "%d-BALL %s" % [count, base_name]
 
 func _notify_exact_pitch_events(pitch_events: Array, elapsed_seconds: float) -> int:
 	var launched := 0

@@ -81,7 +81,13 @@ func _run() -> void:
 	_expect(main.pitch_field.process_priority < main.process_priority, "The field clock must advance before the simulation clock to prevent catch-up bursts")
 	_expect(not main.prestige_header_stack.visible, "Fresh UI reveals a prestige currency")
 	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Ordinary body growth should be visible from the first pitch")
-	_expect(main.rebirth_tab.name == "BODY" and main.human_growth_section.visible, "Ordinary growth and conditioning should live in a plainly named BODY tab")
+	_expect(main.rebirth_tab.name == "BODY" and main.human_growth_section.visible, "Ordinary growth should open in a plainly named BODY tab")
+	_expect(main.body_section_buttons.size() == 5, "BODY should provide one subtab for each progression section")
+	_expect(main.body_section_buttons.growth.visible and main.body_section_buttons.build.visible, "Fresh BODY should expose separate Grow and Build tabs")
+	_expect(not main.body_section_buttons.genetic.visible and not main.body_section_buttons.eldritch.visible and not main.body_section_buttons.divine.visible, "Fresh BODY tabs must not reveal future prestige layers")
+	main._select_body_section("build")
+	_expect(main.human_modifier_section.visible and not main.human_growth_section.visible, "BUILD should be a distinct BODY subtab instead of another long section")
+	main._select_body_section("growth")
 	_expect(not main.genetic_section.visible, "Fresh BODY content must not reveal genetic enhancements")
 	_expect(main.body_growth_buttons.size() == Content.BODY_GROWTH_STAGES.size() - 1, "Every later human body stage should have one ordered growth row")
 	_expect(main.body_modifier_buttons.size() == Content.BODY_MODIFIERS.size(), "Every authored physical-development option should have a BODY row")
@@ -185,6 +191,12 @@ func _run() -> void:
 	main.pitch_field.batter_phase_duration = 0.0
 	main._refresh_interface()
 	_expect(main.opponent_loadout_dock.get_child_count() == 3, "The opening opponent side should show body, bat, and the droppable tutorial cap")
+	var opening_strike_chance := float(main.game.get_outcome_probabilities()[Content.STRIKE_INDEX])
+	_expect(is_equal_approx(main.power_comparison_gauge.you_ratio, opening_strike_chance), "Power YOU must be calibrated directly to the current called-Strike probability")
+	_expect(is_equal_approx(main.power_comparison_gauge.them_ratio, 1.0 - opening_strike_chance), "Power THEM must show the batter's complementary resistance")
+	_expect(main.power_comparison_panel.size.y > main.power_comparison_panel.size.x * 2.0, "Power should be a compact vertical gauge, not the former horizontal bar")
+	_expect(main.power_comparison_panel.position.x + main.power_comparison_panel.size.x <= main.opponent_loadout_dock.position.x + 1.0, "Power should sit directly beside, not over, enemy equipment")
+	_expect(main.power_comparison_panel.tooltip_text.contains("Completed strikeout chance"), "Power details should explain both called-Strike calibration and completed-strikeout odds")
 	_expect(not main.locker_dialog.visible, "The equipment popup should start closed")
 	for definition in Content.LOOT_SLOTS:
 		var slot_button: Button = main.inventory_slot_buttons[str(definition.id)]
@@ -492,6 +504,7 @@ func _run() -> void:
 	_expect(main.prestige_header_stack.visible, "Genetic offer did not reveal DNA")
 	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer should remain available through BODY")
 	_expect(main.genetic_section.visible, "Genetic offer did not reveal mutations")
+	_expect(main.body_section_buttons.genetic.visible and main.selected_body_section == "genetic", "The first rebirth should reveal and open the DNA subtab")
 	_expect(not main.eldritch_section.visible, "Genetic offer prematurely reveals eldritch upgrades")
 	_expect(not main.divine_section.visible, "Genetic offer prematurely reveals divine rewards")
 	_expect(main.guide_label.text.contains("DNA"), "Genetic reveal did not expand the Guide")
@@ -507,6 +520,7 @@ func _run() -> void:
 	await process_frame
 	_expect(main.header_subtitle.text == "A baseball game about one guy versus the void", "The eldritch exhibition should receive its own discovered-milestone subtitle")
 	_expect(main.eldritch_section.visible, "Eldritch offer did not reveal magic")
+	_expect(main.body_section_buttons.eldritch.visible and main.selected_body_section == "eldritch", "The eldritch offer should reveal and open its own BODY subtab")
 	_expect(not main.divine_section.visible, "Eldritch offer prematurely reveals divine rewards")
 	_expect(main.era_label.text.begins_with("LEVEL 41") and not main.era_label.text.contains("/"), "Eldritch contact should retain the current-level-only header")
 	_expect(main.guide_label.text.contains("Arcana"), "Eldritch reveal did not expand the Guide")
@@ -533,6 +547,7 @@ func _run() -> void:
 	_expect(main.title_art._visible_era() == 3, "Cosmic victory should unlock the complete title treatment")
 	main._leave_title_screen(false)
 	_expect(main.divine_section.visible, "Cosmic victory did not reveal divine rewards")
+	_expect(main.body_section_buttons.divine.visible and main.selected_body_section == "divine", "Cosmic victory should reveal and open the Divine BODY subtab")
 	_expect(main.stat_rows.completion.visible, "Cosmic victory did not reveal completion stats")
 	_expect(main.guide_label.text.contains("divine blessing"), "Cosmic victory did not expand the Guide")
 	var divine_heading: Label = main.divine_section.get_child(0) as Label

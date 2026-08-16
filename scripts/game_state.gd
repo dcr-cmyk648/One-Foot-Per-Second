@@ -65,6 +65,9 @@ const RECOVERY_REMAINING_PER_RANK := 0.90
 # A complete mundane build therefore still takes at least 1.39 seconds to reset.
 const HUMAN_BODY_RECOVERY_LIMIT := 0.72
 const HUMAN_RECOVERY_SOFT_CAP_START := 0.60
+const ELASTIC_UCL_RECOVERY_PER_RANK := 1.50
+const ALTERNATING_LOBES_RECOVERY_PER_RANK := 2.0
+const TIME_COMPRESSION_RECOVERY_PER_RANK := 2.0
 const LINEUP_MIN_SECONDS := 1.25
 const LINEUP_REMAINING_PER_RANK := 0.90
 const HIT_DELAY_MIN_FACTOR := 0.35
@@ -3318,11 +3321,12 @@ func get_throwing_source_count() -> int:
 
 func get_simultaneous_ball_cap() -> int:
 	# Human baseball stays recognizably human regardless of ordinary training.
-	# Prenatal coordination unlocks parallel arms; eldritch geometry later makes
-	# room for entire cloned bullpens without turning recovery into phantom balls.
+	# Every purchased arm can immediately throw its own real ball. Eldritch
+	# geometry later makes room for cloned and time-layered sources beyond the
+	# pitcher's personal arm count without turning recovery into phantom balls.
 	if genetic_rebirths <= 0:
 		return 1
-	var capacity := int(pow(2.0, clampi(int(genetic_levels.parallel_pitching_lobes), 0, 3)))
+	var capacity := int(round(get_arm_count()))
 	if eldritch_ascensions > 0:
 		capacity *= int(pow(4.0, clampi(int(eldritch_levels.non_euclidean_bullpen), 0, 4)))
 	return maxi(capacity, 1)
@@ -3364,7 +3368,18 @@ func get_recovery_rate() -> float:
 			HUMAN_BODY_RECOVERY_LIMIT,
 			HUMAN_RECOVERY_SOFT_CAP_START
 		)
-	rate *= pow(1.18, int(genetic_levels.elastic_ucl_colony))
+	rate *= pow(
+		ELASTIC_UCL_RECOVERY_PER_RANK,
+		maxi(int(genetic_levels.elastic_ucl_colony), 0)
+	)
+	rate *= pow(
+		ALTERNATING_LOBES_RECOVERY_PER_RANK,
+		maxi(int(genetic_levels.parallel_pitching_lobes), 0)
+	)
+	rate *= pow(
+		TIME_COMPRESSION_RECOVERY_PER_RANK,
+		maxi(int(eldritch_levels.time_compression), 0)
+	)
 	rate *= 1.0 + float(get_equipment_bonuses().rate_bonus)
 	return minf(rate, MAX_PHYSICAL_PITCH_RATE)
 

@@ -223,6 +223,10 @@ func _run() -> void:
 	_expect(main.catalog_hide_purchased_toggles.size() == 4, "Phone upgrade catalogs should retain every per-tab Hide Purchased control")
 	for catalog_toggle in main.catalog_hide_purchased_toggles.values():
 		_expect((catalog_toggle as CheckButton).get_combined_minimum_size().y >= 44.0, "Phone Hide Purchased controls should remain touch-sized")
+	_expect(main.body_section_buttons.growth.visible and main.body_section_buttons.build.visible, "Phone BODY should expose separate Grow and Build subtabs")
+	for body_section_button_value in main.body_section_buttons.values():
+		var body_section_button := body_section_button_value as Button
+		_expect(body_section_button.get_combined_minimum_size().y >= 44.0, "Every BODY subtab should provide a 44-pixel touch target")
 	main.upgrade_tabs.current_tab = main.achievement_tab.get_index()
 	main._refresh_achievement_tab(true)
 	await process_frame
@@ -268,6 +272,14 @@ func _run() -> void:
 		_expect(main.mobile_inspection_dialog.visible, "Tapping enemy equipment should open mobile details")
 		_expect(main.mobile_inspection_dialog.dialog_text.contains("Batter threat"), "Enemy equipment details should include its threat modifier")
 		main.mobile_inspection_dialog.hide()
+	_expect(main.power_comparison_panel.size.x <= 82.0, "The phone Power gauge should remain narrow beside enemy equipment")
+	_expect(main.power_comparison_panel.size.y > main.power_comparison_panel.size.x * 2.0, "The phone Power gauge should be vertical")
+	_expect(main.power_comparison_panel.position.x + main.power_comparison_panel.size.x <= main.opponent_loadout_dock.position.x + 1.0, "The phone Power gauge must not cover the enemy equipment strip")
+	main._show_mobile_inspection_for_control(main.power_comparison_panel)
+	await process_frame
+	_expect(main.mobile_inspection_dialog.visible, "Tapping Power should expose the same detailed odds available on desktop")
+	_expect(main.mobile_inspection_dialog.dialog_text.contains("called-Strike matchup"), "Phone Power details should explain the probability calibration")
+	main.mobile_inspection_dialog.hide()
 
 	main.game.opponent_mastery[0] = float(main.game.opponents[0].mastery_required) * 124.0
 	main._refresh_interface()

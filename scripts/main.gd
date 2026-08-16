@@ -4,6 +4,7 @@ const Content = preload("res://scripts/content.gd")
 const GameStateScript = preload("res://scripts/game_state.gd")
 const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 const TitleArtScript = preload("res://scripts/title_art.gd")
+const PowerMatchupGaugeScript = preload("res://scripts/power_matchup_gauge.gd")
 
 const COLOR_BG := Color("050810")
 const COLOR_PANEL := Color("101827")
@@ -115,9 +116,14 @@ var achievement_toast_showing := false
 var achievement_toast_tween: Tween
 var automation_section: VBoxContainer
 var human_growth_section: VBoxContainer
+var human_modifier_section: VBoxContainer
 var genetic_section: VBoxContainer
 var eldritch_section: VBoxContainer
 var divine_section: VBoxContainer
+var body_section_navigation: HBoxContainer
+var body_section_buttons := {}
+var body_section_containers := {}
+var selected_body_section := "growth"
 var guide_label: Label
 var rebirth_story_label: Label
 var ascension_currency_label: Label
@@ -136,8 +142,7 @@ var field_stat_labels := {}
 var opponent_loadout_dock: VBoxContainer
 var opponent_loadout_signature := ""
 var power_comparison_panel: PanelContainer
-var power_comparison_label: Label
-var power_comparison_bar: ProgressBar
+var power_comparison_gauge: Control
 var power_comparison_signature := ""
 var locker_dialog: Window
 var locker_dialog_close_button: Button
@@ -2511,11 +2516,11 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	opponent_loadout_dock.offset_left = -40.0 if mobile_layout else -46.0
 	opponent_loadout_dock.offset_top = 44.0 if mobile_layout else 54.0
 	opponent_loadout_dock.offset_bottom = 300.0 if mobile_layout else 354.0
-	power_comparison_panel.offset_left = -174.0 if mobile_layout else -204.0
-	power_comparison_panel.offset_top = 6.0 if mobile_layout else 10.0
+	power_comparison_panel.offset_left = -126.0 if mobile_layout else -144.0
+	power_comparison_panel.offset_top = 44.0 if mobile_layout else 54.0
 	power_comparison_panel.offset_right = -44.0 if mobile_layout else -50.0
-	power_comparison_panel.offset_bottom = 50.0 if mobile_layout else 58.0
-	power_comparison_label.add_theme_font_size_override("font_size", 8 if mobile_layout else 10)
+	power_comparison_panel.offset_bottom = 238.0 if mobile_layout else 274.0
+	power_comparison_gauge.set_compact(mobile_layout)
 	locker_slot_grid.columns = 4 if mobile_layout else Content.LOOT_SLOTS.size()
 	_configure_menu_overlay_geometry()
 	root_margin.queue_sort()
@@ -2966,28 +2971,16 @@ func _build_power_comparison(parent: Control) -> void:
 	power_comparison_panel.set_anchor(SIDE_TOP, 0.0)
 	power_comparison_panel.set_anchor(SIDE_RIGHT, 1.0)
 	power_comparison_panel.set_anchor(SIDE_BOTTOM, 0.0)
-	power_comparison_panel.offset_left = -204.0
-	power_comparison_panel.offset_top = 10.0
+	power_comparison_panel.offset_left = -144.0
+	power_comparison_panel.offset_top = 54.0
 	power_comparison_panel.offset_right = -50.0
-	power_comparison_panel.offset_bottom = 58.0
-	power_comparison_panel.add_theme_stylebox_override("panel", _compact_panel_style(6.0, 4.0, 6))
+	power_comparison_panel.offset_bottom = 274.0
+	power_comparison_panel.add_theme_stylebox_override("panel", _compact_panel_style(4.0, 3.0, 6))
 	parent.add_child(power_comparison_panel)
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 2)
-	power_comparison_panel.add_child(stack)
-	power_comparison_label = Label.new()
-	power_comparison_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	power_comparison_label.add_theme_font_size_override("font_size", 10)
-	power_comparison_label.add_theme_color_override("font_color", COLOR_TEXT)
-	power_comparison_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stack.add_child(power_comparison_label)
-	power_comparison_bar = ProgressBar.new()
-	power_comparison_bar.min_value = 0.0
-	power_comparison_bar.max_value = 100.0
-	power_comparison_bar.show_percentage = false
-	power_comparison_bar.custom_minimum_size.y = 7.0
-	power_comparison_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stack.add_child(power_comparison_bar)
+	power_comparison_gauge = PowerMatchupGaugeScript.new()
+	power_comparison_gauge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	power_comparison_gauge.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	power_comparison_panel.add_child(power_comparison_gauge)
 	_enable_mobile_inspection(power_comparison_panel, "Power comparison")
 
 func _loot_square_style(color: Color, strength: float, locked := false, equipped := false) -> StyleBoxFlat:
@@ -4014,35 +4007,54 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	ascension_currency_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ascension_currency_label.add_theme_color_override("font_color", COLOR_TEXT)
 	content.add_child(ascension_currency_label)
+	_build_catalog_hide_toggle(content, "body")
+
+	body_section_navigation = HBoxContainer.new()
+	body_section_navigation.name = "BodySectionTabs"
+	body_section_navigation.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_section_navigation.add_theme_constant_override("separation", 4)
+	content.add_child(body_section_navigation)
+	var body_tab_group := ButtonGroup.new()
+	_build_body_section_tab(body_tab_group, "growth", "GROW", "Ordinary biological development")
+	_build_body_section_tab(body_tab_group, "build", "BUILD", "Physical development and questionable chemistry")
+	_build_body_section_tab(body_tab_group, "genetic", "DNA", "Genetic rebirth and permanent mutations")
+	_build_body_section_tab(body_tab_group, "eldritch", "ARCANA", "Eldritch ascension and permanent magic")
+	_build_body_section_tab(body_tab_group, "divine", "DIVINE", "God Prestige and permanent blessings")
 
 	human_growth_section = VBoxContainer.new()
+	human_growth_section.name = "GrowthSection"
 	human_growth_section.add_theme_constant_override("separation", 7)
 	content.add_child(human_growth_section)
-	_section_label(human_growth_section, "I • ORDINARY BIOLOGICAL DEVELOPMENT")
+	_section_label(human_growth_section, "ORDINARY BIOLOGICAL DEVELOPMENT")
 	body_growth_status_label = Label.new()
 	body_growth_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_growth_status_label.add_theme_font_size_override("font_size", 12)
 	body_growth_status_label.add_theme_color_override("font_color", COLOR_MUTED)
 	human_growth_section.add_child(body_growth_status_label)
-	_build_catalog_hide_toggle(human_growth_section, "body")
 	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
 		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
 		var entry := _upgrade_row(_definition_tooltip(definition, ["speed", "quality", "recovery"]))
 		(entry.button as Button).pressed.connect(_buy_body_growth.bind(str(definition.id)))
 		human_growth_section.add_child(entry.container)
 		body_growth_buttons[definition.id] = entry
-	_section_label(human_growth_section, "II • PHYSICAL DEVELOPMENT & QUESTIONABLE CHEMISTRY")
+
+	human_modifier_section = VBoxContainer.new()
+	human_modifier_section.name = "BuildSection"
+	human_modifier_section.add_theme_constant_override("separation", 7)
+	content.add_child(human_modifier_section)
+	_section_label(human_modifier_section, "PHYSICAL DEVELOPMENT & QUESTIONABLE CHEMISTRY")
 	for definition_value in Content.BODY_MODIFIERS:
 		var definition: Dictionary = definition_value
 		var entry := _upgrade_row(_definition_tooltip(definition))
 		(entry.button as Button).pressed.connect(_buy_body_modifier.bind(str(definition.id)))
-		human_growth_section.add_child(entry.container)
+		human_modifier_section.add_child(entry.container)
 		body_modifier_buttons[definition.id] = entry
 
 	genetic_section = VBoxContainer.new()
+	genetic_section.name = "GeneticSection"
 	genetic_section.add_theme_constant_override("separation", 7)
 	content.add_child(genetic_section)
-	_section_label(genetic_section, "III • GENETIC REBIRTH — THE TIME MACHINE IS FOR OBSTETRICS")
+	_section_label(genetic_section, "GENETIC REBIRTH — THE TIME MACHINE IS FOR OBSTETRICS")
 	genetic_reset_button = _upgrade_button("Reset the current body for DNA based on all XP earned by that body.")
 	genetic_reset_button.pressed.connect(_request_genetic_rebirth)
 	genetic_section.add_child(genetic_reset_button)
@@ -4053,9 +4065,10 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 		genetic_buttons[definition.id] = entry
 
 	eldritch_section = VBoxContainer.new()
+	eldritch_section.name = "EldritchSection"
 	eldritch_section.add_theme_constant_override("separation", 7)
 	content.add_child(eldritch_section)
-	_section_label(eldritch_section, "IV • ELDRITCH ASCENSION — DESTROY THIS REALITY RESPONSIBLY")
+	_section_label(eldritch_section, "ELDRITCH ASCENSION — DESTROY THIS REALITY RESPONSIBLY")
 	eldritch_reset_button = _upgrade_button("Reset the body, DNA, and every genetic enhancement for Arcana based on total DNA earned in this reality.")
 	eldritch_reset_button.pressed.connect(_request_eldritch_ascension)
 	eldritch_section.add_child(eldritch_reset_button)
@@ -4066,9 +4079,10 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 		eldritch_buttons[definition.id] = entry
 
 	divine_section = VBoxContainer.new()
+	divine_section.name = "DivineSection"
 	divine_section.add_theme_constant_override("separation", 7)
 	content.add_child(divine_section)
-	_section_label(divine_section, "V • GOD PRESTIGE — SAVE IT, THEN DO IT ALL AGAIN")
+	_section_label(divine_section, "GOD PRESTIGE — SAVE IT, THEN DO IT ALL AGAIN")
 	for definition in Content.DIVINE_BLESSINGS:
 		var entry := _upgrade_row(str(definition.description))
 		(entry.button as Button).pressed.connect(_request_divine_ascension.bind(str(definition.id)))
@@ -4077,6 +4091,66 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	divine_halo_button = _upgrade_button("After every blessing is owned, each additional Halo multiplies XP and mastery ×1.50.")
 	divine_halo_button.pressed.connect(_request_divine_ascension.bind("halo"))
 	divine_section.add_child(divine_halo_button)
+	body_section_containers = {
+		"growth": human_growth_section,
+		"build": human_modifier_section,
+		"genetic": genetic_section,
+		"eldritch": eldritch_section,
+		"divine": divine_section,
+	}
+	_refresh_body_section_visibility()
+
+func _build_body_section_tab(group: ButtonGroup, id: String, text: String, tooltip: String) -> void:
+	var button := Button.new()
+	button.name = "BodySection%s" % id.capitalize()
+	button.text = text
+	button.tooltip_text = tooltip
+	button.toggle_mode = true
+	button.button_group = group
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size.y = 44.0
+	button.add_theme_font_size_override("font_size", 11)
+	button.clip_text = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(_select_body_section.bind(id))
+	body_section_navigation.add_child(button)
+	body_section_buttons[id] = button
+
+func _body_section_is_revealed(id: String) -> bool:
+	match id:
+		"growth", "build":
+			return true
+		"genetic":
+			return _has_genetic_reveal()
+		"eldritch":
+			return _has_eldritch_reveal()
+		"divine":
+			return _has_divine_reveal()
+	return false
+
+func _select_body_section(id: String) -> void:
+	if not _body_section_is_revealed(id):
+		return
+	selected_body_section = id
+	_refresh_body_section_visibility()
+	var body_scroll := rebirth_tab as ScrollContainer
+	if body_scroll != null:
+		body_scroll.scroll_vertical = 0
+
+func _refresh_body_section_visibility() -> void:
+	if body_section_buttons.is_empty() or body_section_containers.is_empty():
+		return
+	if not _body_section_is_revealed(selected_body_section):
+		selected_body_section = "growth"
+	for id_value in body_section_buttons:
+		var id := str(id_value)
+		var button: Button = body_section_buttons[id]
+		button.visible = _body_section_is_revealed(id)
+		button.set_pressed_no_signal(id == selected_body_section)
+	for id_value in body_section_containers:
+		var id := str(id_value)
+		var section: Control = body_section_containers[id]
+		section.visible = id == selected_body_section and _body_section_is_revealed(id)
 
 func _build_achievement_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "ACHIEVE")
@@ -4763,6 +4837,7 @@ func _refresh_reveal_visibility() -> void:
 	var eldritch_revealed := _has_eldritch_reveal()
 	var divine_revealed := _has_divine_reveal()
 	var reveal_mask := int(genetic_revealed) + int(eldritch_revealed) * 2 + int(divine_revealed) * 4
+	var previous_reveal_mask := last_reveal_mask
 
 	prestige_header_stack.visible = genetic_revealed and not mobile_layout
 	if genetic_revealed:
@@ -4779,9 +4854,17 @@ func _refresh_reveal_visibility() -> void:
 	if reveal_mask != last_reveal_mask:
 		automation_section.visible = genetic_revealed
 		last_reveal_mask = reveal_mask
-	genetic_section.visible = genetic_revealed
-	eldritch_section.visible = eldritch_revealed
-	divine_section.visible = divine_revealed
+		# A newly discovered prestige layer should open its own BODY subtab once,
+		# while ordinary refreshes and responsive-layout changes preserve the
+		# player's current choice.
+		if previous_reveal_mask >= 0:
+			if divine_revealed and (previous_reveal_mask & 4) == 0:
+				selected_body_section = "divine"
+			elif eldritch_revealed and (previous_reveal_mask & 2) == 0:
+				selected_body_section = "eldritch"
+			elif genetic_revealed and (previous_reveal_mask & 1) == 0:
+				selected_body_section = "genetic"
+	_refresh_body_section_visibility()
 	ascension_currency_label.visible = genetic_revealed
 
 	header_subtitle.text = _get_game_subtitle()
@@ -4856,7 +4939,7 @@ func _refresh_guide_text(
 			"GEAR & ACHIEVEMENTS\n"
 			+ "• Strikeouts sometimes copy one player-wearable item from the batter's visible loadout: same slot, same rarity. Inspect enemy gear to see what can drop. Extra mastery gently favors the better worn pieces.\n"
 			+ "• %s\n" % rarity_help
-			+ "• Power is a quick comparison; hover on desktop or hold on phone for details. Stars protect items; each slot keeps 10.\n"
+			+ "• Power is a vertical matchup gauge: YOU is the called-Strike chance and THEM is batter resistance. Hover or tap for full odds. Stars protect items; each slot keeps 10.\n"
 			+ "• All %d achievement slots are visible. Each completed achievement permanently adds 1%% XP; unrevealed secret entries stay anonymous."
 			% Content.ACHIEVEMENTS.size()
 		),
@@ -5186,7 +5269,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		_refresh_equipment()
 		_refresh_locker()
 	_refresh_opponent_loadout()
-	_refresh_power_comparison()
+	_refresh_power_comparison(at_bat_metrics)
 	var weight: float = float(pitch_field.get_visual_weight())
 	visual_weight_label.text = (
 		"1:1 PROJECTILES  •  %s IN FLIGHT" % BaseballGameState.format_number(
@@ -5242,7 +5325,7 @@ func _refresh_field_stats() -> void:
 			else game.get_pitch_quality()
 		)
 		_set_field_stat_text("pitch", (
-			str(pitch_definition.name)
+			pitch_field.last_pitch_name
 			if has_last_pitch and not pitch_definition.is_empty()
 			else "AUTOMATIC MIX"
 		))
@@ -5567,42 +5650,46 @@ func _refresh_opponent_loadout() -> void:
 		_enable_mobile_inspection(button, "Enemy %s" % kind)
 		opponent_loadout_dock.add_child(button)
 
-func _refresh_power_comparison() -> void:
+func _refresh_power_comparison(at_bat_metrics: Dictionary) -> void:
 	if power_comparison_panel == null:
 		return
+	var probabilities: Array = at_bat_metrics.get("probabilities", [])
+	if probabilities.size() <= Content.STRIKE_INDEX:
+		return
+	var called_strike_probability := clampf(
+		float(probabilities[Content.STRIKE_INDEX]),
+		0.0,
+		1.0
+	)
 	var player_power := game.get_player_power_rating()
 	var opponent_power := game.get_opponent_power_rating()
-	var player_is_stronger := player_power >= opponent_power
-	var stronger := maxf(player_power, opponent_power)
-	var weaker := minf(player_power, opponent_power)
-	var ratio := clampf(weaker / maxf(stronger, 0.000001), 0.0, 1.0)
-	var signature := "%s:%s:%d" % [
+	var strikeout_probability := clampf(
+		float(at_bat_metrics.get("strikeout_probability", 0.0)),
+		0.0,
+		1.0
+	)
+	var signature := "%.6f:%.6f:%s:%s" % [
+		called_strike_probability,
+		strikeout_probability,
 		BaseballGameState.format_number(player_power, 2),
 		BaseballGameState.format_number(opponent_power, 2),
-		int(player_is_stronger),
 	]
 	if signature == power_comparison_signature:
 		return
 	power_comparison_signature = signature
-	power_comparison_label.text = "POWER  YOU %s  •  THEM %s" % [
-		BaseballGameState.format_number(player_power, 1),
-		BaseballGameState.format_number(opponent_power, 1),
-	]
-	power_comparison_bar.value = ratio * 100.0
-	var fill_style := StyleBoxFlat.new()
-	fill_style.bg_color = Color(COLOR_ACCENT if player_is_stronger else COLOR_BAD, 0.88)
-	fill_style.corner_radius_top_left = 3
-	fill_style.corner_radius_top_right = 3
-	fill_style.corner_radius_bottom_left = 3
-	fill_style.corner_radius_bottom_right = 3
-	power_comparison_bar.add_theme_stylebox_override("fill", fill_style)
-	var weaker_name := "BATTER" if player_is_stronger else "YOU"
-	var stronger_name := "YOU" if player_is_stronger else "BATTER"
+	power_comparison_gauge.set_matchup(called_strike_probability)
 	power_comparison_panel.tooltip_text = (
-		"%s is at %.1f%% of %s Power. Power summarizes the real matchup stats; it is not a separate hidden stat."
-		% [weaker_name, ratio * 100.0, stronger_name]
-	)
-	power_comparison_label.tooltip_text = power_comparison_panel.tooltip_text
+		"POWER is calibrated to this batter's current called-Strike matchup.\n"
+		+ "YOU %.2f%% • THEM %.2f%% resistance\n"
+		+ "Completed strikeout chance %.4f%%\n"
+		+ "Underlying build ratings: YOU %s • THEM %s"
+	) % [
+		called_strike_probability * 100.0,
+		(1.0 - called_strike_probability) * 100.0,
+		strikeout_probability * 100.0,
+		BaseballGameState.format_number(player_power, 2),
+		BaseballGameState.format_number(opponent_power, 2),
+	]
 
 func _format_training_delta_number(value: float) -> String:
 	var magnitude := absf(value)
@@ -6427,7 +6514,7 @@ func _complete_first_genetic_rebirth() -> void:
 		genetic_rebirth_explanation_dialog.title = "WELCOME BACK, TINY"
 		genetic_rebirth_explanation_dialog.dialog_text = (
 			"You wake up as a toddler again. Baseball chronology is apparently optional.\n\n"
-			+ "You gained %d DNA. Spend it in BODY on permanent genetic upgrades before growing "
+			+ "You gained %d DNA. Spend it in BODY → DNA on permanent genetic upgrades before growing "
 			+ "through the human leagues again. All prestige upgrades are retained on later "
 			+ "genetic rebirths."
 		) % award
@@ -6440,6 +6527,7 @@ func _complete_first_genetic_rebirth() -> void:
 func _open_body_after_first_rebirth() -> void:
 	if upgrade_tabs == null or rebirth_tab == null:
 		return
+	_select_body_section("genetic")
 	upgrade_tabs.current_tab = rebirth_tab.get_index()
 	_refresh_mobile_tab_navigation()
 	if mobile_layout:

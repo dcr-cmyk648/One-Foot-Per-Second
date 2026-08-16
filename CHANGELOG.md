@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.4 — The arms have reached a collective-bargaining agreement
+
+- Replaced the synthetic horizontal Power ratio with a compact vertical gauge beside enemy equipment. **YOU** is now the current called-Strike chance and **THEM** its complementary resistance, so a 4% matchup appears near the red floor instead of false parity; orange/yellow marks an even fight and green marks control. Hover or phone tap adds completed-strikeout odds and the underlying build ratings.
+- Split BODY into spoiler-gated **Grow**, **Build**, **DNA**, **Arcana**, and **Divine** subtabs. Fresh players see only mundane development; each later section appears and opens when its story layer is actually discovered.
+- Made every purchased pitching arm automatically raise the real balls-per-throw cap. The former capacity-only lobe upgrade is now **Alternating Pitching Lobes** with `Recovery ×2`, Elastic UCL Colony now grants `Recovery ×1.50`, and Time Compression also grants `Recovery ×2`, creating the requested aggressive post-human cadence without changing the human recovery ceiling.
+- Gave each multi-arm volley one shared sampled pitch and one readable call—**Double Fastball**, **Triple Slider**, and so on. The opening two-arm throw uses equal opposite arcs, while larger volleys alternate and spread into distinct deterministic lanes instead of overlapping.
+- Synchronized macOS and Windows executable-version metadata with the project version during every release build, eliminating an old `0.14.0` package-label drift while retaining the shared native update channel.
+- Kept save schema 24. Existing arms, lobe ranks, prestige progress, in-flight throws, and every older migration load directly; the renamed lobe ID remains unchanged internally for compatibility.
+
 ## 0.16.3 — The commissioner has notes
 
 - Rebuilt first contact with Xylophax as a visible humiliation sequence. The alien commissioner now stays at the plate, hits every pitch for a Grand Slam, taunts after every impact, and fills a twelve-hit meter in the exact field location that eventually becomes **HELP**. Offline time cannot advance it.
