@@ -17,10 +17,13 @@ OFPS_ASSETS=(
   "${OFPS_RELEASE_DIR}/${OFPS_TITLE} v${OFPS_VERSION} Linux x86_64.tar.gz"
   "${OFPS_RELEASE_DIR}/${OFPS_TITLE} v${OFPS_VERSION} Linux ARM64.tar.gz"
   "${OFPS_RELEASE_DIR}/${OFPS_TITLE} v${OFPS_VERSION} Browser.zip"
-  "${OFPS_RELEASE_DIR}/${OFPS_TITLE} v${OFPS_VERSION} Source.zip"
   "${OFPS_RELEASE_DIR}/SHA256SUMS.txt"
   "${OFPS_RELEASE_DIR}/release-manifest.json"
 )
+
+# GitHub automatically publishes source ZIP and tarball downloads for the tag.
+# Do not upload the redundant hand-built source archive to a public release;
+# it remains available inside the local All Platforms bundle for offline use.
 
 for OFPS_ASSET in "${OFPS_ASSETS[@]}"; do
   if [[ ! -s "${OFPS_ASSET}" ]]; then
