@@ -157,10 +157,12 @@ func _run() -> void:
 	_expect(str(main.field_stat_labels.plate.text).contains("1.00 ft/s"), "The untouched Wiffle Ball should arrive at the same one-foot-per-second speed")
 	_expect(main.field_stat_labels.drag.text.ends_with("NONE"), "The untouched opening Wiffle Ball should disclose that it has no air-drag model")
 	_expect(main.field_stat_labels.distance.text.contains("3 ft"), "The live profile should show the immutable release distance")
+	_expect(main.field_stat_labels.pitch.text == "AUTOMATIC MIX", "The live throw profile should show the pitch name without a redundant PITCH prefix")
 	for stat_id in main.field_stat_labels:
 		_expect(not (main.field_stat_labels[stat_id] as Label).tooltip_text.is_empty(), "Field stat %s needs a hover explanation" % stat_id)
 		_expect((main.field_stat_labels[stat_id] as Label).size.x >= 58.0, "Field stat %s needs actual rendered width inside the field profile" % stat_id)
-		_expect((main.field_stat_labels[stat_id] as Label).text.contains("  "), "Field stat %s should paint its name and value in one browser-safe label" % stat_id)
+		if str(stat_id) != "pitch":
+			_expect((main.field_stat_labels[stat_id] as Label).text.contains("  "), "Field stat %s should paint its name and value in one browser-safe label" % stat_id)
 	var field_click := InputEventMouseButton.new()
 	field_click.button_index = MOUSE_BUTTON_LEFT
 	field_click.pressed = true
@@ -223,14 +225,14 @@ func _run() -> void:
 			_expect(str((outcome_heading.get_child(1) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus beside its name")
 			_expect(not outcome_panel.tooltip_text.is_empty(), "Detailed outcome rules should live in hover text")
 	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("cannot be saved"), "The Grand Slam tooltip should explicitly distinguish its absolute terminal rule from a Home Run")
-	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Frustration +12"), "The Grand Slam tooltip should expose its maximum Frustration severity")
-	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Frustration +0.20"), "The Ball tooltip should expose its tiny Frustration nudge")
+	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Frustration +12000"), "The Grand Slam tooltip should expose its maximum whole-number Frustration severity")
+	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Frustration +200"), "The Ball tooltip should expose its small whole-number Frustration nudge")
 	_expect(main.outcome_panels[1].tooltip_text.contains("unless saved"), "The Home Run tooltip should retain ordinary hit-save behavior")
 	_expect(not main.strikeout_payout_label.text.begins_with("0 XP"), "The separate strikeout payout should not repeat zero-XP clutter")
 	_expect(main.strikeout_payout_label.text.begins_with("COMPLETED STRIKEOUT:"), "Strikeout XP should appear in one small separate readout")
 	_expect(main.frustration_status.get_parent() == main.outcome_footer, "Frustration and strikeout payout should share the compact outcome footer")
-	_expect(main.frustration_label.text.begins_with("FRUSTRATION +"), "The field should expose the current outcome-weighted quality bonus")
-	_expect(main.frustration_label.tooltip_text.contains("Grand Slam +12") and not main.frustration_label.tooltip_text.contains("since the last"), "Frustration inspection should explain severity rather than elapsed time")
+	_expect(main.frustration_label.text.begins_with("FRUSTRATION ") and not "." in main.frustration_label.text, "The field should expose the current outcome-weighted bonus as a whole-number rating")
+	_expect(main.frustration_label.tooltip_text.contains("Grand Slam +12,000") and not main.frustration_label.tooltip_text.contains("since the last"), "Frustration inspection should explain whole-number severity rather than elapsed time")
 	_expect(main.hard_reset_button != null and main.hard_reset_button.text == "RESET PROGRESS", "A visible progress-reset control should exist")
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
 	_expect(main.load_save_button != null and main.load_save_button.text == "IMPORT", "A visible portable-save import control should exist")

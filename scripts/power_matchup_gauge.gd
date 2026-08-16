@@ -66,12 +66,6 @@ func _track_style(color: Color, alpha: float) -> StyleBoxFlat:
 	style.corner_radius_bottom_right = 7
 	return style
 
-func _percentage_text(value: float) -> String:
-	var percentage := clampf(value, 0.0, 1.0) * 100.0
-	if percentage > 0.0 and percentage < 1.0:
-		return "%.1f%%" % percentage
-	return "%.0f%%" % percentage
-
 func _resolve_label_tops(
 	you_marker_y: float,
 	them_marker_y: float,
@@ -192,7 +186,7 @@ func _draw() -> void:
 		font,
 		you_marker_y,
 		label_tops.x,
-		"YOU %s" % _percentage_text(you_ratio),
+		"YOU",
 		matchup_color,
 		track_rect.end.x,
 		label_left,
@@ -204,7 +198,7 @@ func _draw() -> void:
 		font,
 		them_marker_y,
 		label_tops.y,
-		"THEM %s" % _percentage_text(them_ratio),
+		"THEM",
 		matchup_color,
 		track_rect.end.x,
 		label_left,

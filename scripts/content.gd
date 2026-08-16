@@ -62,6 +62,18 @@ const BASE_BALLS_REQUIRED := [
 	3, 3, 3, 2, 2,
 ]
 
+# Simultaneous coverage is a real post-human defensive stat. Ordinary batters
+# own one bat; authored multi-bat opponents visibly carry the matching count.
+# A pitcher who releases beyond this capacity forces each uncovered ball through
+# a sharply worsening independent contact check.
+const OPPONENT_BAT_COUNTS := [
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 4, 1, 1, 1, 1, 1, 1,
+	1, 1, 9, 1, 8,
+]
+
 const HUMAN_FINAL_INDEX := 29
 const ALIEN_EXHIBITION_INDEX := 30
 const ALIEN_FINAL_INDEX := 39
@@ -169,7 +181,7 @@ const LOOT_STATS := [
 	{"id": "quality_bonus", "name": "Quality", "format": "additive"},
 	{"id": "xp_bonus", "name": "Strikeout XP", "format": "multiplier"},
 	{"id": "mastery_bonus", "name": "Opponent mastery", "format": "multiplier"},
-	{"id": "distance_bonus", "name": "Distance XP", "format": "multiplier"},
+	{"id": "distance_bonus", "name": "Distance Control", "format": "multiplier"},
 ]
 
 const STAT_HELP := {
@@ -224,21 +236,22 @@ const LOOT_SUFFIXES := {
 # letting uncapped idle-game income turn the whole ladder into automatic
 # strikes. The final anchor is Octathulhu rather than a tenth era.
 const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 6.0, 10.5, 15.2, 20.4, 31.0, 41.0, 59.0, 81.0, 110.0]
+const HUMAN_FINAL_DIFFICULTY_TARGET := 38.0
 
 const DISTANCE_TIERS := [
-	{"name": "PRESCHOOL POINT-BLANK", "label": "3 ft", "feet": 3.0, "required_level": 0, "xp_multiplier": 1.0, "difficulty": 0.0},
-	{"name": "TEE-BALL COACH DISTANCE", "label": "10 ft", "feet": 10.0, "required_level": 3, "xp_multiplier": 1.35, "difficulty": 0.18},
-	{"name": "COACH-PITCH FRONT LINE", "label": "25 ft", "feet": 25.0, "required_level": 5, "xp_multiplier": 1.85, "difficulty": 0.38},
-	{"name": "LITTLE-LEAGUE MOUND", "label": "46 ft", "feet": 46.0, "required_level": 7, "xp_multiplier": 2.75, "difficulty": 0.68},
-	{"name": "INTERMEDIATE 50/70 MOUND", "label": "50 ft", "feet": 50.0, "required_level": 10, "xp_multiplier": 3.25, "difficulty": 0.82},
-	{"name": "JUNIOR-LEAGUE MOUND", "label": "54 ft", "feet": 54.0, "required_level": 11, "xp_multiplier": 3.80, "difficulty": 0.96},
-	{"name": "REGULATION MOUND", "label": "60 ft 6 in", "feet": 60.5, "required_level": 12, "xp_multiplier": 4.75, "difficulty": 1.15},
-	{"name": "ONE-MILE MOUND", "label": "1 mile", "feet": 5280.0, "required_level": 31, "xp_multiplier": 30.0, "difficulty": 3.1},
-	{"name": "LOW-ORBIT BULLPEN", "label": "250 miles", "feet": 1320000.0, "required_level": 34, "xp_multiplier": 100.0, "difficulty": 4.0},
-	{"name": "LUNAR SERIES", "label": "Earth to Moon", "feet": 1.261e9, "required_level": 36, "xp_multiplier": 500.0, "difficulty": 5.0},
-	{"name": "SOLAR MOUND", "label": "1 AU", "feet": 4.908e11, "required_level": 38, "xp_multiplier": 2500.0, "difficulty": 6.0},
-	{"name": "INTERSTELLAR CLASSIC", "label": "1 light-year", "feet": 3.104e16, "required_level": 40, "xp_multiplier": 200000.0, "difficulty": 7.5},
-	{"name": "GALAXY-WIDTH WORLD SERIES", "label": "100,000 light-years", "feet": 3.104e21, "required_level": 43, "xp_multiplier": 100000000.0, "difficulty": 10.0},
+	{"name": "PRESCHOOL POINT-BLANK", "label": "3 ft", "feet": 3.0, "required_level": 0, "difficulty": 0.0},
+	{"name": "TEE-BALL COACH DISTANCE", "label": "10 ft", "feet": 10.0, "required_level": 3, "difficulty": 0.18},
+	{"name": "COACH-PITCH FRONT LINE", "label": "25 ft", "feet": 25.0, "required_level": 5, "difficulty": 0.38},
+	{"name": "LITTLE-LEAGUE MOUND", "label": "46 ft", "feet": 46.0, "required_level": 7, "difficulty": 0.68},
+	{"name": "INTERMEDIATE 50/70 MOUND", "label": "50 ft", "feet": 50.0, "required_level": 10, "difficulty": 0.82},
+	{"name": "JUNIOR-LEAGUE MOUND", "label": "54 ft", "feet": 54.0, "required_level": 11, "difficulty": 0.96},
+	{"name": "REGULATION MOUND", "label": "60 ft 6 in", "feet": 60.5, "required_level": 12, "difficulty": 1.15},
+	{"name": "ONE-MILE MOUND", "label": "1 mile", "feet": 5280.0, "required_level": 31, "difficulty": 3.1},
+	{"name": "LOW-ORBIT BULLPEN", "label": "250 miles", "feet": 1320000.0, "required_level": 34, "difficulty": 4.0},
+	{"name": "LUNAR SERIES", "label": "Earth to Moon", "feet": 1.261e9, "required_level": 36, "difficulty": 5.0},
+	{"name": "SOLAR MOUND", "label": "1 AU", "feet": 4.908e11, "required_level": 38, "difficulty": 6.0},
+	{"name": "INTERSTELLAR CLASSIC", "label": "1 light-year", "feet": 3.104e16, "required_level": 40, "difficulty": 7.5},
+	{"name": "GALAXY-WIDTH WORLD SERIES", "label": "100,000 light-years", "feet": 3.104e21, "required_level": 43, "difficulty": 10.0},
 ]
 
 const OPPONENT_NAMES := [
@@ -661,10 +674,10 @@ const SIGNATURE_BATTER_NAMES := {
 
 # Achievements are permanent, additive side bonuses rather than another
 # purchase economy.  Future reward types can be added per definition; for now
-# every entry uses the shared +1% XP default.  Tiers are revealed only after
+# every entry uses the shared +0.5% XP default. Tiers are revealed only after
 # their corresponding story layer has been discovered, so this catalog does
 # not advertise aliens, destroyed realities, or God to a new pitcher.
-const DEFAULT_ACHIEVEMENT_XP_BONUS := 0.01
+const DEFAULT_ACHIEVEMENT_XP_BONUS := 0.005
 const ACHIEVEMENT_TIER_ORDER := ["human", "genetic", "eldritch", "divine"]
 const ACHIEVEMENT_TIER_NAMES := {
 	"human": "THE REGULAR OL’ CAREER",
@@ -674,7 +687,7 @@ const ACHIEVEMENT_TIER_NAMES := {
 }
 
 const ACHIEVEMENTS := [
-	# Human baseball — 55 achievements. New milestones are additive: the catalog
+	# Human baseball — 54 achievements. New milestones are additive: the catalog
 	# is allowed to grow when a distinct joke or challenge earns its place.
 	{"id": "first_pitch", "tier": "human", "name": "A Threat Has Been Issued", "metric": "lifetime_pitches", "threshold": 1.0, "description": "Resolve your first pitch."},
 	{"id": "first_field_tap", "tier": "human", "name": "This Is Supposed to Be Idle", "metric": "field_taps", "threshold": 1.0, "description": "Hurry an active timer with a field tap."},
@@ -732,7 +745,9 @@ const ACHIEVEMENTS := [
 	{"id": "legendary_loot", "tier": "human", "name": "Orange You Glad It Dropped", "metric": "loot_rarity", "threshold": 3.0, "secret": true, "description": "Find a Legendary equipment item."},
 	{"id": "fully_equipped", "tier": "human", "name": "Dressed for the Job", "metric": "equipped_slots", "threshold": 6.0, "description": "Equip all six human clothing slots at once."},
 
-	# Genetic and alien baseball — 26 achievements.
+	# Genetic and alien baseball. Replaying human baseball with impossible anatomy
+	# is fertile achievement territory, so simultaneous-rule oddities are recorded
+	# as durable event metrics instead of being discarded after their popup.
 	{"id": "genetic_offer", "tier": "genetic", "name": "Come With Me If You Want to Pitch", "metric": "genetic_offer", "threshold": 1.0, "description": "Accept the portal stranger’s deeply irresponsible baseball plan."},
 	{"id": "illegal_pitch", "tier": "genetic", "name": "Wait… That’s Illegal", "metric": "illegal_pitch", "threshold": 1.0, "description": "Learn your first pitch that cannot be reconciled with any human rulebook."},
 	{"id": "genetic_rebirth_1", "tier": "genetic", "name": "Born Again, But Baseball", "metric": "genetic_rebirths", "threshold": 1.0, "description": "Complete your first genetic rebirth."},
@@ -760,8 +775,24 @@ const ACHIEVEMENTS := [
 	{"id": "speed_mach_1", "tier": "genetic", "name": "Sound Barrier: Optional", "metric": "speed", "threshold": 1125.33, "description": "Throw a pitch at Mach 1."},
 	{"id": "speed_mach_3", "tier": "genetic", "name": "Licensed for Mach Three", "metric": "speed", "threshold": 3375.99, "reveal_level": 39, "description": "Throw a pitch at Mach 3."},
 	{"id": "speed_mach_12", "tier": "genetic", "name": "Atmosphere Not Included", "metric": "speed", "threshold": 13503.96, "secret": true, "description": "Reach the Mach 12 genetic limit."},
+	{"id": "born_again_bully", "tier": "genetic", "name": "Back to Preschool", "metric": "event", "key": "post_rebirth_toddler_strikeout", "threshold": 1.0, "description": "After time travel, strike out a Wiffle-Bat Toddler again."},
+	{"id": "excessive_daycare_force", "tier": "genetic", "name": "Excessive Force, Daycare Division", "metric": "event", "key": "multi_arm_toddler_strikeout", "threshold": 1.0, "description": "Strike out a Wiffle-Bat Toddler while pitching with multiple arms."},
+	{"id": "eight_arm_daycare", "tier": "genetic", "name": "Eight Arms, One Nap Time", "metric": "event", "key": "eight_arm_toddler_strikeout", "threshold": 1.0, "secret": true, "description": "Strike out a Wiffle-Bat Toddler with eight pitching arms."},
+	{"id": "double_strike_volley", "tier": "genetic", "name": "Two Strikes, One Windup", "metric": "event", "key": "double_strike_volley", "threshold": 1.0, "description": "Record at least two called Strikes in one simultaneous volley."},
+	{"id": "triple_strike_volley", "tier": "genetic", "name": "Hat Trick, Wrong Sport", "metric": "event", "key": "triple_strike_volley", "threshold": 1.0, "description": "Record at least three called Strikes in one simultaneous volley."},
+	{"id": "hit_and_strike_volley", "tier": "genetic", "name": "Schrödinger’s At-Bat", "metric": "event", "key": "hit_and_strike_volley", "threshold": 1.0, "description": "Give up an unsaved hit and record a Strike in the same volley. The hit wins."},
+	{"id": "grand_slam_and_strike", "tier": "genetic", "name": "Put It in Both Columns", "metric": "event", "key": "grand_slam_and_strike", "threshold": 1.0, "secret": true, "description": "Allow a Grand Slam and record a Strike at exactly the same time."},
+	{"id": "triple_single_volley", "tier": "genetic", "name": "Three Singles in a Trench Coat", "metric": "event", "key": "triple_single_volley", "threshold": 1.0, "description": "Allow three Singles in one volley."},
+	{"id": "mixed_hit_combo", "tier": "genetic", "name": "Sabermetrics Has Left the Building", "metric": "event", "key": "mixed_hit_combo", "threshold": 1.0, "description": "Combine two different unsaved hit types in one volley."},
+	{"id": "bat_overload", "tier": "genetic", "name": "Brought a Bat to a Ball Fight", "metric": "event", "key": "bat_overload", "threshold": 1.0, "description": "Throw more simultaneous balls than the batter has bats."},
+	{"id": "multi_ball_strikeout", "tier": "genetic", "name": "One Batter, Several Ks", "metric": "event", "key": "multi_ball_strikeout", "threshold": 1.0, "description": "Complete one strikeout with a multi-ball volley."},
+	{"id": "umpire_conference", "tier": "genetic", "name": "Please Consult the Umpire", "metric": "event", "key": "simultaneous_walk_strikeout", "threshold": 1.0, "secret": true, "description": "Cross the walk and strikeout counts in the same volley. Called Strikes win."},
+	{"id": "posthuman_bambino", "tier": "genetic", "name": "Revisiting Former Coworkers", "metric": "event", "key": "posthuman_human_champion_strikeout", "threshold": 1.0, "description": "Return after time travel and strike out the final human champion."},
+	{"id": "solved_human_baseball", "tier": "genetic", "name": "The Humans Have a Problem", "metric": "human_final_strikeout_certainty", "threshold": 1.0, "secret": true, "description": "Reach at least a 99% strikeout chance against the final human champion after time travel."},
+	{"id": "saved_hit_and_strike", "tier": "genetic", "name": "The Fielder Also Says Strike", "metric": "event", "key": "saved_hit_and_strike", "threshold": 1.0, "description": "Save a fair hit and record a called Strike in the same volley."},
+	{"id": "fourfold_overwhelmed", "tier": "genetic", "name": "Four Bats Were Not Enough", "metric": "event", "key": "fourfold_overwhelmed", "threshold": 1.0, "reveal_level": 33, "description": "Overload and strike out the Four-Armed Cleanup Hitter."},
 
-	# Eldritch baseball — 20 achievements.
+	# Eldritch baseball.
 	{"id": "eldritch_offer", "tier": "eldritch", "name": "The Rookie Explains Reality", "metric": "eldritch_offer", "threshold": 1.0, "description": "Hear N’Kthra’s complete explanation of reality."},
 	{"id": "eldritch_ascension_1", "tier": "eldritch", "name": "This Reality Had Bad Umpires", "metric": "eldritch_ascensions", "threshold": 1.0, "description": "Destroy your first reality."},
 	{"id": "eldritch_ascension_3", "tier": "eldritch", "name": "Multiverse Journeyman", "metric": "eldritch_ascensions", "threshold": 3.0, "description": "Destroy three realities."},
@@ -782,6 +813,11 @@ const ACHIEVEMENTS := [
 	{"id": "reach_octathulhu", "tier": "eldritch", "name": "Eight Bats Enter", "metric": "level", "threshold": 44.0, "reveal_level": 44, "description": "Reach Octathulhu."},
 	{"id": "speed_of_light", "tier": "eldritch", "name": "At the Speed of Plot", "metric": "speed", "threshold": 983571056.0, "reveal_level": 44, "description": "Throw a pitch at exactly light speed."},
 	{"id": "cosmos_conquered", "tier": "eldritch", "name": "The Oldest Rule of Baseball", "metric": "cosmos", "threshold": 1.0, "reveal_level": 44, "description": "Defeat Octathulhu and save the universe."},
+	{"id": "rainbow_volley", "tier": "eldritch", "name": "Chromatic Box Score", "metric": "event", "key": "rainbow_volley", "threshold": 1.0, "description": "Produce at least four different outcomes in one volley."},
+	{"id": "box_score_bingo", "tier": "eldritch", "name": "Box Score Bingo", "metric": "event", "key": "all_outcome_volley", "threshold": 1.0, "secret": true, "description": "Produce all eight possible pitch outcomes in one volley."},
+	{"id": "octathulhu_overwhelmed", "tier": "eldritch", "name": "Nine Is Greater Than Eight", "metric": "event", "key": "octathulhu_overwhelmed", "threshold": 1.0, "reveal_level": 44, "description": "Strike out Octathulhu with more than eight simultaneous balls."},
+	{"id": "thousand_strike_volley", "tier": "eldritch", "name": "The Umpire’s Hand Fell Off", "metric": "event", "key": "thousand_strike_volley", "threshold": 1.0, "description": "Record at least 1,000 called Strikes in one volley."},
+	{"id": "fielding_department_infinite", "tier": "eldritch", "name": "Department of Infinite Fielding", "metric": "event", "key": "eight_saved_hits_volley", "threshold": 1.0, "description": "Save at least eight fair hits from one simultaneous volley."},
 
 	# Divine extra innings — 7 achievements.
 	{"id": "divine_ascension_1", "tier": "divine", "name": "God Is a Baseball Fan", "metric": "divine_ascensions", "threshold": 1.0, "description": "Let God restore your first universe."},
@@ -818,7 +854,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 0,
 		"visual_size": 1.025,
 		"effects": {"speed": 1.03, "quality": 0.012, "recovery": 1.012},
-		"description": "Speed ×1.03; Quality +0.012; Recovery ×1.012.",
+		"description": "Speed ×1.03; Quality +12; Recovery ×1.012.",
 	},
 	{
 		"id": "grade_schooler",
@@ -829,7 +865,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 2,
 		"visual_size": 1.055,
 		"effects": {"speed": 1.035, "quality": 0.012, "recovery": 1.012},
-		"description": "Speed ×1.035; Quality +0.012; Recovery ×1.012.",
+		"description": "Speed ×1.035; Quality +12; Recovery ×1.012.",
 	},
 	{
 		"id": "preteen",
@@ -840,7 +876,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 5,
 		"visual_size": 1.085,
 		"effects": {"speed": 1.035, "quality": 0.012, "recovery": 1.012},
-		"description": "Speed ×1.035; Quality +0.012; Recovery ×1.012.",
+		"description": "Speed ×1.035; Quality +12; Recovery ×1.012.",
 	},
 	{
 		"id": "young_teen",
@@ -851,7 +887,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 8,
 		"visual_size": 1.12,
 		"effects": {"speed": 1.035, "quality": 0.015, "recovery": 1.015},
-		"description": "Speed ×1.035; Quality +0.015; Recovery ×1.015.",
+		"description": "Speed ×1.035; Quality +15; Recovery ×1.015.",
 	},
 	{
 		"id": "teenager",
@@ -862,7 +898,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 11,
 		"visual_size": 1.155,
 		"effects": {"speed": 1.04, "quality": 0.015, "recovery": 1.015},
-		"description": "Speed ×1.04; Quality +0.015; Recovery ×1.015.",
+		"description": "Speed ×1.04; Quality +15; Recovery ×1.015.",
 	},
 	{
 		"id": "older_teen",
@@ -873,7 +909,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 14,
 		"visual_size": 1.19,
 		"effects": {"speed": 1.04, "quality": 0.018, "recovery": 1.015},
-		"description": "Speed ×1.04; Quality +0.018; Recovery ×1.015.",
+		"description": "Speed ×1.04; Quality +18; Recovery ×1.015.",
 	},
 	{
 		"id": "young_adult",
@@ -884,7 +920,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 16,
 		"visual_size": 1.225,
 		"effects": {"speed": 1.04, "quality": 0.018, "recovery": 1.015},
-		"description": "Speed ×1.04; Quality +0.018; Recovery ×1.015.",
+		"description": "Speed ×1.04; Quality +18; Recovery ×1.015.",
 	},
 	{
 		"id": "adult",
@@ -895,7 +931,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 19,
 		"visual_size": 1.255,
 		"effects": {"speed": 1.035, "quality": 0.018, "recovery": 1.012},
-		"description": "Speed ×1.035; Quality +0.018; Recovery ×1.012.",
+		"description": "Speed ×1.035; Quality +18; Recovery ×1.012.",
 	},
 	{
 		"id": "prime_adult",
@@ -906,7 +942,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 22,
 		"visual_size": 1.28,
 		"effects": {"speed": 1.035, "quality": 0.015, "recovery": 1.010},
-		"description": "Speed ×1.035; Quality +0.015; Recovery ×1.010.",
+		"description": "Speed ×1.035; Quality +15; Recovery ×1.010.",
 	},
 	{
 		"id": "veteran_adult",
@@ -917,7 +953,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 26,
 		"visual_size": 1.30,
 		"effects": {"speed": 1.03, "quality": 0.015, "recovery": 1.008},
-		"description": "Speed ×1.03; Quality +0.015; Recovery ×1.008.",
+		"description": "Speed ×1.03; Quality +15; Recovery ×1.008.",
 	},
 	{
 		"id": "regular_guy",
@@ -928,7 +964,7 @@ const BODY_GROWTH_STAGES := [
 		"required_level": 29,
 		"visual_size": 1.32,
 		"effects": {"speed": 1.025, "quality": 0.012, "recovery": 1.006},
-		"description": "Speed ×1.025; Quality +0.012; Recovery ×1.006.",
+		"description": "Speed ×1.025; Quality +12; Recovery ×1.006.",
 	},
 ]
 
@@ -937,18 +973,18 @@ const BODY_GROWTH_STAGES := [
 # strength, conditioning, command, or dubious chemistry. These purchases reset
 # with time travel just like the body they modify.
 const BODY_MODIFIERS := [
-	{"id": "playground_conditioning", "name": "Playground Conditioning", "cost": 20.0, "required_level": 2, "adjective": "Sturdy", "effects": {"speed": 1.025, "quality_add": 0.008, "visual_size": 1.006}, "stats": ["speed", "quality"], "description": "Speed ×1.025; Quality +0.008."},
+	{"id": "playground_conditioning", "name": "Playground Conditioning", "cost": 20.0, "required_level": 2, "adjective": "Sturdy", "effects": {"speed": 1.025, "quality_add": 0.008, "visual_size": 1.006}, "stats": ["speed", "quality"], "description": "Speed ×1.025; Quality +8."},
 	{"id": "cardio_basics", "name": "Cardio Basics", "cost": 80.0, "required_level": 2, "adjective": "Spry", "effects": {"recovery": 1.018, "lineup": 0.985}, "stats": ["recovery", "lineup"], "description": "Recovery ×1.018; Lineup time ×0.985."},
 	{"id": "pushup_phase", "name": "The Push-Up Phase", "cost": 1800.0, "required_level": 7, "adjective": "Buff", "effects": {"speed": 1.045, "payload": 1.025, "visual_size": 1.012}, "stats": ["speed", "payload"], "description": "Speed ×1.045; Payload ×1.025."},
 	{"id": "running_laps", "name": "Actually Run the Laps", "cost": 1800.0, "required_level": 7, "adjective": "Toned", "effects": {"recovery": 1.025, "hit_delay": 0.975}, "stats": ["recovery", "hit_delay"], "description": "Recovery ×1.025; Hit delay ×0.975."},
 	{"id": "creatine", "name": "Creatine and an Alarmingly Large Water Bottle", "cost": 90000.0, "required_level": 12, "adjective": "Creatine-Fueled", "effects": {"speed": 1.045, "payload": 1.04, "visual_size": 1.012}, "stats": ["speed", "payload"], "description": "Speed ×1.045; Payload ×1.04."},
-	{"id": "mobility_program", "name": "Mobility Program", "cost": 90000.0, "required_level": 12, "adjective": "Limber", "effects": {"quality_add": 0.025, "calling": 1.06, "drag": 0.98}, "stats": ["quality", "calling", "drag"], "description": "Quality +0.025; Calling ×1.06; air drag ×0.98."},
+	{"id": "mobility_program", "name": "Mobility Program", "cost": 90000.0, "required_level": 12, "adjective": "Limber", "effects": {"quality_add": 0.025, "calling": 1.06, "drag": 0.98}, "stats": ["quality", "calling", "drag"], "description": "Quality +25; Calling ×1.06; air drag ×0.98."},
 	{"id": "suspicious_vitamins", "name": "Suspicious Vitamins", "cost": 9000000.0, "required_level": 18, "adjective": "Suspiciously Vital", "effects": {"speed": 1.07, "recovery": 1.025, "visual_size": 1.018}, "stats": ["speed", "recovery"], "description": "Speed ×1.07; Recovery ×1.025."},
 	{"id": "sports_nutrition", "name": "Professional Sports Nutrition", "cost": 9000000.0, "required_level": 18, "adjective": "Well-Fed", "effects": {"payload": 1.06, "xp": 1.025, "mastery": 1.025}, "stats": ["payload", "xp", "mastery"], "description": "Payload ×1.06; strikeout XP ×1.025; mastery ×1.025."},
 	{"id": "advanced_strength", "name": "Advanced Strength Program", "cost": 900000000.0, "required_level": 23, "adjective": "Very Buff", "effects": {"speed": 1.065, "payload": 1.045, "visual_size": 1.018}, "stats": ["speed", "payload"], "description": "Speed ×1.065; Payload ×1.045."},
 	{"id": "altitude_cardio", "name": "Altitude Cardio Camp", "cost": 900000000.0, "required_level": 23, "adjective": "Very Toned", "effects": {"recovery": 1.035, "hit_delay": 0.95, "lineup": 0.97}, "stats": ["recovery", "hit_delay", "lineup"], "description": "Recovery ×1.035; hit delay ×0.95; lineup time ×0.97."},
 	{"id": "steroids", "name": "Extremely Obvious Steroids", "cost": 90000000000.0, "required_level": 27, "required_speed_fps": 132.0, "adjective": "Roided-Out", "effects": {"speed": 1.10, "recovery": 1.025, "visual_size": 1.028}, "stats": ["speed", "recovery"], "description": "Speed ×1.10; Recovery ×1.025."},
-	{"id": "professional_rehab", "name": "Professional Rehab Staff", "cost": 90000000000.0, "required_level": 27, "adjective": "Rebuilt", "effects": {"quality_add": 0.04, "drag": 0.94, "mastery": 1.04}, "stats": ["quality", "drag", "mastery"], "description": "Quality +0.04; air drag ×0.94; mastery ×1.04."},
+	{"id": "professional_rehab", "name": "Professional Rehab Staff", "cost": 90000000000.0, "required_level": 27, "adjective": "Rebuilt", "effects": {"quality_add": 0.04, "drag": 0.94, "mastery": 1.04}, "stats": ["quality", "drag", "mastery"], "description": "Quality +40; air drag ×0.94; mastery ×1.04."},
 ]
 
 const TRAINING := [
@@ -969,8 +1005,8 @@ const TRAINING := [
 		"growth": 1.18,
 		"required_level": 1,
 		"stats": ["quality"],
-		"description": "Base quality +0.018.",
-		"details": "Each rank adds 0.018 base Quality. Quality shifts results away from dangerous contact and toward Strikes.",
+		"description": "Base Quality +18.",
+		"details": "Each rank adds 18 displayed base Quality. Quality shifts results away from dangerous contact and toward Strikes.",
 	},
 	{
 		"id": "field_hustle",
@@ -1010,7 +1046,7 @@ const TRAINING := [
 		"required_level": 5,
 		"stats": ["distance"],
 		"description": "Distance threat ×0.94.",
-		"details": "Each rank removes 6% of the remaining level-range threat above its 40% floor. It does not change the opponent's assigned distance or its XP multiplier.",
+		"details": "Each rank removes 6% of the remaining level-range threat above its 40% floor. It does not change the opponent's assigned distance or strikeout bounty.",
 	},
 	{
 		"id": "turnover",
@@ -1114,7 +1150,7 @@ const PITCHES := [
 		"speed_min": 1.00,
 		"speed_max": 1.00,
 		"color": Color("f4f7ff"),
-		"description": "Quality −0.25 • Speed ×1.00.",
+		"description": "Quality −250 • Speed ×1.00.",
 	},
 	{
 		"id": "four_seam",
@@ -1125,7 +1161,7 @@ const PITCHES := [
 		"speed_min": 0.97,
 		"speed_max": 1.03,
 		"color": Color("d8f3ff"),
-		"description": "Quality +0.15 • Speed ×0.97–1.03.",
+		"description": "Quality +150 • Speed ×0.97–1.03.",
 	},
 	{
 		"id": "changeup",
@@ -1136,7 +1172,7 @@ const PITCHES := [
 		"speed_min": 0.78,
 		"speed_max": 0.90,
 		"color": Color("83e6c2"),
-		"description": "Quality +0.30 • Speed ×0.78–0.90.",
+		"description": "Quality +300 • Speed ×0.78–0.90.",
 	},
 	{
 		"id": "two_seam",
@@ -1147,7 +1183,7 @@ const PITCHES := [
 		"speed_min": 0.94,
 		"speed_max": 1.04,
 		"color": Color("b7e5ff"),
-		"description": "Quality +0.24 • Speed ×0.94–1.04.",
+		"description": "Quality +240 • Speed ×0.94–1.04.",
 	},
 	{
 		"id": "curveball",
@@ -1158,7 +1194,7 @@ const PITCHES := [
 		"speed_min": 0.76,
 		"speed_max": 0.91,
 		"color": Color("8ca7ff"),
-		"description": "Quality +0.48 • Speed ×0.76–0.91.",
+		"description": "Quality +480 • Speed ×0.76–0.91.",
 	},
 	{
 		"id": "slider",
@@ -1169,7 +1205,7 @@ const PITCHES := [
 		"speed_min": 0.84,
 		"speed_max": 0.98,
 		"color": Color("bc91ff"),
-		"description": "Quality +0.68 • Speed ×0.84–0.98.",
+		"description": "Quality +680 • Speed ×0.84–0.98.",
 	},
 	{
 		"id": "sweeper",
@@ -1180,7 +1216,7 @@ const PITCHES := [
 		"speed_min": 0.80,
 		"speed_max": 0.95,
 		"color": Color("a68cff"),
-		"description": "Quality +0.58 • Speed ×0.80–0.95.",
+		"description": "Quality +580 • Speed ×0.80–0.95.",
 	},
 	{
 		"id": "circle_change",
@@ -1191,7 +1227,7 @@ const PITCHES := [
 		"speed_min": 0.74,
 		"speed_max": 0.89,
 		"color": Color("65d9b5"),
-		"description": "Quality +0.82 • Speed ×0.74–0.89.",
+		"description": "Quality +820 • Speed ×0.74–0.89.",
 	},
 	{
 		"id": "splitter",
@@ -1202,7 +1238,7 @@ const PITCHES := [
 		"speed_min": 0.80,
 		"speed_max": 0.96,
 		"color": Color("f49dff"),
-		"description": "Quality +0.92 • Speed ×0.80–0.96.",
+		"description": "Quality +920 • Speed ×0.80–0.96.",
 	},
 	{
 		"id": "knuckleball",
@@ -1213,7 +1249,7 @@ const PITCHES := [
 		"speed_min": 0.58,
 		"speed_max": 0.82,
 		"color": Color("ffd07d"),
-		"description": "Quality +1.20 • Speed ×0.58–0.82.",
+		"description": "Quality +1,200 • Speed ×0.58–0.82.",
 	},
 	{
 		"id": "forkball",
@@ -1224,7 +1260,7 @@ const PITCHES := [
 		"speed_min": 0.76,
 		"speed_max": 0.92,
 		"color": Color("e89bff"),
-		"description": "Quality +1.05 • Speed ×0.76–0.92.",
+		"description": "Quality +1,050 • Speed ×0.76–0.92.",
 	},
 	{
 		"id": "screwball",
@@ -1235,7 +1271,7 @@ const PITCHES := [
 		"speed_min": 0.78,
 		"speed_max": 0.95,
 		"color": Color("ff9cc9"),
-		"description": "Quality +1.30 • Speed ×0.78–0.95.",
+		"description": "Quality +1,300 • Speed ×0.78–0.95.",
 	},
 	{
 		"id": "buzzsaw_cutter",
@@ -1246,7 +1282,7 @@ const PITCHES := [
 		"speed_min": 0.90,
 		"speed_max": 1.00,
 		"color": Color("d6ff7f"),
-		"description": "Quality +1.45 • Speed ×0.90–1.00.",
+		"description": "Quality +1,450 • Speed ×0.90–1.00.",
 	},
 	{
 		"id": "fireball",
@@ -1257,7 +1293,7 @@ const PITCHES := [
 		"speed_min": 0.98,
 		"speed_max": 1.04,
 		"color": Color("ff6a4f"),
-		"description": "Quality +1.75 • Speed ×0.98–1.04.",
+		"description": "Quality +1,750 • Speed ×0.98–1.04.",
 	},
 	{
 		"id": "gyroball",
@@ -1268,7 +1304,7 @@ const PITCHES := [
 		"speed_min": 0.91,
 		"speed_max": 1.05,
 		"color": Color("c8ff77"),
-		"description": "Quality +1.58 • Speed ×0.91–1.05.",
+		"description": "Quality +1,580 • Speed ×0.91–1.05.",
 	},
 	{
 		"id": "eephus",
@@ -1279,7 +1315,7 @@ const PITCHES := [
 		"speed_min": 0.40,
 		"speed_max": 0.68,
 		"color": Color("ffd77a"),
-		"description": "Quality +2.05 • Speed ×0.40–0.68.",
+		"description": "Quality +2,050 • Speed ×0.40–0.68.",
 	},
 	{
 		"id": "max_effort_four_seam",
@@ -1290,7 +1326,7 @@ const PITCHES := [
 		"speed_min": 1.04,
 		"speed_max": 1.12,
 		"color": Color("fff2d8"),
-		"description": "Quality +1.95 • Speed ×1.04–1.12.",
+		"description": "Quality +1,950 • Speed ×1.04–1.12.",
 	},
 	{
 		"id": "gazorpian_strudelball",
@@ -1302,7 +1338,7 @@ const PITCHES := [
 		"speed_max": 0.32,
 		"illegal": true,
 		"color": Color("f7c6ff"),
-		"description": "Quality +5.80 • Speed ×0.18–0.32. Devastating break; breakfast-paced arrival.",
+		"description": "Quality +5,800 • Speed ×0.18–0.32. Devastating break; breakfast-paced arrival.",
 	},
 	{
 		"id": "gravity_ball",
@@ -1314,7 +1350,7 @@ const PITCHES := [
 		"speed_max": 1.06,
 		"illegal": true,
 		"color": Color("65f0ff"),
-		"description": "Quality +2.50 • Speed ×0.82–1.06.",
+		"description": "Quality +2,500 • Speed ×0.82–1.06.",
 	},
 	{
 		"id": "andromedan_knucklebomb",
@@ -1326,7 +1362,7 @@ const PITCHES := [
 		"speed_max": 3.80,
 		"illegal": true,
 		"color": Color("8ff7bd"),
-		"description": "Quality −1.50 • Speed ×2.50–3.80. It goes fast; nobody knows where.",
+		"description": "Quality −1,500 • Speed ×2.50–3.80. It goes fast; nobody knows where.",
 	},
 	{
 		"id": "nebular_spitball",
@@ -1338,7 +1374,7 @@ const PITCHES := [
 		"speed_max": 0.80,
 		"illegal": true,
 		"color": Color("82d9b4"),
-		"description": "Quality +4.40 • Speed ×0.55–0.80. The nebula refuses to identify the substance.",
+		"description": "Quality +4,400 • Speed ×0.55–0.80. The nebula refuses to identify the substance.",
 	},
 	{
 		"id": "plasma_sinker",
@@ -1350,7 +1386,7 @@ const PITCHES := [
 		"speed_max": 1.08,
 		"illegal": true,
 		"color": Color("ff8b55"),
-		"description": "Quality +3.05 • Speed ×0.94–1.08.",
+		"description": "Quality +3,050 • Speed ×0.94–1.08.",
 	},
 	{
 		"id": "bubonic_swerve",
@@ -1362,7 +1398,7 @@ const PITCHES := [
 		"speed_max": 0.25,
 		"illegal": true,
 		"color": Color("b8db57"),
-		"description": "Quality +8.50 • Speed ×0.12–0.25. Historically unhittable; medically inadvisable.",
+		"description": "Quality +8,500 • Speed ×0.12–0.25. Historically unhittable; medically inadvisable.",
 	},
 	{
 		"id": "quasar_riser",
@@ -1374,7 +1410,7 @@ const PITCHES := [
 		"speed_max": 8.00,
 		"illegal": true,
 		"color": Color("fff383"),
-		"description": "Quality +1.00 • Speed ×4.00–8.00. Accuracy was traded for a localized sunrise.",
+		"description": "Quality +1,000 • Speed ×4.00–8.00. Accuracy was traded for a localized sunrise.",
 	},
 	{
 		"id": "quantum_fork",
@@ -1386,7 +1422,7 @@ const PITCHES := [
 		"speed_max": 1.10,
 		"illegal": true,
 		"color": Color("ff6fca"),
-		"description": "Quality +3.60 • Speed ×0.88–1.10.",
+		"description": "Quality +3,600 • Speed ×0.88–1.10.",
 	},
 	{
 		"id": "false_vacuum_change",
@@ -1398,7 +1434,7 @@ const PITCHES := [
 		"speed_max": 0.12,
 		"illegal": true,
 		"color": Color("6e79ff"),
-		"description": "Quality +12.00 • Speed ×0.05–0.12. Perfect deception; unacceptable cosmological downside.",
+		"description": "Quality +12,000 • Speed ×0.05–0.12. Perfect deception; unacceptable cosmological downside.",
 	},
 	{
 		"id": "wormhole_changeup",
@@ -1410,7 +1446,7 @@ const PITCHES := [
 		"speed_max": 1.18,
 		"illegal": true,
 		"color": Color("9d7bff"),
-		"description": "Quality +4.35 • Speed ×0.72–1.18.",
+		"description": "Quality +4,350 • Speed ×0.72–1.18.",
 	},
 	{
 		"id": "pitch_first_death",
@@ -1422,7 +1458,7 @@ const PITCHES := [
 		"speed_max": 0.025,
 		"illegal": true,
 		"color": Color("d6c8ff"),
-		"description": "Quality +22.00 • Speed ×0.008–0.025. It has been arriving since before life began.",
+		"description": "Quality +22,000 • Speed ×0.008–0.025. It has been arriving since before life began.",
 	},
 	{
 		"id": "eschaton_screwball",
@@ -1434,7 +1470,7 @@ const PITCHES := [
 		"speed_max": 40.00,
 		"illegal": true,
 		"color": Color("ff725e"),
-		"description": "Quality −6.00 • Speed ×20.00–40.00. The pitch ends before the windup agrees it began.",
+		"description": "Quality −6,000 • Speed ×20.00–40.00. The pitch ends before the windup agrees it began.",
 	},
 	{
 		"id": "event_horizon",
@@ -1446,7 +1482,7 @@ const PITCHES := [
 		"speed_max": 0.16,
 		"illegal": true,
 		"color": Color("fff6a6"),
-		"description": "Quality +15.00 • Speed ×0.03–0.16. Nothing escapes, including the inning schedule.",
+		"description": "Quality +15,000 • Speed ×0.03–0.16. Nothing escapes, including the inning schedule.",
 	},
 	{
 		"id": "causal_paradox_eephus",
@@ -1458,7 +1494,7 @@ const PITCHES := [
 		"speed_max": 0.006,
 		"illegal": true,
 		"color": Color("ffffff"),
-		"description": "Quality +40.00 • Speed ×0.001–0.006. The strike is called several eternities before release.",
+		"description": "Quality +40,000 • Speed ×0.001–0.006. The strike is called several eternities before release.",
 	},
 ]
 
@@ -2476,7 +2512,7 @@ const GENETIC_UPGRADES := [
 		"base_cost": 2.0,
 		"growth": 3.0,
 		"max_level": 6,
-		"description": "Quality +1.25.",
+		"description": "Quality +1,250.",
 	},
 	{
 		"id": "extra_arms",
@@ -2629,7 +2665,7 @@ const ELDRITCH_UPGRADES := [
 		"base_cost": 2.0,
 		"growth": 3.0,
 		"max_level": 5,
-		"description": "Quality +2.",
+		"description": "Quality +2,000.",
 	},
 	{
 		"id": "causal_seams",
@@ -2771,6 +2807,15 @@ static func opponents() -> Array[Dictionary]:
 		elif index > ALIEN_FINAL_INDEX:
 			completed_count_equivalents = 160.0 * pow(1.30, index - ELDRITCH_EXHIBITION_INDEX)
 		var mastery_required := strikeout_bounty * completed_count_equivalents
+		var reward := pow(2.015, mini(index, HUMAN_FINAL_INDEX))
+		if index > HUMAN_FINAL_INDEX:
+			# Level-assigned distance is a physical challenge, not a second payout
+			# axis. Post-human bounties therefore grow directly with the opponent:
+			# smoothly through alien baseball, then much faster once eldritch counts
+			# and facilities enter cosmic notation.
+			reward *= pow(3.50, mini(index, ALIEN_FINAL_INDEX) - HUMAN_FINAL_INDEX)
+		if index > ALIEN_FINAL_INDEX:
+			reward *= pow(14.0, index - ALIEN_FINAL_INDEX)
 		result.append({
 			"id": "opponent_%02d" % (index + 1),
 			"name": OPPONENT_NAMES[index],
@@ -2778,10 +2823,9 @@ static func opponents() -> Array[Dictionary]:
 			"era_index": era_index,
 			"difficulty": _opponent_difficulty_for_index(index),
 			# Fewer repeated strikeouts now gate each level, so each successful
-			# frontier count carries more of that level's former total income.
-			# This preserves the savings/build cadence while making a difficult
-			# strikeout feel materially valuable instead of merely one of thousands.
-			"reward": pow(1.80, index),
+			# frontier count carries more of that level's former total income. Range
+			# never multiplies this value; all income belongs to the batter bounty.
+			"reward": reward,
 			"mastery_required": mastery_required,
 			"distance": distance,
 			"quirk": OPPONENT_QUIRKS[index],
@@ -2793,6 +2837,15 @@ static func _opponent_difficulty_for_index(index: int) -> float:
 	var bounded_index := clampi(index, 0, OPPONENT_NAMES.size() - 1)
 	var era_index := int(bounded_index / 5)
 	var within_era := bounded_index % 5
+	if era_index == 5:
+		# Keep the best humans formidable without pinning a normal first lifetime
+		# to the emergency 1% Strike floor. The alien exhibition then makes a clear
+		# upward jump to its own authored anchor instead of inheriting a soft MLB.
+		return lerpf(
+			float(OPPONENT_DIFFICULTY_ANCHORS[era_index]),
+			HUMAN_FINAL_DIFFICULTY_TARGET,
+			float(within_era) / 5.0
+		)
 	if era_index >= ERA_NAMES.size() - 1:
 		return lerpf(
 			float(OPPONENT_DIFFICULTY_ANCHORS[era_index]),
@@ -2924,31 +2977,31 @@ static func _trait_for_index(index: int) -> String:
 static func trait_description(trait_id: String) -> String:
 	match trait_id:
 		"sequence_reader":
-			return "COUNTER • +0.70 threat per missing pitch below 2."
+			return "COUNTER • +700 threat per missing pitch below 2."
 		"scouted", "college_champion", "adaptive_legend":
-			return "COUNTER • +0.48 threat per missing pitch below 4."
+			return "COUNTER • +480 threat per missing pitch below 4."
 		"major_distance":
-			return "COUNTER • Below 60 ft 6 in: +0.40 threat per 10× closer."
+			return "COUNTER • Below 60 ft 6 in: +400 threat per 10× closer."
 		"switch_experiment":
-			return "COUNTER • One throwing arm adds +0.75 threat; 2+ removes it."
+			return "COUNTER • One throwing arm adds +750 threat; 2+ removes it."
 		"cybernetic_learning":
-			return "COUNTER • +0.55 threat per missing pitch below 6."
+			return "COUNTER • +550 threat per missing pitch below 6."
 		"four_bats":
-			return "COUNTER • +0.75 threat per 10× below 100 pitches/sec."
+			return "COUNTER • +750 threat per 10× below 100 pitches/sec."
 		"chrono":
-			return "COUNTER • +0.80 threat per 10× below 500 pitches/sec."
+			return "COUNTER • +800 threat per 10× below 500 pitches/sec."
 		"low_gravity", "plasma_bat", "giant_zone", "solar_champion":
-			return "FIELD EFFECT • +0.65 threat."
+			return "FIELD EFFECT • +650 threat."
 		"aeon_rookie":
-			return "COUNTER • One time layer adds +0.80 threat; 2+ removes it."
+			return "COUNTER • One time layer adds +800 threat; 2+ removes it."
 		"phase_hitter":
-			return "COUNTER • +0.50 threat per missing pitch below 8."
+			return "COUNTER • +500 threat per missing pitch below 8."
 		"hive_mind":
-			return "COUNTER • +0.60 threat per 3× short of 9 pitcher bodies."
+			return "COUNTER • +600 threat per 3× short of 9 pitcher bodies."
 		"black_hole":
-			return "COUNTER • +0.42 threat per 10× below 1M ft/s."
+			return "COUNTER • +420 threat per 10× below 1M ft/s."
 		"octopus_god":
-			return "COUNTER • +0.90 threat per 10× below 1,000/s; +0.50 per arm-doubling below 8."
+			return "COUNTER • +900 threat per 10× below 1,000/s; +500 per arm-doubling below 8."
 		_:
 			return ""
 

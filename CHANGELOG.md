@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.16.5 — Power stopped reading out the scouting report
+
+- Removed percentages from the on-field Power markers so the compact vertical gauge now shows only **YOU** and **THEM**. Marker height and matchup color still communicate the live called-Strike balance, while hover or phone tap retains the exact percentages and completed-strikeout odds.
+- Narrowed the gauge beside enemy equipment on both desktop and phone without changing its probability calibration or touch inspection target.
+- Made every post-human ball authoritative and independent. One volley still shares a named pitch, speed family, and color, but every ball rolls its own outcome and save defense; matching calls become **Double Strike** or **Triple Single**, mixed results display together, fair-hit bases and lineup delays stack, and Strike/Ball completion is resolved from the combined count.
+- Made anatomical overload matter. The first ball beyond the batter's simultaneous bat count keeps only 18% of its normal contact chance, and every additional uncovered ball compounds that penalty again.
+- Expanded the achievement catalog from 109 to 130 without removing distinct goals. Twenty-one event-driven achievements recognize reborn toddler bullying, multiple arms, bat overload, simultaneous Strikes, mixed hits and Strikes, impossible base arithmetic, saved multi-hit volleys, and eight-outcome chaos. Each achievement now adds **+0.5% XP**, for a complete-catalog multiplier of `×1.65`.
+- Removed distance as an XP multiplier. Level-assigned range remains physical distance, travel time, drag, camera scale, and batter threat; strikeout income now comes from directly calibrated opponent bounties. Distance gear was repurposed into range-threat reduction.
+- Raised effective one-time Facility pricing to `×4` baseline and premium human projects to `×8` baseline while preserving their strong effects. The optimal no-loot first lifetime now clears human baseball in **12 h 05 m** at **115 mph** and **0.72 recoveries/s**; the complete audit reaches cosmic victory in **12 d 06 h**.
+- Displayed Quality, Threat, Frustration, and related matchup ratings as whole-number game values at `×1000` presentation scale. Internal `0.039` now reads `39`, internal `6` reads `6000`, and unwieldy values switch to `1eN`; simulation balance and old saves remain unchanged.
+- Simplified the Live Throw Profile's first row to the pitch name itself—**Curveball**, not **Pitch Curveball**—and kept the last sampled name visible after impact.
+- Hardened browser updates with a separately verified localStorage checkpoint, persistent-storage request, startup comparison across checkpoint/mirror/rollback/filesystem generations, and delayed checkpoint retirement after a successful post-load save. Autosaves are expected to carry through updates; Export remains an optional fallback rather than a required ritual.
+- Advanced saves to schema 25 for per-ball pending outcomes, save flags, and durable simultaneous-volley achievement history. Older shared-volley saves expand compatibly and all earlier migrations remain supported.
+- Published the complete native package set that the installed-app update checker expects. Installed browser apps continue to activate Web updates in place; downloaded macOS, Windows, and Linux builds preserve saves and offer the matching replacement package when a newer release is available.
+
 ## 0.16.4 — The arms have reached a collective-bargaining agreement
 
 - Replaced the synthetic horizontal Power ratio with a compact vertical gauge beside enemy equipment. **YOU** is now the current called-Strike chance and **THEM** its complementary resistance, so a 4% matchup appears near the red floor instead of false parity; orange/yellow marks an even fight and green marks control. Hover or phone tap adds completed-strikeout odds and the underlying build ratings.

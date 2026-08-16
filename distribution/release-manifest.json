@@ -1,8 +1,8 @@
 {
   "game": "No Hitter",
-  "version": "0.16.4",
+  "version": "0.16.5",
   "engine": "Godot 4.7.1",
-  "save_version": 24,
+  "save_version": 25,
   "updates": {
     "browser": "service-worker",
     "native_check_minutes": 5,

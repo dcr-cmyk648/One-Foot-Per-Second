@@ -84,6 +84,7 @@ var snapshot := {
 		"pitcher_size_multiplier": 1.0,
 		"strike_limit": 3,
 		"ball_limit": 4,
+		"opponent_bat_count": 1,
 		"authoritative_strikes": 0,
 		"authoritative_balls": 0,
 		"batter_cooldown": 0.0,
@@ -125,6 +126,7 @@ var batter_phase_duration := 0.0
 var batter_end_pending := false
 var batter_end_delay := 0.0
 var batter_exit_outcome := Content.STRIKE_INDEX
+var batter_lifecycle_total_override := -1.0
 var batter_terminal_in_flight := false
 var volley_in_flight := false
 var volley_release_time := 0.0
@@ -202,6 +204,7 @@ func reset_visual_state() -> void:
 	batter_end_pending = false
 	batter_end_delay = 0.0
 	batter_exit_outcome = Content.STRIKE_INDEX
+	batter_lifecycle_total_override = -1.0
 	batter_terminal_in_flight = false
 	volley_in_flight = false
 	volley_release_time = 0.0
@@ -491,9 +494,9 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 		"max_distance_index": game.get_max_distance_index(),
 		"distance_feet": game.get_pitch_distance_feet(),
 		"distance_label": str(distance.label),
-		"distance_gear_multiplier": (
-			game.get_distance_xp_multiplier() / maxf(float(distance.xp_multiplier), 0.000001)
-		),
+		# Legacy snapshot field retained for older rendering/debug consumers. Range
+		# no longer pays XP; equipment now helps the range's threat instead.
+		"distance_gear_multiplier": 1.0,
 		"arms": game.get_arm_count(),
 		"clones": game.get_clone_count(),
 		"time_layers": game.get_time_multiplier(),
@@ -507,6 +510,7 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 		"pitcher_size_multiplier": game.get_pitcher_size_multiplier(),
 		"strike_limit": game.get_strikes_required(),
 		"ball_limit": game.get_balls_required(),
+		"opponent_bat_count": game.get_opponent_bat_count(),
 		"authoritative_strikes": game.plate_strikes,
 		"authoritative_balls": game.plate_balls,
 		"batter_cooldown": game.batter_cooldown_remaining,
@@ -1037,15 +1041,36 @@ func _notify_exact_pitch_events(pitch_events: Array, elapsed_seconds: float) -> 
 func _pitch_event_is_terminal(event: Dictionary) -> bool:
 	if bool(event.get("holds_batter", false)):
 		return false
-	var outcome := clampi(
-		int(event.get("outcome", Content.STRIKE_INDEX)),
-		0,
-		Content.OUTCOME_NAMES.size() - 1
-	)
-	var saved := bool(event.get("saved", false)) and outcome < Content.HIT_OUTCOME_COUNT and outcome != Content.GRAND_SLAM_INDEX
 	return bool(event.get("strikeout", false)) or (
-		outcome < Content.HIT_OUTCOME_COUNT and not saved
+		_result_has_unsaved_fair_hit(event)
 	) or bool(event.get("walk", false))
+
+func _result_has_unsaved_fair_hit(event: Dictionary) -> bool:
+	var outcomes: Array = event.get("outcomes", [])
+	var saved_flags: Array = event.get("saved_flags", [])
+	if outcomes.is_empty():
+		var outcome := clampi(
+			int(event.get("outcome", Content.STRIKE_INDEX)),
+			0,
+			Content.OUTCOME_NAMES.size() - 1
+		)
+		var saved := (
+			bool(event.get("saved", false))
+			and outcome < Content.HIT_OUTCOME_COUNT
+			and outcome != Content.GRAND_SLAM_INDEX
+		)
+		return outcome < Content.HIT_OUTCOME_COUNT and not saved
+	for ball_index in outcomes.size():
+		var outcome := clampi(int(outcomes[ball_index]), 0, Content.OUTCOME_NAMES.size() - 1)
+		var saved := (
+			ball_index < saved_flags.size()
+			and bool(saved_flags[ball_index])
+			and outcome < Content.HIT_OUTCOME_COUNT
+			and outcome != Content.GRAND_SLAM_INDEX
+		)
+		if outcome < Content.HIT_OUTCOME_COUNT and not saved:
+			return true
+	return false
 
 func _notify_aggregate_pitch_batch(
 	summary: Dictionary,
@@ -1091,11 +1116,18 @@ func _schedule_pitch_result(event: Dictionary, delay: float) -> void:
 		"strikeout": bool(event.get("strikeout", false)),
 		"walk": bool(event.get("walk", false)),
 		"saved": saved,
+		"outcomes": (event.get("outcomes", []) as Array).duplicate(),
+		"saved_flags": (event.get("saved_flags", []) as Array).duplicate(),
+		"outcome_counts": (event.get("outcome_counts", []) as Array).duplicate(),
+		"call_lines": (event.get("call_lines", []) as Array).duplicate(true),
+		"call_text": str(event.get("call_text", "")),
 		"strike_count": int(event.get("strike_count", visual_strike_count)),
 		"plate_ball_count": int(event.get("plate_ball_count", visual_ball_count)),
 		"strike_requirement": int(event.get("strike_requirement", get_strike_limit())),
 		"ball_requirement": int(event.get("ball_requirement", get_ball_limit())),
 		"ball_count": maxi(int(event.get("ball_count", 1)), 1),
+		"opponent_bat_count": maxi(int(event.get("opponent_bat_count", 1)), 1),
+		"batter_downtime": float(event.get("batter_downtime", -1.0)),
 		"holds_batter": bool(event.get("holds_batter", false)),
 		"story_taunt": str(event.get("story_taunt", "")),
 	})
@@ -1168,57 +1200,109 @@ func _trigger_result_visual(result: Dictionary) -> void:
 	var outcome := int(result.outcome)
 	var salvo := float(result.get("salvo", _get_salvo_strength()))
 	var ball_count := maxi(int(result.get("ball_count", 1)), 1)
-	var saved := bool(result.get("saved", false)) and outcome < Content.HIT_OUTCOME_COUNT and outcome != Content.GRAND_SLAM_INDEX
+	var outcomes: Array = (result.get("outcomes", []) as Array).duplicate()
+	var saved_flags: Array = (result.get("saved_flags", []) as Array).duplicate()
+	if outcomes.is_empty():
+		for _ball_index in ball_count:
+			outcomes.append(outcome)
+			saved_flags.append(bool(result.get("saved", false)))
+	while saved_flags.size() < outcomes.size():
+		saved_flags.append(false)
+	var any_unsaved_hit := _result_has_unsaved_fair_hit({
+		"outcomes": outcomes,
+		"saved_flags": saved_flags,
+	})
 	var holds_batter := bool(result.get("holds_batter", false))
-	var authoritative_result := result.has("strikeout")
 	impact_color = Content.OUTCOME_COLORS[outcome]
 	impact_strength = 1.0
 	last_contact_outcome = outcome
-	bat_swing_animation = 1.0 if outcome < Content.HIT_OUTCOME_COUNT or outcome == Content.FOUL_INDEX else 0.22
+	var any_contact := false
+	for ball_outcome_value in outcomes:
+		var ball_outcome := int(ball_outcome_value)
+		if ball_outcome < Content.HIT_OUTCOME_COUNT or ball_outcome == Content.FOUL_INDEX:
+			any_contact = true
+			break
+	bat_swing_animation = 1.0 if any_contact else 0.22
 	result_sequence += 1
-	var call_name: String = str(Content.OUTCOME_NAMES[outcome])
 	var ends_batter := false
 	if batter_phase == "active" and not batter_end_pending:
-		if outcome == Content.STRIKE_INDEX:
-			visual_strike_count = int(result.get("strike_count", visual_strike_count + 1))
-			visual_ball_count = int(result.get("plate_ball_count", visual_ball_count))
-			removed_strike_icon = maxi(get_strike_limit() - visual_strike_count, 0)
-			strike_icon_flash = 1.0
-			if bool(result.get("strikeout", visual_strike_count >= get_strike_limit())):
-				visual_strike_count = get_strike_limit()
-				call_name = "STRIKEOUT"
-				ends_batter = true
-		elif outcome == Content.FOUL_INDEX:
-			visual_strike_count = int(result.get("strike_count", mini(visual_strike_count + 1, get_strike_limit() - 1)))
-			visual_ball_count = int(result.get("plate_ball_count", visual_ball_count))
-			removed_strike_icon = maxi(get_strike_limit() - visual_strike_count, 0)
-			strike_icon_flash = 1.0
-		elif outcome == Content.BALL_INDEX:
-			visual_ball_count = int(result.get("plate_ball_count", visual_ball_count + 1))
+		var outcome_counts: Array = result.get("outcome_counts", [])
+		var strike_events := 0
+		var foul_events := 0
+		var ball_events := 0
+		if outcome_counts.size() == Content.OUTCOME_NAMES.size():
+			foul_events = int(outcome_counts[Content.FOUL_INDEX])
+			strike_events = int(outcome_counts[Content.STRIKE_INDEX]) + foul_events
+			ball_events = int(outcome_counts[Content.BALL_INDEX])
+		else:
+			for ball_outcome_value in outcomes:
+				var ball_outcome := int(ball_outcome_value)
+				if ball_outcome == Content.STRIKE_INDEX or ball_outcome == Content.FOUL_INDEX:
+					strike_events += 1
+				if ball_outcome == Content.FOUL_INDEX:
+					foul_events += 1
+				elif ball_outcome == Content.BALL_INDEX:
+					ball_events += 1
+		if result.has("strike_count"):
 			visual_strike_count = int(result.get("strike_count", visual_strike_count))
-			if bool(result.get("walk", visual_ball_count >= get_ball_limit())):
-				visual_ball_count = get_ball_limit()
-				call_name = "WALK"
-				ends_batter = true
-		elif saved:
-			if authoritative_result:
-				visual_strike_count = int(result.get("strike_count", visual_strike_count))
-		elif not holds_batter:
+		else:
+			visual_strike_count = mini(
+				visual_strike_count + foul_events,
+				maxi(get_strike_limit() - 1, 0)
+			)
+			visual_strike_count += strike_events - foul_events
+		if result.has("plate_ball_count"):
+			visual_ball_count = int(result.get("plate_ball_count", visual_ball_count))
+		else:
+			visual_ball_count += ball_events
+		if strike_events > 0:
+			removed_strike_icon = maxi(get_strike_limit() - visual_strike_count, 0)
+			strike_icon_flash = 1.0
+		if bool(result.get("strikeout", false)):
+			visual_strike_count = get_strike_limit()
+			ends_batter = true
+		elif bool(result.get("walk", false)):
+			visual_ball_count = get_ball_limit()
+			ends_batter = true
+		elif any_unsaved_hit and not holds_batter:
 			ends_batter = true
 		if ends_batter:
 			batter_end_pending = true
+			batter_lifecycle_total_override = float(result.get("batter_downtime", -1.0))
 			batter_end_delay = BATTER_CONTACT_HOLD * _get_lifecycle_time_scale(outcome)
 			batter_exit_outcome = outcome
-	# Keep the field call readable at a glance. Count, XP, and save mechanics are
-	# represented elsewhere; the popup over the batter names only the outcome.
-	var result_text := call_name
+	var call_lines: Array = result.get("call_lines", [])
+	if call_lines.is_empty():
+		var fallback_text := str(Content.OUTCOME_NAMES[outcome])
+		if bool(result.get("strikeout", false)):
+			fallback_text = "STRIKEOUT"
+		elif bool(result.get("walk", false)):
+			fallback_text = "WALK"
+		call_lines = [{"outcome": outcome, "text": fallback_text}]
+	var result_text := str(result.get("call_text", "")).strip_edges()
+	if result_text.is_empty():
+		var result_parts: Array[String] = []
+		for line_value in call_lines:
+			result_parts.append(str((line_value as Dictionary).get("text", "")))
+		result_text = " • ".join(result_parts)
 	result_popups.clear()
-	result_popups.append({
-		"outcome": outcome,
-		"text": result_text,
-		"age": 0.0,
-		"duration": 1.35,
-	})
+	var popup_font_size := 20 if call_lines.size() <= 2 else maxi(13, 19 - call_lines.size())
+	var popup_spacing := float(popup_font_size + 4)
+	for line_index in call_lines.size():
+		var line: Dictionary = call_lines[line_index]
+		var line_outcome := clampi(
+			int(line.get("outcome", outcome)),
+			0,
+			Content.OUTCOME_NAMES.size() - 1
+		)
+		result_popups.append({
+			"outcome": line_outcome,
+			"text": str(line.get("text", Content.OUTCOME_NAMES[line_outcome])),
+			"age": 0.0,
+			"duration": 1.35 + minf(float(call_lines.size() - 1) * 0.08, 0.45),
+			"vertical_offset": -float(line_index) * popup_spacing,
+			"font_size": popup_font_size,
+		})
 	var story_taunt := str(result.get("story_taunt", "")).strip_edges()
 	if not story_taunt.is_empty():
 		result_popups.append({
@@ -1226,14 +1310,35 @@ func _trigger_result_visual(result: Dictionary) -> void:
 			"text": story_taunt,
 			"age": 0.0,
 			"duration": 1.65,
-			"vertical_offset": -27.0,
+			"vertical_offset": -float(call_lines.size()) * popup_spacing - 5.0,
 			"font_size": 15,
 			"color": Color("f6e56f"),
 		})
 	batter_call_displayed.emit(result_text, Content.OUTCOME_COLORS[outcome])
 	var return_count := mini(ball_count, return_ball_capacity)
-	for ball_index in return_count:
-		_create_return_ball(outcome, salvo, saved, ball_index, return_count)
+	for render_index in return_count:
+		var source_index := mini(
+			int(floor(float(render_index) * float(outcomes.size()) / float(return_count))),
+			outcomes.size() - 1
+		)
+		var return_outcome := clampi(
+			int(outcomes[source_index]),
+			0,
+			Content.OUTCOME_NAMES.size() - 1
+		)
+		var return_saved := (
+			source_index < saved_flags.size()
+			and bool(saved_flags[source_index])
+			and return_outcome < Content.HIT_OUTCOME_COUNT
+			and return_outcome != Content.GRAND_SLAM_INDEX
+		)
+		_create_return_ball(
+			return_outcome,
+			salvo,
+			return_saved,
+			render_index,
+			return_count
+		)
 
 func show_loot_popup(heading: String, detail: String, color: Color) -> void:
 	loot_popups.clear()
@@ -1266,6 +1371,7 @@ func _reset_batter_for_opponent(opponent_index: int, preserve_released_ball := f
 	batter_end_pending = false
 	batter_end_delay = 0.0
 	batter_exit_outcome = Content.STRIKE_INDEX
+	batter_lifecycle_total_override = -1.0
 	batter_terminal_in_flight = false
 	if not preserve_released_ball:
 		volley_in_flight = false
@@ -1312,6 +1418,7 @@ func _update_batter_lifecycle(delta: float) -> void:
 			batter_phase = "active"
 			batter_phase_age = 0.0
 			batter_phase_duration = 0.0
+			batter_lifecycle_total_override = -1.0
 			batter_terminal_in_flight = false
 
 func _get_batter_exit_duration(outcome: int) -> float:
@@ -1329,8 +1436,16 @@ func _get_batter_replacement_delay(outcome: int) -> float:
 func _get_lifecycle_time_scale(outcome: int) -> float:
 	var bounded := clampi(outcome, 0, BATTER_LIFECYCLE_TOTALS.size() - 1)
 	var downtimes: Array = snapshot.get("batter_downtimes", BATTER_LIFECYCLE_TOTALS)
-	var actual := float(downtimes[bounded]) if bounded < downtimes.size() else float(BATTER_LIFECYCLE_TOTALS[bounded])
-	return clampf(actual / maxf(float(BATTER_LIFECYCLE_TOTALS[bounded]), 0.001), 0.001, 1.0)
+	var actual := (
+		batter_lifecycle_total_override
+		if batter_lifecycle_total_override >= 0.0
+		else (
+			float(downtimes[bounded])
+			if bounded < downtimes.size()
+			else float(BATTER_LIFECYCLE_TOTALS[bounded])
+		)
+	)
+	return maxf(actual / maxf(float(BATTER_LIFECYCLE_TOTALS[bounded]), 0.001), 0.001)
 
 func get_strike_limit() -> int:
 	return maxi(int(snapshot.get("strike_limit", 3)), 3)
@@ -2317,11 +2432,7 @@ func _draw_batter(origin: Vector2) -> void:
 	for marker in marker_count:
 		var marker_angle := float(marker) / float(maxi(marker_count, 1)) * TAU
 		draw_circle(origin + Vector2(cos(marker_angle), sin(marker_angle)) * (body_radius + 5.0 * scale_factor), 1.6 * clampf(scale_factor, 0.8, 1.8), Color(body_color, 0.72))
-	var bat_count := 1
-	if opponent_index == 33:
-		bat_count = 4
-	elif opponent_index == 36:
-		bat_count = 3
+	var bat_count := maxi(int(snapshot.get("opponent_bat_count", 1)), 1)
 	var bat_length := (38.0 + float(within_era) * 2.0) * scale_factor
 	for bat_index in bat_count:
 		var angle := _get_bat_shaft_angle(bat_index, bat_count, swing_phase)

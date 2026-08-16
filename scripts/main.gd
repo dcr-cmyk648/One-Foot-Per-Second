@@ -25,6 +25,7 @@ const NATIVE_UPDATE_INITIAL_DELAY := 3.0
 const OFFICIAL_RELEASE_URL_PREFIX := "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/"
 const BROWSER_SAVE_MIRROR_KEY := "no_hitter_portable_save_mirror_v1"
 const BROWSER_SAVE_ROLLBACK_KEY := "no_hitter_portable_save_rollback_v1"
+const BROWSER_SAVE_CHECKPOINT_KEY := "no_hitter_update_checkpoint_v1"
 const BROWSER_MANUAL_SAVE_SLOT_COUNT := 3
 const WEB_WIDE_MIN_WIDTH := 1280.0
 const WEB_WIDE_MIN_HEIGHT := 696.0
@@ -230,6 +231,7 @@ var web_update_installing := false
 var web_update_attempt_serial := 0
 var browser_save_recovered := false
 var browser_save_regression_allowed := false
+var browser_update_checkpoint_pending := false
 var update_banner: PanelContainer
 var update_banner_label: Label
 var update_now_button: Button
@@ -421,6 +423,24 @@ func _write_browser_save_mirror() -> void:
 	storage.setItem(BROWSER_SAVE_MIRROR_KEY, current_text)
 	browser_save_regression_allowed = false
 
+func _write_browser_update_checkpoint() -> bool:
+	if not is_web_build or game == null or development_session or game.save_writes_locked:
+		return false
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage == null:
+		return false
+	var checkpoint_text := game.get_save_json()
+	var decoded := game.decode_save_text(checkpoint_text)
+	if not bool(decoded.get("ok", false)):
+		return false
+	storage.setItem(BROWSER_SAVE_CHECKPOINT_KEY, checkpoint_text)
+	var verified_text := str(storage.getItem(BROWSER_SAVE_CHECKPOINT_KEY))
+	var verified := game.decode_save_text(verified_text)
+	if verified_text != checkpoint_text or not bool(verified.get("ok", false)):
+		return false
+	browser_update_checkpoint_pending = true
+	return true
+
 func _recover_browser_save_mirror() -> Dictionary:
 	if game.last_load_failure_reason == "future_version":
 		# A mirror from an older schema is not permission to downgrade a newer
@@ -429,18 +449,27 @@ func _recover_browser_save_mirror() -> Dictionary:
 	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
 	if storage == null:
 		return {}
-	var mirrored_data := _read_browser_recovery_data(storage, BROWSER_SAVE_MIRROR_KEY)
-	if mirrored_data.is_empty() or not _browser_save_has_progress(mirrored_data):
-		mirrored_data = _read_browser_recovery_data(storage, BROWSER_SAVE_ROLLBACK_KEY)
-	if mirrored_data.is_empty() or not _browser_save_has_progress(mirrored_data):
+	var checkpoint_data := _read_browser_recovery_data(storage, BROWSER_SAVE_CHECKPOINT_KEY)
+	browser_update_checkpoint_pending = not checkpoint_data.is_empty()
+	var mirrored_data: Dictionary = {}
+	for candidate in [
+		checkpoint_data,
+		_read_browser_recovery_data(storage, BROWSER_SAVE_MIRROR_KEY),
+		_read_browser_recovery_data(storage, BROWSER_SAVE_ROLLBACK_KEY),
+	]:
+		var candidate_data: Dictionary = candidate
+		if (
+			_browser_save_has_progress(candidate_data)
+			and _browser_recovery_candidate_is_better(candidate_data, mirrored_data)
+		):
+			mirrored_data = candidate_data
+	if mirrored_data.is_empty():
 		return {}
 	var current_data := game.to_save_data()
-	var mirror_is_newer := (
-		float(mirrored_data.get("saved_at", 0.0))
-		> game.last_loaded_save_timestamp + 0.5
-	)
-	var mirror_is_ahead := _browser_save_has_more_progress(mirrored_data, current_data)
-	if game.last_load_succeeded and not mirror_is_newer and not mirror_is_ahead:
+	if (
+		game.last_load_succeeded
+		and not _browser_recovery_candidate_is_better(mirrored_data, current_data)
+	):
 		return {}
 	game.apply_save_data(mirrored_data)
 	game.save_writes_locked = false
@@ -450,8 +479,25 @@ func _recover_browser_save_mirror() -> Dictionary:
 	var saved_at := float(mirrored_data.get("saved_at", Time.get_unix_time_from_system()))
 	var recovered_summary := game.simulate_offline(maxf(Time.get_unix_time_from_system() - saved_at, 0.0))
 	game.save_game()
-	_log_event("Recovered progress from the browser's secondary save mirror.")
+	_log_event("Recovered the newest verified browser save after an update or interrupted write.")
 	return recovered_summary
+
+func _browser_recovery_candidate_is_better(candidate: Dictionary, baseline: Dictionary) -> bool:
+	if candidate.is_empty():
+		return false
+	if baseline.is_empty():
+		return true
+	var candidate_ahead := _browser_save_has_more_progress(candidate, baseline)
+	var baseline_ahead := _browser_save_has_more_progress(baseline, candidate)
+	if candidate_ahead != baseline_ahead:
+		return candidate_ahead
+	# Two generations can each lead on a different lifetime counter. In that rare
+	# case the later verified snapshot is the safest coherent state to restore.
+	var candidate_saved_at := float(candidate.get("saved_at", 0.0))
+	var baseline_saved_at := float(baseline.get("saved_at", 0.0))
+	if absf(candidate_saved_at - baseline_saved_at) > 0.5:
+		return candidate_saved_at > baseline_saved_at
+	return int(candidate.get("version", 0)) > int(baseline.get("version", 0))
 
 func _read_browser_recovery_data(storage: Variant, key: String) -> Dictionary:
 	var text := str(storage.getItem(key))
@@ -497,6 +543,23 @@ func _clear_browser_recovery_mirrors() -> void:
 	if storage != null:
 		storage.removeItem(BROWSER_SAVE_MIRROR_KEY)
 		storage.removeItem(BROWSER_SAVE_ROLLBACK_KEY)
+		storage.removeItem(BROWSER_SAVE_CHECKPOINT_KEY)
+	browser_update_checkpoint_pending = false
+
+func _clear_browser_update_checkpoint_if_safe() -> void:
+	if not is_web_build or not browser_update_checkpoint_pending or game == null:
+		return
+	var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+	if storage == null:
+		return
+	var checkpoint_data := _read_browser_recovery_data(storage, BROWSER_SAVE_CHECKPOINT_KEY)
+	if (
+		not checkpoint_data.is_empty()
+		and _browser_save_has_more_progress(checkpoint_data, game.to_save_data())
+	):
+		return
+	storage.removeItem(BROWSER_SAVE_CHECKPOINT_KEY)
+	browser_update_checkpoint_pending = false
 
 func _browser_save_slot_key(slot_index: int) -> String:
 	return "no_hitter_manual_save_slot_%d" % (clampi(slot_index, 0, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1) + 1)
@@ -618,6 +681,13 @@ func _configure_platform_ui() -> void:
 	if not is_web_build:
 		return
 	web_storage_persistent = OS.is_userfs_persistent()
+	# Ask supporting browsers to protect IndexedDB from routine storage eviction.
+	# This is advisory (not every iOS release exposes it), while the verified
+	# localStorage generations below remain the update-independent fallback.
+	JavaScriptBridge.eval(
+		"if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }",
+		true
+	)
 	if not JavaScriptBridge.pwa_update_available.is_connected(_on_browser_update_available):
 		JavaScriptBridge.pwa_update_available.connect(_on_browser_update_available)
 	if JavaScriptBridge.pwa_needs_update():
@@ -704,7 +774,7 @@ func _configure_mobile_install_dialog(platform: String) -> void:
 			"1. Open this game in Chrome.\n\n"
 			+ "2. Tap Chrome's ⋮ menu, then tap INSTALL APP or ADD TO HOME SCREEN.\n\n"
 			+ "3. Confirm Install, then launch the game from its new app icon.\n\n"
-			+ "The installed game stays on the browser update channel and will offer REVIEW UPDATE when a new build is ready. Export a portable backup before accepting an update."
+			+ "The installed game stays on the browser update channel and will offer REVIEW UPDATE when a new build is ready. Autosaves carry across normal updates; EXPORT is an optional portable backup."
 		)
 	else:
 		mobile_install_dialog.title = "INSTALL ON IPHONE"
@@ -712,7 +782,7 @@ func _configure_mobile_install_dialog(platform: String) -> void:
 			"1. Tap Safari's SHARE button (the square with an up arrow).\n\n"
 			+ "2. Scroll down and tap ADD TO HOME SCREEN.\n\n"
 			+ "3. Tap ADD, then launch the game from its new Home Screen icon.\n\n"
-			+ "EXPORT a backup first. If iOS starts the installed game with a fresh save, use IMPORT to bring your run across. IMPORT can browse Google Drive when Drive is enabled under Files > Browse > Locations. If Add to Home Screen is missing, open this page in Safari."
+			+ "Autosaves carry across normal updates; EXPORT is an optional portable backup. IMPORT can browse Google Drive when Drive is enabled under Files > Browse > Locations. If Add to Home Screen is missing, open this page in Safari."
 		)
 
 func _show_mobile_install() -> void:
@@ -872,7 +942,7 @@ func _on_native_update_manifest_received(
 	native_update_confirmation.title = "NO HITTER v%s IS READY" % candidate_version
 	native_update_confirmation.dialog_text = (
 		"This installed build is v%s. Download the current package now?\n\n"
-		+ "Your automatic and manual saves live outside the application and remain in place when the new build replaces it. EXPORT BACKUP is still recommended before updating."
+		+ "Your automatic and manual saves live outside the application and remain in place when the new build replaces it. EXPORT BACKUP is available as an optional portable fallback."
 	) % current_version
 	native_update_confirmation.popup_centered_clamped(Vector2i(500, 250), 0.90)
 
@@ -926,7 +996,7 @@ func _reset_browser_update_attempt(message := "") -> void:
 	update_banner_label.text = (
 		message
 		if not message.is_empty()
-		else ("UPDATE • BACK UP FIRST" if mobile_layout else "UPDATE READY • EXPORT BACKUP FIRST")
+		else ("UPDATE READY" if mobile_layout else "UPDATE READY • SAVES STAY PUT")
 	)
 
 func _show_browser_update_confirmation() -> void:
@@ -947,10 +1017,11 @@ func _show_browser_update_confirmation() -> void:
 	browser_update_confirmation.popup_centered_clamped(requested_size, clamp_ratio)
 
 func _configure_browser_update_confirmation(for_mobile: bool) -> void:
-	browser_update_confirmation.title = "BACK UP YOUR SAVE"
+	browser_update_confirmation.title = "INSTALL UPDATE"
 	browser_update_confirmation.dialog_text = (
-		"Choose EXPORT for a portable backup, or install the update now.\n\n"
-		+ "Progress should be preserved, but browser storage can still be cleared."
+		"Your autosave and manual slots should carry across this update. "
+		+ "A verified recovery checkpoint is written before reloading.\n\n"
+		+ "EXPORT is available as an optional portable fallback."
 	)
 	browser_update_confirmation.ok_button_text = "UPDATE"
 	browser_update_confirmation.cancel_button_text = "LATER"
@@ -986,11 +1057,19 @@ func _install_browser_update() -> void:
 			)
 			return
 		_write_browser_save_mirror()
+		if not _write_browser_update_checkpoint():
+			_reset_browser_update_attempt("CHECKPOINT FAILED • EXPORT OR RETRY")
+			_show_save_transfer_error(
+				"The update was not installed because its recovery checkpoint could not be verified. Your current autosave was left untouched; export a backup or retry."
+			)
+			return
+		update_banner_label.text = "CHECKPOINT VERIFIED • INSTALLING…"
 	# Web saves live in IndexedDB. Flush them before asking the service worker to
 	# activate the new release and reload every open game tab.
 	JavaScriptBridge.force_fs_sync()
 	# Godot's Web filesystem flush is asynchronous. The synchronous localStorage
-	# mirror is already complete; this window gives IndexedDB time to catch up.
+	# mirror and update checkpoint are already complete; this short window gives
+	# IndexedDB time to catch up without leaving the UI stuck on a save message.
 	await get_tree().create_timer(WEB_UPDATE_SAVE_FLUSH_SECONDS, true, false, true).timeout
 	if attempt_serial != web_update_attempt_serial or not web_update_installing:
 		return
@@ -1907,7 +1986,7 @@ func _build_update_banner() -> void:
 	row.add_theme_constant_override("separation", 8)
 	update_banner.add_child(row)
 	update_banner_label = Label.new()
-	update_banner_label.text = "UPDATE READY • EXPORT BACKUP FIRST"
+	update_banner_label.text = "UPDATE READY • SAVES STAY PUT"
 	update_banner_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_banner_label.add_theme_color_override("font_color", COLOR_GOOD)
 	update_banner_label.add_theme_font_size_override("font_size", 13)
@@ -1945,7 +2024,7 @@ func _build_achievement_toast() -> void:
 	stack.add_theme_constant_override("separation", 2)
 	achievement_toast.add_child(stack)
 	achievement_toast_heading = Label.new()
-	achievement_toast_heading.text = "ACHIEVEMENT UNLOCKED  •  +1% XP"
+	achievement_toast_heading.text = "ACHIEVEMENT UNLOCKED  •  +0.5% XP"
 	achievement_toast_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	achievement_toast_heading.add_theme_font_size_override("font_size", 11)
 	achievement_toast_heading.add_theme_color_override("font_color", COLOR_GOLD)
@@ -2377,7 +2456,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	update_banner.offset_bottom = 61.0 if mobile_layout else 66.0
 	update_banner_label.add_theme_font_size_override("font_size", 11 if mobile_layout else 13)
 	if not update_now_button.disabled:
-		update_banner_label.text = "UPDATE • BACK UP FIRST" if mobile_layout else "UPDATE READY • EXPORT BACKUP FIRST"
+		update_banner_label.text = "UPDATE READY" if mobile_layout else "UPDATE READY • SAVES STAY PUT"
 	update_now_button.text = "REVIEW" if mobile_layout else "REVIEW UPDATE"
 	update_now_button.custom_minimum_size.x = 66.0 if mobile_layout else 0.0
 	update_now_button.add_theme_font_size_override("font_size", 10 if mobile_layout else 16)
@@ -2516,7 +2595,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	opponent_loadout_dock.offset_left = -40.0 if mobile_layout else -46.0
 	opponent_loadout_dock.offset_top = 44.0 if mobile_layout else 54.0
 	opponent_loadout_dock.offset_bottom = 300.0 if mobile_layout else 354.0
-	power_comparison_panel.offset_left = -126.0 if mobile_layout else -144.0
+	power_comparison_panel.offset_left = -108.0 if mobile_layout else -122.0
 	power_comparison_panel.offset_top = 44.0 if mobile_layout else 54.0
 	power_comparison_panel.offset_right = -44.0 if mobile_layout else -50.0
 	power_comparison_panel.offset_bottom = 238.0 if mobile_layout else 274.0
@@ -2920,7 +2999,7 @@ func _build_field_stat_overlay(parent: Control) -> void:
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	stack.add_child(heading)
 	var rows := [
-		["pitch", "PITCH", "The pitch type selected for this immutable throw."],
+		["pitch", "", "The pitch type selected for this immutable throw."],
 		["release", "RELEASE", "Ball speed at the instant it leaves the hand."],
 		["plate", "AT PLATE", "Ball speed when it reaches the plate after air drag."],
 		["drag", "AIR DRAG", "Percentage of release speed lost before the plate. Space leagues play in vacuum."],
@@ -2971,7 +3050,7 @@ func _build_power_comparison(parent: Control) -> void:
 	power_comparison_panel.set_anchor(SIDE_TOP, 0.0)
 	power_comparison_panel.set_anchor(SIDE_RIGHT, 1.0)
 	power_comparison_panel.set_anchor(SIDE_BOTTOM, 0.0)
-	power_comparison_panel.offset_left = -144.0
+	power_comparison_panel.offset_left = -122.0
 	power_comparison_panel.offset_top = 54.0
 	power_comparison_panel.offset_right = -50.0
 	power_comparison_panel.offset_bottom = 274.0
@@ -3411,7 +3490,12 @@ func _get_loot_item_inspection_text(item: Dictionary) -> String:
 		var equipped_value := float(equipped_stats.get(stat_id, 0.0)) * effectiveness
 		var delta := candidate_value - equipped_value
 		if str(stat_definition.format) == "additive":
-			lines.append("%s: +%.3f vs +%.3f (%+.3f)" % [str(stat_definition.name), candidate_value, equipped_value, delta])
+			lines.append("%s: %s vs %s (%s)" % [
+				str(stat_definition.name),
+				BaseballGameState.format_rating(candidate_value, true),
+				BaseballGameState.format_rating(equipped_value, true),
+				BaseballGameState.format_rating(delta, true),
+			])
 		else:
 			lines.append("%s: ×%.3f vs ×%.3f (%+.3f)" % [str(stat_definition.name), 1.0 + candidate_value, 1.0 + equipped_value, delta])
 	lines.append("Use COMPARE for equip and trash actions")
@@ -3577,8 +3661,10 @@ func _rebuild_loot_item_dialog() -> void:
 		value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		value_label.add_theme_font_size_override("font_size", 14)
 		if str(stat_definition.format) == "additive":
-			value_label.text = "THIS +%.3f   •   EQUIPPED +%.3f   •   CHANGE %+.3f" % [
-				candidate_value, equipped_value, delta,
+			value_label.text = "THIS %s   •   EQUIPPED %s   •   CHANGE %s" % [
+				BaseballGameState.format_rating(candidate_value, true),
+				BaseballGameState.format_rating(equipped_value, true),
+				BaseballGameState.format_rating(delta, true),
 			]
 		else:
 			value_label.text = "THIS ×%.3f   •   EQUIPPED ×%.3f   •   CHANGE %+.3f" % [
@@ -4166,7 +4252,7 @@ func _build_achievement_tab(tabs: TabContainer) -> void:
 	achievement_bonus_label.add_theme_color_override("font_color", COLOR_GOLD)
 	content.add_child(achievement_bonus_label)
 	var explainer := Label.new()
-	explainer.text = "Every achievement permanently adds +1% XP. Hidden achievements disclose nothing until their subject has been encountered."
+	explainer.text = "Every achievement permanently adds +0.5% XP. Hidden achievements disclose nothing until their subject has been encountered."
 	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	explainer.add_theme_font_size_override("font_size", 12)
 	explainer.add_theme_color_override("font_color", COLOR_MUTED)
@@ -4261,7 +4347,7 @@ func _show_achievement_details(id: String) -> void:
 		mobile_inspection_dialog.dialog_text = "No details are available yet."
 	else:
 		var progress := game.get_achievement_progress(definition)
-		mobile_inspection_dialog.dialog_text = "%s\n\n%s  •  PERMANENT XP +1%%" % [
+		mobile_inspection_dialog.dialog_text = "%s\n\n%s  •  PERMANENT XP +0.5%%" % [
 			str(definition.description),
 			"COMPLETE" if game.has_achievement(id) else str(progress.text),
 		]
@@ -4294,7 +4380,6 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 		"opponent_difficulty": "Effective opponent threat",
 		"trait_penalty": "Special counter penalty",
 		"distance": "Pitching distance",
-		"distance_bonus": "Distance XP multiplier",
 		"distance_penalty": "Distance threat multiplier",
 		"flight_time": "True flight time",
 		"speed": "True velocity",
@@ -4921,7 +5006,7 @@ func _refresh_guide_text(
 		(
 			"PROGRESSION\n"
 			+ "• Mastery unlocks the next level and permanently improves your odds against that opponent. Extra mastery adds small logarithmic XP and loot bonuses.\n"
-			+ "• Each level sets its own opponent, range, threat, and XP multiplier. PREVIOUS and NEXT choose the level; distance is automatic."
+			+ "• Each level sets its own opponent, range, threat, and strikeout bounty. Range affects flight and difficulty, never XP. PREVIOUS and NEXT choose the level; range follows automatically."
 		),
 		(
 			"PITCH FLOW\n"
@@ -4940,13 +5025,13 @@ func _refresh_guide_text(
 			+ "• Strikeouts sometimes copy one player-wearable item from the batter's visible loadout: same slot, same rarity. Inspect enemy gear to see what can drop. Extra mastery gently favors the better worn pieces.\n"
 			+ "• %s\n" % rarity_help
 			+ "• Power is a vertical matchup gauge: YOU is the called-Strike chance and THEM is batter resistance. Hover or tap for full odds. Stars protect items; each slot keeps 10.\n"
-			+ "• All %d achievement slots are visible. Each completed achievement permanently adds 1%% XP; unrevealed secret entries stay anonymous."
+			+ "• All %d achievement slots are visible. Each completed achievement permanently adds 0.5%% XP; unrevealed secret entries stay anonymous."
 			% Content.ACHIEVEMENTS.size()
 		),
 		(
 			"AWAY PLAY & SAVES\n"
 			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. It scales both XP and called-Strike mastery; your return popup shows the exact deposit.\n"
-			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Browser installs update on their Web channel; native builds check every five minutes and offer the matching official package. Export before any update."
+			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Browser installs preserve verified save generations while updating on their Web channel; native builds check every five minutes and offer the matching official package. EXPORT is an optional portable fallback."
 		),
 		(
 			"VISUALS\n"
@@ -4959,6 +5044,7 @@ func _refresh_guide_text(
 		sections.append(
 			"TIME TRAVEL\n"
 			+ "• The portal stranger unlocks genetic rebirth. It resets XP, levels, and gear for DNA based on total body XP; mutations persist.\n"
+			+ "• Extra arms release one shared pitch as independent balls. Balls beyond the batter's bat count become dramatically harder to hit; simultaneous results stack bases, delays, Strikes, Balls, and absurd box-score calls.\n"
 			+ "• Autonomic Coaching licenses Training auto-buy. Autonomic Clicking Finger adds one auto-clicker; its speed and resistance to rapid-tap fatigue grow logarithmically without a hard rank limit. Alien counts can require more Strikes."
 		)
 	if eldritch_revealed:
@@ -5001,8 +5087,8 @@ func _refresh_achievement_tab(force := false) -> void:
 		game.unlocked_achievements.size(),
 		Content.ACHIEVEMENTS.size(),
 	]
-	achievement_bonus_label.text = "PERMANENT XP BONUS  +%d%%  •  XP ×%.2f" % [
-		int(round(game.get_achievement_xp_bonus() * 100.0)),
+	achievement_bonus_label.text = "PERMANENT XP BONUS  +%.1f%%  •  XP ×%.3f" % [
+		game.get_achievement_xp_bonus() * 100.0,
 		game.get_achievement_xp_multiplier(),
 	]
 	achievement_hide_achieved_toggle.set_pressed_no_signal(game.achievement_hide_achieved)
@@ -5061,7 +5147,7 @@ func _refresh_achievement_tab(force := false) -> void:
 		progress_bar.value = float(achievement_progress.ratio) * 100.0
 		footer.text = "%s  •  %s" % [
 			"COMPLETE" if unlocked else str(achievement_progress.text),
-			"PERMANENT XP +1%",
+			"PERMANENT XP +0.5%",
 		]
 		panel.tooltip_text = "%s\n%s\n%s" % [
 			str(definition.name),
@@ -5139,17 +5225,15 @@ func _refresh_interface(refresh_expensive := true) -> void:
 			next_button.text = "NEXT LEVEL LOCKED"
 	var distance := game.get_current_distance()
 	distance_label.text = (
-		"LEVEL RANGE  •  %s  •  XP ×%s  •  THREAT +%.2f" % [
+		"LEVEL RANGE  •  %s  •  THREAT %s" % [
 			str(distance.label),
-			BaseballGameState.format_number(game.get_distance_xp_multiplier()),
-			game.get_distance_difficulty(),
+			BaseballGameState.format_rating(game.get_distance_difficulty(), true),
 		]
 		if mobile_layout
-		else "LEVEL RANGE  •  %s  •  %s  •  XP ×%s  •  BATTER THREAT +%.2f" % [
+		else "LEVEL RANGE  •  %s  •  %s  •  BATTER THREAT %s" % [
 			str(distance.name),
 			str(distance.label),
-			BaseballGameState.format_number(game.get_distance_xp_multiplier()),
-			game.get_distance_difficulty(),
+			BaseballGameState.format_rating(game.get_distance_difficulty(), true),
 		]
 	)
 	var mastery_value := game.opponent_mastery[game.current_opponent]
@@ -5157,9 +5241,9 @@ func _refresh_interface(refresh_expensive := true) -> void:
 	var mastery_quality_bonus := game.get_opponent_mastery_quality_bonus()
 	var overmastery_summary := game.get_overmastery_summary()
 	mastery_label.tooltip_text = (
-		"Every called Strike builds mastery against this batter. Current mastery adds +%.3f quality to this matchup. "
+		"Every called Strike builds mastery against this batter. Current mastery adds %s Quality to this matchup. "
 		+ "The advantage is uncapped and logarithmic; reaching 100%% unlocks progression, while excess mastery also improves XP and loot."
-	) % mastery_quality_bonus
+	) % BaseballGameState.format_rating(mastery_quality_bonus, true)
 	if game.is_alien_exhibition_blocked():
 		mastery_label.text = game.get_story_status_text()
 		mastery_bar.value = game.get_alien_exhibition_progress_ratio() * 100.0
@@ -5175,23 +5259,23 @@ func _refresh_interface(refresh_expensive := true) -> void:
 				"  •  %s" % overmastery_summary if not overmastery_summary.is_empty() else ""
 			)
 			if game.cosmos_conquered
-			else "FINAL BOSS MASTERY  %s / %s  •  ODDS +%.3f" % [
+			else "FINAL BOSS MASTERY  %s / %s  •  ODDS %s" % [
 				BaseballGameState.format_number(mastery_value),
 				BaseballGameState.format_number(mastery_required),
-				mastery_quality_bonus,
+				BaseballGameState.format_rating(mastery_quality_bonus, true),
 			]
 		)
 	elif mastery_value >= mastery_required:
 		var target_ratio := mastery_value / maxf(mastery_required, 0.000001)
-		var full_mastery_text := "OPPONENT MASTERED  •  ×%s TARGET  •  ODDS +%.3f%s" % [
+		var full_mastery_text := "OPPONENT MASTERED  •  ×%s TARGET  •  ODDS %s%s" % [
 			BaseballGameState.format_number(target_ratio),
-			mastery_quality_bonus,
+			BaseballGameState.format_rating(mastery_quality_bonus, true),
 			"  •  %s" % overmastery_summary if not overmastery_summary.is_empty() else "",
 		]
 		if mobile_layout and not overmastery_summary.is_empty():
-			mastery_label.text = "MASTERED ×%s  •  ODDS +%.3f  •  XP ×%.3f  •  LOOT +%.1f%%" % [
+			mastery_label.text = "MASTERED ×%s  •  ODDS %s  •  XP ×%.3f  •  LOOT +%.1f%%" % [
 				BaseballGameState.format_number(target_ratio),
-				mastery_quality_bonus,
+				BaseballGameState.format_rating(mastery_quality_bonus, true),
 				game.get_opponent_farm_xp_multiplier(),
 				game.get_opponent_loot_luck() * 100.0,
 			]
@@ -5202,10 +5286,10 @@ func _refresh_interface(refresh_expensive := true) -> void:
 				+ "\nEvery called Strike still increases the uncapped logarithmic matchup advantage, XP bonus, and loot rolls."
 			)
 	else:
-		mastery_label.text = "OPPONENT MASTERY  %s / %s  •  ODDS +%.3f" % [
+		mastery_label.text = "OPPONENT MASTERY  %s / %s  •  ODDS %s" % [
 			BaseballGameState.format_number(mastery_value),
 			BaseballGameState.format_number(mastery_required),
-			mastery_quality_bonus,
+			BaseballGameState.format_rating(mastery_quality_bonus, true),
 		]
 		mastery_label.tooltip_text = (
 			"Every called Strike builds mastery and immediately improves the called-Strike rate against this batter. Reach 100% to unlock the next batter; every point beyond it still helps logarithmically."
@@ -5229,7 +5313,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 			detail = "Adds one strike. Strike %d completes the only XP-paying outcome." % game.get_strikes_required()
 		var frustration_cost := game.get_outcome_frustration_points(index)
 		var frustration_note := (
-			"Frustration +%s per resolved volley." % BaseballGameState.format_number(frustration_cost, 2)
+			"Frustration %s per resolved ball." % BaseballGameState.format_rating(frustration_cost, true)
 			if frustration_cost > 0.0
 			else "Frustration +0; a completed strikeout resets the entire score."
 		)
@@ -5244,13 +5328,16 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		game.get_strikeout_base_points() * game.get_xp_multiplier()
 	)
 	var frustration_bonus := game.get_frustration_quality_bonus()
-	frustration_label.text = "FRUSTRATION +%.3f" % frustration_bonus
+	frustration_label.text = "FRUSTRATION %s" % BaseballGameState.format_rating(frustration_bonus, true)
 	frustration_bar.value = game.get_frustration_meter_ratio() * 100.0
 	frustration_label.tooltip_text = (
-		"%s Frustration • +%.3f quality against the active batter. "
-		+ "Grand Slam +12, Home Run +8, Triple +5, Double +3, Single +1, Ball +0.20, Foul +0.10, Strike +0. "
+		"%s Frustration • %s Quality against the active batter. "
+		+ "Grand Slam +12,000; Home Run +8,000; Triple +5,000; Double +3,000; Single +1,000; Ball +200; Foul +100; Strike +0. "
 		+ "The bonus has no cap but grows logarithmically, and a completed strikeout resets it."
-	) % [BaseballGameState.format_number(game.frustration_points, 2), frustration_bonus]
+	) % [
+		BaseballGameState.format_rating(game.frustration_points),
+		BaseballGameState.format_rating(frustration_bonus, true),
+	]
 
 	pitch_field.configure_from_game(game, at_bat_metrics)
 	_refresh_field_stats()
@@ -5340,7 +5427,7 @@ func _refresh_field_stats() -> void:
 			if in_flight
 			else (pitch_field.last_pitch_visual_travel_time if has_last_pitch else game.get_resolved_flight_seconds())
 		))
-		_set_field_stat_text("quality", "%.3f" % quality)
+		_set_field_stat_text("quality", BaseballGameState.format_rating(quality))
 		_set_field_stat_text("distance", str(distance.label))
 	_refresh_mobile_upgrade_stats()
 
@@ -5348,7 +5435,8 @@ func _set_field_stat_text(stat_id: String, value: String) -> void:
 	var label := field_stat_labels.get(stat_id) as Label
 	if label == null:
 		return
-	label.text = "%s  %s" % [str(label.get_meta("stat_prefix", stat_id.to_upper())), value]
+	var prefix := str(label.get_meta("stat_prefix", stat_id.to_upper()))
+	label.text = value if prefix.is_empty() else "%s  %s" % [prefix, value]
 
 func _refresh_mobile_upgrade_stats() -> void:
 	_refresh_effective_stat_labels(
@@ -5366,7 +5454,7 @@ func _refresh_effective_stat_labels(labels: Dictionary, speed_fps: float) -> voi
 	if labels.is_empty():
 		return
 	labels.speed.text = BaseballGameState.format_speed(speed_fps)
-	labels.quality.text = "%.3f" % game.get_pitch_quality()
+	labels.quality.text = BaseballGameState.format_rating(game.get_pitch_quality())
 	labels.recovery.text = "%.3f/s" % game.get_recovery_rate()
 	labels.lineup.text = _format_compact_seconds(game.get_base_batter_turnover_seconds())
 	labels.hit_delay.text = "×%.3f" % game.get_hit_delay_factor()
@@ -5387,7 +5475,10 @@ func _refresh_effective_stat_labels(labels: Dictionary, speed_fps: float) -> voi
 			2
 		)
 		labels.loot.text = "%.1f%%" % (game.get_loot_drop_chance() * 100.0)
-		labels.frustration.text = "+%.3f" % game.get_frustration_quality_bonus()
+		labels.frustration.text = BaseballGameState.format_rating(
+			game.get_frustration_quality_bonus(),
+			true
+		)
 
 func _format_compact_seconds(seconds: float) -> String:
 	if absf(seconds - round(seconds)) < 0.05:
@@ -5415,8 +5506,8 @@ func _refresh_equipment() -> void:
 			float(entry.probability) * 100.0,
 		])
 	pitch_value.tooltip_text = "Automatic selection\n" + "\n".join(selection_lines)
-	pitch_effect.text = "Best quality %+.2f • calling bias ×%.2f" % [
-		float(best_pitch.bonus),
+	pitch_effect.text = "Best quality %s • calling bias ×%.2f" % [
+		BaseballGameState.format_rating(float(best_pitch.bonus), true),
 		game.get_pitch_calling_bias(),
 	]
 
@@ -5441,11 +5532,11 @@ func _refresh_equipment() -> void:
 		]
 	else:
 		body_value.text = game.get_body_growth_name()
-	body_value.tooltip_text = "%s\n%s\nCurrent growth: speed ×%.3f • quality +%.3f • recovery ×%.3f" % [
+	body_value.tooltip_text = "%s\n%s\nCurrent growth: speed ×%.3f • Quality %s • recovery ×%.3f" % [
 		body_value.text,
 		str(game.get_body_growth_stage().get("description", "")),
 		game.get_body_growth_effect_multiplier("speed"),
-		game.get_body_growth_quality_bonus(),
+		BaseballGameState.format_rating(game.get_body_growth_quality_bonus(), true),
 		game.get_body_growth_effect_multiplier("recovery"),
 	]
 	body_effect.text = "%s cooldown • %d ball%s/release\nBody size ×%.3f" % [
@@ -5639,11 +5730,14 @@ func _refresh_opponent_loadout() -> void:
 		var rarity_text := ""
 		if entry_id != "body":
 			rarity_text = " • %s" % str(Content.loot_rarity(int(entry.get("rarity", 0))).name)
-		button.tooltip_text = "%s%s • %s • Batter threat %+.3f" % [
+		button.tooltip_text = "%s%s • %s • Batter threat %s" % [
 			kind,
 			rarity_text,
 			str(entry.get("name", "Unknown")),
-			float(entry.get("difficulty_bonus", 0.0)),
+			BaseballGameState.format_rating(
+				float(entry.get("difficulty_bonus", 0.0)),
+				true
+			),
 		]
 		if not Content.loot_slot_by_id(entry_id).is_empty():
 			button.tooltip_text += "\nStrikeout drops can copy this slot and rarity."
@@ -5739,7 +5833,7 @@ func _training_next_rank_summary(id: String) -> String:
 		"velocity":
 			return "%s ft/s Speed" % _format_training_effect_delta(effect)
 		"command":
-			return "%s Quality" % _format_signed_training_delta(delta)
+			return "%s Quality" % BaseballGameState.format_rating(delta, true)
 		"field_hustle":
 			return "%s%% Base Field Tap" % _format_signed_training_delta(delta, 100.0)
 		"recovery":
@@ -5767,7 +5861,7 @@ func _training_next_rank_summary(id: String) -> String:
 		"loot_training":
 			return "%s%% Loot Chance" % _format_signed_training_delta(delta, 100.0)
 		"frustration_training":
-			return "%s Frustration Quality" % _format_signed_training_delta(delta)
+			return "%s Frustration Quality" % BaseballGameState.format_rating(delta, true)
 	return "%s" % _format_signed_training_delta(delta)
 
 func _refresh_purchase_buttons() -> void:
@@ -6038,11 +6132,11 @@ func _refresh_rebirth_buttons() -> void:
 	rebirth_story_label.text = story
 	var cumulative_speed := game.get_body_growth_effect_multiplier("speed")
 	var cumulative_recovery := game.get_body_growth_effect_multiplier("recovery")
-	body_growth_status_label.text = "%s  •  SIZE ×%.2f  •  SPEED ×%.3f  •  QUALITY +%.3f  •  RECOVERY ×%.3f" % [
+	body_growth_status_label.text = "%s  •  SIZE ×%.2f  •  SPEED ×%.3f  •  QUALITY %s  •  RECOVERY ×%.3f" % [
 		game.get_body_growth_name(),
 		game.get_body_growth_visual_size(),
 		cumulative_speed,
-		game.get_body_growth_quality_bonus(),
+		BaseballGameState.format_rating(game.get_body_growth_quality_bonus(), true),
 		cumulative_recovery,
 	]
 	if game.body_growth_level == 0:
@@ -6204,12 +6298,11 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	if pitch_rate >= 1000.0:
 		mode = "BATCHED MATH"
 	mode += " • 1:1 PROJECTILES" if pitch_field.is_rendering_one_to_one() else " • LABELED REPRESENTATIVES"
-	stat_labels.quality.text = "%.3f" % game.get_pitch_quality()
+	stat_labels.quality.text = BaseballGameState.format_rating(game.get_pitch_quality())
 	stat_labels.potency.text = "×%s" % BaseballGameState.format_number(game.get_pitch_potency())
-	stat_labels.opponent_difficulty.text = "%.3f" % game.get_effective_opponent_difficulty()
-	stat_labels.trait_penalty.text = "+%.3f" % game.get_opponent_trait_penalty()
+	stat_labels.opponent_difficulty.text = BaseballGameState.format_rating(game.get_effective_opponent_difficulty())
+	stat_labels.trait_penalty.text = BaseballGameState.format_rating(game.get_opponent_trait_penalty(), true)
 	stat_labels.distance.text = str(game.get_current_distance().label)
-	stat_labels.distance_bonus.text = "×%s" % BaseballGameState.format_number(game.get_distance_xp_multiplier())
 	stat_labels.distance_penalty.text = "×%.3f" % game.get_distance_penalty_multiplier()
 	stat_labels.flight_time.text = BaseballGameState.format_flight_time(game.get_physical_flight_seconds())
 	stat_labels.speed.text = BaseballGameState.format_speed(game.get_velocity_fps())
@@ -6283,10 +6376,10 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 	]
 	stat_labels.lifetime_pitches.text = BaseballGameState.format_number(game.lifetime_pitches)
 	stat_labels.lifetime_xp.text = BaseballGameState.format_xp_total(game.lifetime_xp)
-	stat_labels.achievements.text = "%d / %d • +%d%% • XP ×%.2f" % [
+	stat_labels.achievements.text = "%d / %d • +%.1f%% • XP ×%.3f" % [
 		game.unlocked_achievements.size(),
 		Content.ACHIEVEMENTS.size(),
-		int(round(game.get_achievement_xp_bonus() * 100.0)),
+		game.get_achievement_xp_bonus() * 100.0,
 		game.get_achievement_xp_multiplier(),
 	]
 	stat_labels.dna.text = "%s / %s" % [BaseballGameState.format_number(float(game.dna), 0), BaseballGameState.format_number(game.lifetime_dna_earned, 0)]
@@ -6299,7 +6392,7 @@ func _refresh_stats(at_bat_metrics: Dictionary, estimated_xp_per_second: float) 
 
 func _on_achievement_unlocked(definition: Dictionary, total_unlocked: int) -> void:
 	achievement_toast_queue.append(definition)
-	_log_event("ACHIEVEMENT: %s • +1%% XP (%d/%d)." % [
+	_log_event("ACHIEVEMENT: %s • +0.5%% XP (%d/%d)." % [
 		str(definition.name),
 		total_unlocked,
 		Content.ACHIEVEMENTS.size(),
@@ -6434,6 +6527,7 @@ func _on_progression_changed(message: String) -> void:
 func _on_save_status_changed(message: String) -> void:
 	if message == "Saved":
 		_write_browser_save_mirror()
+		_clear_browser_update_checkpoint_if_safe()
 	if is_web_build and not web_storage_persistent:
 		save_label.text = "temporary save"
 	else:

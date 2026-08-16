@@ -12,7 +12,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 24
+const SAVE_VERSION := 25
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -104,11 +104,21 @@ const AUTO_CLICK_PROCESS_LIMIT := 256
 # Contact adds the displayed delay on top; a walk uses the Single bonus.
 const BASE_BATTER_TURNOVER_SECONDS := 3.0
 const OUTCOME_TURNOVER_BONUS_SECONDS := [9.0, 5.0, 3.0, 2.0, 1.0, 0.0, 1.0, 0.0]
-const MAX_BATTER_DOWNTIME_SECONDS := BASE_BATTER_TURNOVER_SECONDS + OUTCOME_TURNOVER_BONUS_SECONDS[Content.GRAND_SLAM_INDEX]
+const MAX_SAVED_VOLLEY_SIZE := 4096
+const MAX_BATTER_DOWNTIME_SECONDS := BASE_BATTER_TURNOVER_SECONDS + OUTCOME_TURNOVER_BONUS_SECONDS[Content.GRAND_SLAM_INDEX] * MAX_SAVED_VOLLEY_SIZE
+# The first ball assigned beyond the batter's visible bat count retains only
+# 18% of its normal contact chance. Every additional uncovered ball compounds
+# that factor again, quickly turning anatomical overload into called Strikes.
+const BAT_OVERLOAD_CONTACT_REMAINING := 0.18
 # Literal throws are deliberately finite: at the renderer's 0.16 second
 # minimum travel time, this cap produces at most 3,200 simultaneous outbound
 # balls. The idle game's larger numbers come from payload potency and rewards.
 const MAX_PHYSICAL_PITCH_RATE := 20000.0
+# Quality, Threat, Frustration-derived quality, and similar matchup ratings are
+# stored in compact simulation units but shown as satisfying whole-number game
+# ratings. This is presentation-only so old saves and probability balance remain
+# exact: 0.039 internal displays as 39 and 6 displays as 6,000.
+const DISPLAY_RATING_SCALE := 1000.0
 const LOOT_DROP_CHANCE := 0.12
 const LOOT_REMAINING_PER_RANK := 0.995
 const LOOT_PITY_ROLLS := 10
@@ -127,9 +137,8 @@ const MASTERY_REQUIREMENT_FACTOR_PER_RANK := 0.85
 # The logarithm deliberately has no hard ceiling: doubling an already enormous
 # mastery total always helps, but by the same modest +quality step.
 const MASTERY_MATCHUP_QUALITY_PER_DOUBLING := 0.12
-# Bad results supply a second, temporary adaptation bonus. Frustration is scored
-# once per resolved volley rather than once per physical projectile, so an
-# eldritch 2,048-ball salvo remains one baseball result. Four frustration points
+# Bad results supply a second, temporary adaptation bonus. Every independently
+# resolved ball contributes its own result severity. Four frustration points
 # grant the first +0.08 quality step; every later step takes twice as many.
 const FRUSTRATION_REFERENCE_POINTS := 4.0
 const FRUSTRATION_QUALITY_PER_DOUBLING := 0.08
@@ -156,7 +165,11 @@ const PREMIUM_HUMAN_MILESTONE_IDS := [
 	"world_series_pitching_campus",
 	"personal_hall_of_fame_wing",
 ]
-const PREMIUM_HUMAN_MILESTONE_COST_MULTIPLIER := 1.10
+# One-time facilities should be deliberate savings decisions. Their effects are
+# intentionally strong; the price lane is therefore separated from repeatable
+# Training and premium capital projects sit another step above ordinary builds.
+const MILESTONE_COST_MULTIPLIER := 4.0
+const PREMIUM_HUMAN_MILESTONE_COST_MULTIPLIER := 2.0
 # Save v16 stored seconds on the old time-based curve. Keeping its reference
 # interval here lets migration preserve the exact earned quality bonus.
 const LEGACY_FRUSTRATION_INTERVAL_SECONDS := 15.0
@@ -288,6 +301,7 @@ var purchased_ball_upgrades: Array[String] = []
 var purchased_milestones: Array[String] = []
 var purchased_body_modifiers: Array[String] = []
 var unlocked_achievements: Array[String] = []
+var achievement_event_totals := {}
 var achievement_revision := 0
 var catalog_hide_purchased := {
 	"pitch": false,
@@ -331,6 +345,7 @@ var loot_revision := 0
 var equipment_bonus_cache_revision := -1
 var equipment_bonus_cache_unlock_state := ""
 var equipment_bonus_cache := {}
+var at_bat_metrics_cache := {}
 var last_time_travel_retained_slots: Array[String] = []
 # Deterministic pacing audits disable drops to prove that random equipment is
 # never a progression requirement. This is a development switch, not save data.
@@ -347,6 +362,11 @@ var pitch_credit := 0.0
 var pitch_flight_remaining := 0.0
 var pending_volley_flight_duration := 0.0
 var pending_volley_size := 0
+# v25 resolves every simultaneous projectile independently. The scalar pair is
+# retained as the first-ball compatibility view for older saves and focused
+# diagnostics; authoritative play uses the arrays.
+var pending_volley_outcomes: Array[int] = []
+var pending_volley_saved_flags: Array[bool] = []
 var pending_volley_outcome := Content.STRIKE_INDEX
 var pending_volley_saved := false
 var pending_volley_pitch_id := "dead_fish"
@@ -887,6 +907,7 @@ func reset_fresh() -> void:
 	purchased_milestones.clear()
 	purchased_body_modifiers.clear()
 	unlocked_achievements.clear()
+	achievement_event_totals.clear()
 	achievement_revision += 1
 	catalog_hide_purchased = {
 		"pitch": false,
@@ -942,6 +963,8 @@ func _clear_pitch_cycle() -> void:
 	pitch_flight_remaining = 0.0
 	pending_volley_flight_duration = 0.0
 	pending_volley_size = 0
+	pending_volley_outcomes.clear()
+	pending_volley_saved_flags.clear()
 	pending_volley_outcome = Content.STRIKE_INDEX
 	pending_volley_saved = false
 	pending_volley_pitch_id = "dead_fish"
@@ -1556,16 +1579,7 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	lifetime_max_pitch_speed_fps = maxf(lifetime_max_pitch_speed_fps, pending_volley_speed_fps)
 	lifetime_max_distance_index = maxi(lifetime_max_distance_index, pending_volley_distance_index)
 	pending_volley_opponent_index = current_opponent
-	pending_volley_outcome = _sample_outcome(get_outcome_probabilities_for_pitch(
-		pending_volley_pitch_id,
-		pending_volley_speed_fps,
-		pending_volley_opponent_index,
-		pending_volley_distance_index
-	))
-	pending_volley_saved = (
-		pending_volley_outcome < Content.HIT_OUTCOME_COUNT
-		and rng.randf() < get_hit_save_chance(pending_volley_outcome)
-	)
+	_sample_pending_volley_interactions(pending_volley_opponent_index)
 	pending_volley_flight_duration = get_resolved_flight_seconds_for_speed(
 		pending_volley_speed_fps,
 		pending_volley_distance_index,
@@ -1591,14 +1605,22 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 
 func _resolve_pending_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	var ball_count := maxi(pending_volley_size, 1)
-	var outcome := pending_volley_outcome
-	var saved := pending_volley_saved
+	var outcomes: Array[int] = pending_volley_outcomes.duplicate()
+	var saved_flags: Array[bool] = pending_volley_saved_flags.duplicate()
+	# Save v24 represented a simultaneous volley with one shared result. Preserve
+	# that exact unresolved interaction if an old generation is loaded.
+	if outcomes.is_empty():
+		for _ball in ball_count:
+			outcomes.append(pending_volley_outcome)
+			saved_flags.append(pending_volley_saved)
 	var release_distance := pending_volley_distance_index
 	# If the player selected another batter during flight, that batter owns the
 	# impact. Distance remains release-time immutable so moving the mound never
 	# teleports a ball or changes its payout after it leaves the hand.
 	var resolved_opponent := current_opponent
 	pending_volley_size = 0
+	pending_volley_outcomes.clear()
+	pending_volley_saved_flags.clear()
 	pitch_flight_remaining = 0.0
 	pending_volley_flight_duration = 0.0
 	pending_volley_outcome = Content.STRIKE_INDEX
@@ -1608,12 +1630,11 @@ func _resolve_pending_volley(summary: Dictionary, elapsed_offset: float) -> void
 	pending_volley_plate_speed_fps = pending_volley_speed_fps
 	pending_volley_drag_per_foot = 0.0
 	_start_new_foreground_timer_phase()
-	_apply_pitch_outcome(
+	_apply_volley_outcomes(
 		summary,
-		outcome,
+		outcomes,
+		saved_flags,
 		elapsed_offset,
-		ball_count,
-		saved,
 		resolved_opponent,
 		release_distance
 	)
@@ -1630,84 +1651,281 @@ func _apply_pitch_outcome(
 	resolved_opponent: int = current_opponent,
 	resolved_distance: int = selected_distance_index
 ) -> void:
+	var outcomes: Array[int] = []
+	var saved_flags: Array[bool] = []
 	var outcome := clampi(requested_outcome, 0, Content.OUTCOME_NAMES.size() - 1)
-	var resolved_balls := maxi(ball_count, 1)
+	for _ball in maxi(ball_count, 1):
+		outcomes.append(outcome)
+		saved_flags.append(
+			bool(saved_override)
+			if saved_override != null
+			else (
+				outcome < Content.HIT_OUTCOME_COUNT
+				and rng.randf() < get_hit_save_chance(outcome, resolved_opponent)
+			)
+		)
+	_apply_volley_outcomes(
+		summary,
+		outcomes,
+		saved_flags,
+		elapsed_offset,
+		resolved_opponent,
+		resolved_distance
+	)
+
+static func _outcome_multiplicity_prefix(count: int) -> String:
+	match count:
+		2:
+			return "DOUBLE"
+		3:
+			return "TRIPLE"
+		4:
+			return "QUADRUPLE"
+		5:
+			return "QUINTUPLE"
+		6:
+			return "SEXTUPLE"
+		7:
+			return "SEPTUPLE"
+		8:
+			return "OCTUPLE"
+		var larger:
+			return "%d×" % larger
+
+static func _format_outcome_group(outcome: int, count: int) -> String:
+	var name := str(Content.OUTCOME_NAMES[clampi(outcome, 0, Content.OUTCOME_NAMES.size() - 1)])
+	return name if count <= 1 else "%s %s" % [_outcome_multiplicity_prefix(count), name]
+
+func _get_combined_hit_call(unsaved_hit_counts: Array[int]) -> String:
+	var total_hits := 0
+	var distinct_hits := 0
+	var total_bases := 0
+	var base_values := [4, 4, 3, 2, 1]
+	for outcome in Content.HIT_OUTCOME_COUNT:
+		var count := maxi(int(unsaved_hit_counts[outcome]), 0)
+		total_hits += count
+		total_bases += count * int(base_values[outcome])
+		if count > 0:
+			distinct_hits += 1
+	if total_hits <= 1 or distinct_hits <= 1:
+		return ""
+	if int(unsaved_hit_counts[Content.GRAND_SLAM_INDEX]) > 0:
+		var grand_slam_bases := int(unsaved_hit_counts[Content.GRAND_SLAM_INDEX]) * 4
+		return "+%d GRAND SLAM" % maxi(total_bases - grand_slam_bases, 0)
+	if int(unsaved_hit_counts[1]) > 0:
+		var home_run_bases := int(unsaved_hit_counts[1]) * 4
+		return "+%d HOME RUN" % maxi(total_bases - home_run_bases, 0)
+	match total_bases:
+		1:
+			return "SINGLE"
+		2:
+			return "DOUBLE"
+		3:
+			return "TRIPLE"
+		var bases:
+			return "%d-BASE HIT" % bases
+
+func _build_volley_call_lines(
+	outcome_counts: Array[int],
+	unsaved_hit_counts: Array[int],
+	struck_out: bool,
+	walked: bool
+) -> Array[Dictionary]:
+	var total_outcomes := 0
+	var distinct_outcomes := 0
+	for count in outcome_counts:
+		total_outcomes += count
+		if count > 0:
+			distinct_outcomes += 1
+	if total_outcomes == 1 and struck_out:
+		return [{"outcome": Content.STRIKE_INDEX, "text": "STRIKEOUT"}]
+	if total_outcomes == 1 and walked:
+		return [{"outcome": Content.BALL_INDEX, "text": "WALK"}]
+	var result: Array[Dictionary] = []
+	for outcome in outcome_counts.size():
+		var count := int(outcome_counts[outcome])
+		if count > 0:
+			result.append({
+				"outcome": outcome,
+				"text": _format_outcome_group(outcome, count),
+			})
+	var combined_hit_call := _get_combined_hit_call(unsaved_hit_counts)
+	if not combined_hit_call.is_empty():
+		var combined_outcome := Content.GRAND_SLAM_INDEX
+		for outcome in Content.HIT_OUTCOME_COUNT:
+			if int(unsaved_hit_counts[outcome]) > 0:
+				combined_outcome = outcome
+				break
+		result.append({"outcome": combined_outcome, "text": "= %s" % combined_hit_call})
+	if struck_out:
+		result.append({"outcome": Content.STRIKE_INDEX, "text": "STRIKEOUT"})
+	elif walked:
+		result.append({"outcome": Content.BALL_INDEX, "text": "WALK"})
+	return result
+
+func get_combined_hit_downtime(unsaved_hit_counts: Array[int]) -> float:
+	var result := get_base_batter_turnover_seconds()
+	for outcome in mini(unsaved_hit_counts.size(), Content.HIT_OUTCOME_COUNT):
+		result += float(maxi(int(unsaved_hit_counts[outcome]), 0)) * get_outcome_turnover_bonus(outcome)
+	return clampf(result, 0.0, MAX_BATTER_DOWNTIME_SECONDS)
+
+func _apply_volley_outcomes(
+	summary: Dictionary,
+	requested_outcomes: Array[int],
+	requested_saved_flags: Array[bool],
+	elapsed_offset := -1.0,
+	resolved_opponent: int = current_opponent,
+	resolved_distance: int = selected_distance_index
+) -> void:
+	var opening_plate_balls := plate_balls
+	var outcomes: Array[int] = requested_outcomes.duplicate()
+	if outcomes.is_empty():
+		outcomes.append(Content.STRIKE_INDEX)
+	var outcome_counts: Array[int] = []
+	outcome_counts.resize(Content.OUTCOME_NAMES.size())
+	outcome_counts.fill(0)
+	var unsaved_hit_counts: Array[int] = []
+	unsaved_hit_counts.resize(Content.HIT_OUTCOME_COUNT)
+	unsaved_hit_counts.fill(0)
+	var normalized_saved_flags: Array[bool] = []
+	var saved_hit_count := 0
+	var unsaved_hit_count := 0
 	var counts: Array = summary.counts
-	counts[outcome] = float(counts[outcome]) + float(resolved_balls)
-	summary.pitches = float(summary.pitches) + float(resolved_balls)
-	var saved := false
+	for ball_index in outcomes.size():
+		var outcome := clampi(outcomes[ball_index], 0, Content.OUTCOME_NAMES.size() - 1)
+		outcomes[ball_index] = outcome
+		var saved := (
+			ball_index < requested_saved_flags.size()
+			and bool(requested_saved_flags[ball_index])
+			and outcome < Content.HIT_OUTCOME_COUNT
+			and outcome != Content.GRAND_SLAM_INDEX
+		)
+		normalized_saved_flags.append(saved)
+		outcome_counts[outcome] += 1
+		counts[outcome] = float(counts[outcome]) + 1.0
+		if outcome < Content.HIT_OUTCOME_COUNT:
+			no_hitter_attempt_valid = false
+			if saved:
+				saved_hit_count += 1
+			else:
+				unsaved_hit_counts[outcome] += 1
+				unsaved_hit_count += 1
+	summary.pitches = float(summary.pitches) + float(outcomes.size())
+	summary.saved_hits = float(summary.saved_hits) + float(saved_hit_count)
+
 	var struck_out := false
 	var walked := false
 	var holds_batter := (
 		resolved_opponent == Content.ALIEN_EXHIBITION_INDEX
 		and genetic_rebirths <= 0
-		and outcome == Content.GRAND_SLAM_INDEX
+		and int(unsaved_hit_counts[Content.GRAND_SLAM_INDEX]) > 0
 	)
 	var story_taunt := ""
-	if outcome < Content.HIT_OUTCOME_COUNT:
-		no_hitter_attempt_valid = false
-	if outcome == Content.STRIKE_INDEX:
-		plate_strikes += resolved_balls
-		if plate_strikes >= get_strikes_required():
-			struck_out = true
-			plate_strikes = 0
-			plate_balls = 0
-			batter_cooldown_remaining = get_batter_downtime(Content.STRIKE_INDEX)
-			batter_replacement_pending = true
-			summary.strikeouts = float(summary.strikeouts) + 1.0
-			consecutive_home_runs = 0
-	elif outcome == Content.FOUL_INDEX:
-		plate_strikes = mini(plate_strikes + resolved_balls, maxi(get_strikes_required() - 1, 0))
-	elif outcome == Content.BALL_INDEX:
-		plate_balls += resolved_balls
-		if plate_balls >= get_balls_required():
-			walked = true
-			plate_strikes = 0
-			plate_balls = 0
-			batter_cooldown_remaining = get_batter_downtime(Content.BALL_INDEX)
-			batter_replacement_pending = true
-			consecutive_home_runs = 0
-	else:
-		saved = (
-			bool(saved_override)
-			if saved_override != null
-			else rng.randf() < get_hit_save_chance(outcome)
-		)
-		if saved:
-			summary.saved_hits = float(summary.saved_hits) + float(resolved_balls)
-		elif holds_batter:
+	var primary_outcome := Content.STRIKE_INDEX
+	var resolved_downtime := 0.0
+	if unsaved_hit_count > 0:
+		for outcome in Content.HIT_OUTCOME_COUNT:
+			if int(unsaved_hit_counts[outcome]) > 0:
+				primary_outcome = outcome
+				break
+		if holds_batter:
 			# Xylophax is not a normal plate appearance. He stays put, resets the
-			# count, and turns each humiliation into visible progress toward HELP.
+			# count, and turns every impossible Grand Slam into visible HELP progress.
 			plate_strikes = 0
 			plate_balls = 0
 			batter_cooldown_remaining = 0.0
 			batter_replacement_pending = false
-			consecutive_home_runs = mini(consecutive_home_runs + 1, 20)
+			var exhibition_grand_slams := maxi(
+				int(unsaved_hit_counts[Content.GRAND_SLAM_INDEX]),
+				1
+			)
+			consecutive_home_runs = mini(consecutive_home_runs + exhibition_grand_slams, 20)
 			var previous_grand_slams := alien_exhibition_grand_slams
 			alien_exhibition_grand_slams = mini(
-				alien_exhibition_grand_slams + 1,
+				alien_exhibition_grand_slams + exhibition_grand_slams,
 				ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
 			)
-			alien_exhibition_seconds = (
-				get_alien_exhibition_progress_ratio() * EXHIBITION_SECONDS
-			)
+			alien_exhibition_seconds = get_alien_exhibition_progress_ratio() * EXHIBITION_SECONDS
 			story_taunt = get_alien_exhibition_taunt(alien_exhibition_grand_slams)
 			if (
 				previous_grand_slams < ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
 				and alien_exhibition_grand_slams >= ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
 			):
-				progression_changed.emit(
-					"Something red has appeared beside the impossible exhibition."
-				)
+				progression_changed.emit("Something red has appeared beside the impossible exhibition.")
 		else:
 			plate_strikes = 0
 			plate_balls = 0
-			batter_cooldown_remaining = get_batter_downtime(outcome)
+			resolved_downtime = get_combined_hit_downtime(unsaved_hit_counts)
+			batter_cooldown_remaining = resolved_downtime
 			batter_replacement_pending = true
-			consecutive_home_runs = mini(consecutive_home_runs + 1, 20)
-	summary.visual_outcome = outcome
+			consecutive_home_runs = mini(
+				consecutive_home_runs
+				+ int(unsaved_hit_counts[Content.GRAND_SLAM_INDEX])
+				+ int(unsaved_hit_counts[1]),
+				20
+			)
+	else:
+		var foul_count := int(outcome_counts[Content.FOUL_INDEX])
+		var called_strike_count := int(outcome_counts[Content.STRIKE_INDEX])
+		var called_ball_count := int(outcome_counts[Content.BALL_INDEX])
+		if foul_count > 0:
+			plate_strikes = mini(
+				plate_strikes + foul_count,
+				maxi(get_strikes_required(resolved_opponent) - 1, 0)
+			)
+		plate_strikes += called_strike_count
+		plate_balls += called_ball_count
+		if called_strike_count > 0:
+			primary_outcome = Content.STRIKE_INDEX
+		elif called_ball_count > 0:
+			primary_outcome = Content.BALL_INDEX
+		elif foul_count > 0:
+			primary_outcome = Content.FOUL_INDEX
+		elif saved_hit_count > 0:
+			for outcome in Content.HIT_OUTCOME_COUNT:
+				if int(outcome_counts[outcome]) > 0:
+					primary_outcome = outcome
+					break
+		# Called Strikes win a simultaneous count race against a walk. Any fair
+		# hit already took priority above both of them.
+		if plate_strikes >= get_strikes_required(resolved_opponent):
+			struck_out = true
+			plate_strikes = 0
+			plate_balls = 0
+			resolved_downtime = get_batter_downtime(Content.STRIKE_INDEX)
+			batter_cooldown_remaining = resolved_downtime
+			batter_replacement_pending = true
+			summary.strikeouts = float(summary.strikeouts) + 1.0
+			consecutive_home_runs = 0
+		elif plate_balls >= get_balls_required(resolved_opponent):
+			walked = true
+			plate_strikes = 0
+			plate_balls = 0
+			resolved_downtime = get_batter_downtime(Content.BALL_INDEX)
+			batter_cooldown_remaining = resolved_downtime
+			batter_replacement_pending = true
+			consecutive_home_runs = 0
+	_record_volley_achievement_events(
+		outcome_counts,
+		unsaved_hit_counts,
+		saved_hit_count,
+		struck_out,
+		resolved_opponent,
+		opening_plate_balls
+	)
+	var call_lines := _build_volley_call_lines(
+		outcome_counts,
+		unsaved_hit_counts,
+		struck_out,
+		walked
+	)
+	var call_text_parts: Array[String] = []
+	for line in call_lines:
+		call_text_parts.append(str(line.text))
+	var call_text := " • ".join(call_text_parts)
+	summary.visual_outcome = primary_outcome
 	summary.visual_strikeout = struck_out
-	summary.visual_saved = saved
+	summary.visual_saved = saved_hit_count > 0 and unsaved_hit_count == 0
 	summary.visual_xp = (
 		get_strikeout_base_points(resolved_opponent)
 		* get_xp_multiplier(resolved_opponent, resolved_distance)
@@ -1722,10 +1940,10 @@ func _apply_pitch_outcome(
 	summary["resolved_distance_index"] = resolved_distance
 	if summary.has("frustration_events"):
 		var frustration_events: Array = summary.frustration_events
-		frustration_events.append({
-			"outcome": outcome,
-			"strikeout": struck_out,
-		})
+		for outcome in outcomes:
+			frustration_events.append({"outcome": outcome, "strikeout": false})
+		if struck_out:
+			frustration_events.append({"outcome": Content.STRIKE_INDEX, "strikeout": true})
 	# Outcomes are emitted only now, at impact. The release event intentionally
 	# contains no result, so neither the UI nor the pitcher cadence can reveal a
 	# hit before the ball reaches the batter.
@@ -1738,10 +1956,15 @@ func _apply_pitch_outcome(
 				if elapsed_offset < 0.0
 				else elapsed_offset
 			),
-			"outcome": outcome,
+			"outcome": primary_outcome,
+			"outcomes": outcomes,
+			"saved_flags": normalized_saved_flags,
+			"outcome_counts": outcome_counts,
+			"call_lines": call_lines,
+			"call_text": call_text,
 			"strikeout": struck_out,
 			"walk": walked,
-			"saved": saved,
+			"saved": summary.visual_saved,
 			"xp": summary.visual_xp,
 			"strike_count": plate_strikes,
 			"plate_ball_count": plate_balls,
@@ -1749,11 +1972,90 @@ func _apply_pitch_outcome(
 			"ball_requirement": get_balls_required(),
 			"opponent_index": resolved_opponent,
 			"distance_index": resolved_distance,
-				"ball_count": resolved_balls,
+			"ball_count": outcomes.size(),
+			"opponent_bat_count": get_opponent_bat_count(resolved_opponent),
+			"batter_downtime": resolved_downtime,
 				"holds_batter": holds_batter,
 				"story_taunt": story_taunt,
-				"alien_exhibition_grand_slams": alien_exhibition_grand_slams,
+			"alien_exhibition_grand_slams": alien_exhibition_grand_slams,
 			})
+
+func _increment_achievement_event(id: String, amount := 1.0) -> void:
+	achievement_event_totals[id] = minf(
+		float(achievement_event_totals.get(id, 0.0)) + maxf(amount, 0.0),
+		MAX_NUMBER
+	)
+
+func _record_volley_achievement_events(
+	outcome_counts: Array[int],
+	unsaved_hit_counts: Array[int],
+	saved_hit_count: int,
+	struck_out: bool,
+	resolved_opponent: int,
+	opening_plate_balls: int
+) -> void:
+	var volley_size := 0
+	var distinct_outcomes := 0
+	for count in outcome_counts:
+		volley_size += maxi(int(count), 0)
+		if int(count) > 0:
+			distinct_outcomes += 1
+	var called_strikes := int(outcome_counts[Content.STRIKE_INDEX])
+	var called_balls := int(outcome_counts[Content.BALL_INDEX])
+	var unsaved_hits := 0
+	var distinct_unsaved_hits := 0
+	for count in unsaved_hit_counts:
+		unsaved_hits += maxi(int(count), 0)
+		if int(count) > 0:
+			distinct_unsaved_hits += 1
+	if volley_size > get_opponent_bat_count(resolved_opponent):
+		_increment_achievement_event("bat_overload")
+	if called_strikes >= 2:
+		_increment_achievement_event("double_strike_volley")
+	if called_strikes >= 3:
+		_increment_achievement_event("triple_strike_volley")
+	if called_strikes >= 1000:
+		_increment_achievement_event("thousand_strike_volley")
+	if called_strikes > 0 and unsaved_hits > 0:
+		_increment_achievement_event("hit_and_strike_volley")
+	if called_strikes > 0 and int(unsaved_hit_counts[Content.GRAND_SLAM_INDEX]) > 0:
+		_increment_achievement_event("grand_slam_and_strike")
+	if int(unsaved_hit_counts[4]) >= 3:
+		_increment_achievement_event("triple_single_volley")
+	if distinct_unsaved_hits >= 2:
+		_increment_achievement_event("mixed_hit_combo")
+	if called_strikes > 0 and saved_hit_count > 0:
+		_increment_achievement_event("saved_hit_and_strike")
+	if saved_hit_count >= 8:
+		_increment_achievement_event("eight_saved_hits_volley")
+	if distinct_outcomes >= 4:
+		_increment_achievement_event("rainbow_volley")
+	if distinct_outcomes >= Content.OUTCOME_NAMES.size():
+		_increment_achievement_event("all_outcome_volley")
+	if not struck_out:
+		return
+	if volley_size > 1:
+		_increment_achievement_event("multi_ball_strikeout")
+	if opening_plate_balls + called_balls >= get_balls_required(resolved_opponent):
+		_increment_achievement_event("simultaneous_walk_strikeout")
+	if resolved_opponent == 0 and genetic_rebirths > 0:
+		_increment_achievement_event("post_rebirth_toddler_strikeout")
+		if get_arm_count() >= 2.0:
+			_increment_achievement_event("multi_arm_toddler_strikeout")
+		if get_arm_count() >= 8.0:
+			_increment_achievement_event("eight_arm_toddler_strikeout")
+	if resolved_opponent == Content.HUMAN_FINAL_INDEX and genetic_rebirths > 0:
+		_increment_achievement_event("posthuman_human_champion_strikeout")
+	if (
+		resolved_opponent == 33
+		and volley_size > get_opponent_bat_count(resolved_opponent)
+	):
+		_increment_achievement_event("fourfold_overwhelmed")
+	if (
+		resolved_opponent == Content.FINAL_BOSS_INDEX
+		and volley_size > get_opponent_bat_count(resolved_opponent)
+	):
+		_increment_achievement_event("octathulhu_overwhelmed")
 
 func _resolve_aggregate_time(
 	seconds: float,
@@ -1795,7 +2097,7 @@ func _resolve_aggregate_time(
 		aggregate_frustration = minf(
 			MAX_NUMBER,
 			aggregate_frustration
-			+ active_volleys * float(probabilities[index]) * get_outcome_frustration_points(index)
+			+ active_pitches * float(probabilities[index]) * get_outcome_frustration_points(index)
 		)
 	summary.pitches = minf(float(summary.pitches) + active_pitches, MAX_NUMBER)
 	summary.strikeouts = minf(float(summary.strikeouts) + strikeouts, MAX_NUMBER)
@@ -1823,14 +2125,13 @@ func _resolve_aggregate_time(
 		batter_replacement_pending = false
 		_clear_pitch_cycle()
 	else:
-		plate_strikes = (
-			int(floor(active_volleys * (
-				float(probabilities[Content.STRIKE_INDEX])
+		plate_strikes = int(floor(active_pitches * (
+			float(probabilities[Content.STRIKE_INDEX])
 				+ float(probabilities[Content.FOUL_INDEX]) * 0.5
-			)))
-			* get_volley_size()
-		) % maxi(requirement, 1)
-		plate_balls = int(floor(active_volleys * float(probabilities[Content.BALL_INDEX]))) % maxi(get_balls_required(), 1)
+		))) % maxi(requirement, 1)
+		plate_balls = int(floor(
+			active_pitches * float(probabilities[Content.BALL_INDEX])
+		)) % maxi(get_balls_required(), 1)
 		batter_cooldown_remaining = 0.0
 		_clear_pitch_cycle()
 		if cycles >= 1.0:
@@ -1878,7 +2179,6 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, reward_multiplier
 	for index in mini(counts.size(), result_totals.size()):
 		result_totals[index] = minf(MAX_NUMBER, result_totals[index] + float(counts[index]))
 	var reward_opponent := clampi(int(summary.get("resolved_opponent_index", current_opponent)), 0, opponents.size() - 1)
-	var reward_distance := int(summary.get("resolved_distance_index", selected_distance_index))
 	var base_score := minf(strikeouts * get_strikeout_base_points(reward_opponent), MAX_NUMBER)
 	var called_strikes := maxf(float(counts[Content.STRIKE_INDEX]), 0.0)
 	# A normal completed count is worth the same mastery it was before, but its
@@ -1893,7 +2193,7 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, reward_multiplier
 		MAX_NUMBER
 	)
 	var mastery_gained := minf(raw_mastery_gained * maxf(reward_multiplier, 0.0), MAX_NUMBER)
-	var raw_earned_xp := minf(base_score * get_xp_multiplier(reward_opponent, reward_distance), MAX_NUMBER)
+	var raw_earned_xp := minf(base_score * get_xp_multiplier(reward_opponent), MAX_NUMBER)
 	var earned_xp := minf(raw_earned_xp * maxf(reward_multiplier, 0.0), MAX_NUMBER)
 	summary.base_score = base_score
 	summary.raw_mastery_gained = raw_mastery_gained
@@ -2427,7 +2727,7 @@ func get_loot_item_stat_lines(item: Dictionary) -> Array[String]:
 			continue
 		var value := float(stats[stat_id])
 		if str(definition.format) == "additive":
-			lines.append("%s +%.3f" % [definition.name, value])
+			lines.append("%s %s" % [definition.name, format_rating(value, true)])
 		else:
 			lines.append("%s ×%.3f" % [definition.name, 1.0 + value])
 	return lines
@@ -2493,13 +2793,13 @@ func get_equipment_bonuses() -> Dictionary:
 
 func get_equipment_bonus_summary(raw := false) -> String:
 	var bonuses := get_raw_equipment_bonuses() if raw else get_equipment_bonuses()
-	return "Speed ×%.3f • Recovery ×%.3f • Quality +%.3f • XP ×%.3f • Mastery ×%.3f • Distance ×%.3f" % [
+	return "Speed ×%.3f • Recovery ×%.3f • Quality %s • XP ×%.3f • Mastery ×%.3f • Distance threat ×%.3f" % [
 		1.0 + float(bonuses.speed_bonus),
 		1.0 + float(bonuses.rate_bonus),
-		float(bonuses.quality_bonus),
+		format_rating(float(bonuses.quality_bonus), true),
 		1.0 + float(bonuses.xp_bonus),
 		1.0 + float(bonuses.mastery_bonus),
-		1.0 + float(bonuses.distance_bonus),
+		1.0 / (1.0 + float(bonuses.distance_bonus)),
 	]
 
 func get_equipped_loot_count() -> int:
@@ -2550,6 +2850,80 @@ func _sample_outcome(probabilities: Array[float]) -> int:
 		if roll <= cumulative:
 			return index
 	return Content.STRIKE_INDEX
+
+func get_opponent_bat_count(opponent_index: int = current_opponent) -> int:
+	var bounded := clampi(opponent_index, 0, Content.OPPONENT_BAT_COUNTS.size() - 1)
+	return maxi(int(Content.OPPONENT_BAT_COUNTS[bounded]), 1)
+
+func _apply_bat_overload_penalty(
+	base_probabilities: Array[float],
+	ball_index: int,
+	opponent_index: int = current_opponent
+) -> Array[float]:
+	var result: Array[float] = base_probabilities.duplicate()
+	var uncovered_depth := ball_index - get_opponent_bat_count(opponent_index) + 1
+	if uncovered_depth <= 0:
+		return result
+	var contact_multiplier := pow(
+		BAT_OVERLOAD_CONTACT_REMAINING,
+		float(uncovered_depth)
+	)
+	var removed_contact := 0.0
+	for outcome in Content.HIT_OUTCOME_COUNT:
+		var original := float(result[outcome])
+		result[outcome] = original * contact_multiplier
+		removed_contact += original - float(result[outcome])
+	var original_foul := float(result[Content.FOUL_INDEX])
+	result[Content.FOUL_INDEX] = original_foul * contact_multiplier
+	removed_contact += original_foul - float(result[Content.FOUL_INDEX])
+	result[Content.STRIKE_INDEX] = float(result[Content.STRIKE_INDEX]) + removed_contact
+	return result
+
+func get_outcome_probabilities_for_volley_ball(
+	pitch_id: String,
+	pitch_speed_fps: float,
+	ball_index: int,
+	opponent_index: int = current_opponent,
+	distance_index: int = -1
+) -> Array[float]:
+	return _apply_bat_overload_penalty(
+		get_outcome_probabilities_for_pitch(
+			pitch_id,
+			pitch_speed_fps,
+			opponent_index,
+			distance_index
+		),
+		maxi(ball_index, 0),
+		opponent_index
+	)
+
+func _sample_pending_volley_interactions(opponent_index: int) -> void:
+	pending_volley_outcomes.clear()
+	pending_volley_saved_flags.clear()
+	for ball_index in maxi(pending_volley_size, 1):
+		var outcome := _sample_outcome(get_outcome_probabilities_for_volley_ball(
+			pending_volley_pitch_id,
+			pending_volley_speed_fps,
+			ball_index,
+			opponent_index,
+			pending_volley_distance_index
+		))
+		var saved := (
+			outcome < Content.HIT_OUTCOME_COUNT
+			and rng.randf() < get_hit_save_chance(outcome, opponent_index)
+		)
+		pending_volley_outcomes.append(outcome)
+		pending_volley_saved_flags.append(saved)
+	pending_volley_outcome = (
+		pending_volley_outcomes[0]
+		if not pending_volley_outcomes.is_empty()
+		else Content.STRIKE_INDEX
+	)
+	pending_volley_saved = (
+		pending_volley_saved_flags[0]
+		if not pending_volley_saved_flags.is_empty()
+		else false
+	)
 
 func get_pitch_selection_entries() -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
@@ -2711,18 +3085,33 @@ func get_outcome_probabilities_for_pitch(
 			result[Content.STRIKE_INDEX] = HUMAN_CALLED_STRIKE_FLOOR
 	return result
 
-func get_outcome_probabilities(opponent_index: int = current_opponent) -> Array[float]:
+func _get_covered_ball_outcome_probabilities(opponent_index: int) -> Array[float]:
 	var result: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	for entry in get_pitch_selection_entries():
 		var pitch_id := str(entry.id)
+		var pitch_speed := get_representative_pitch_speed(pitch_id)
 		var pitch_probabilities := get_outcome_probabilities_for_pitch(
 			pitch_id,
-			get_representative_pitch_speed(pitch_id),
+			pitch_speed,
 			opponent_index,
 			selected_distance_index
 		)
 		for index in result.size():
 			result[index] += float(pitch_probabilities[index]) * float(entry.probability)
+	return result
+
+func get_outcome_probabilities(opponent_index: int = current_opponent) -> Array[float]:
+	var result: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	var volley_size := maxi(get_volley_size(), 1)
+	var covered_probabilities := _get_covered_ball_outcome_probabilities(opponent_index)
+	for ball_index in volley_size:
+		var ball_probabilities := _apply_bat_overload_penalty(
+			covered_probabilities,
+			ball_index,
+			opponent_index
+		)
+		for index in result.size():
+			result[index] += float(ball_probabilities[index]) / float(volley_size)
 	return result
 
 func get_base_strikes_required(opponent_index: int = current_opponent) -> int:
@@ -2899,25 +3288,124 @@ func get_seconds_until_next_pitch() -> float:
 	return maxf(1.0 - get_pitch_cycle_progress(), 0.0) / maxf(get_recovery_rate(), 0.000001)
 
 func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
-	var probabilities := get_outcome_probabilities(opponent_index)
 	var strike_requirement := get_strikes_required(opponent_index)
 	var ball_requirement := get_balls_required(opponent_index)
 	var volley_size := maxi(get_volley_size(), 1)
-	var fair_terminal: Array[float] = []
-	fair_terminal.resize(Content.HIT_OUTCOME_COUNT)
-	fair_terminal.fill(0.0)
-	var saved_fair_probability := 0.0
+	var covered_probabilities := _get_covered_ball_outcome_probabilities(opponent_index)
+	var per_ball_probabilities: Array[Array] = []
+	var probabilities: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	var save_chances: Array[float] = []
 	for outcome in Content.HIT_OUTCOME_COUNT:
-		var saved_probability := (
-			float(probabilities[outcome])
-			* get_hit_save_chance(outcome, opponent_index)
+		save_chances.append(get_hit_save_chance(outcome, opponent_index))
+	var expected_saved_hits_per_volley := 0.0
+	var no_unsaved_hit_probability := 1.0
+	# Primary hit calls use baseball severity order. The difference between two
+	# adjacent "none of these hit types occurred" products is the probability
+	# that this outcome is the strongest unsaved contact in the volley.
+	var no_stronger_hit_products: Array[float] = []
+	no_stronger_hit_products.resize(Content.HIT_OUTCOME_COUNT + 1)
+	no_stronger_hit_products.fill(1.0)
+	var expected_hit_bonus_per_volley := 0.0
+	for ball_index in volley_size:
+		var ball_probabilities := _apply_bat_overload_penalty(
+			covered_probabilities,
+			ball_index,
+			opponent_index
 		)
-		saved_fair_probability += saved_probability
-		fair_terminal[outcome] = maxf(float(probabilities[outcome]) - saved_probability, 0.0)
+		per_ball_probabilities.append(ball_probabilities)
+		for outcome in probabilities.size():
+			probabilities[outcome] += float(ball_probabilities[outcome]) / float(volley_size)
+		var cumulative_unsaved_hit := 0.0
+		for outcome in Content.HIT_OUTCOME_COUNT:
+			var unsaved_probability := (
+				float(ball_probabilities[outcome])
+				* (1.0 - float(save_chances[outcome]))
+			)
+			var saved_probability := float(ball_probabilities[outcome]) - unsaved_probability
+			expected_saved_hits_per_volley += saved_probability
+			expected_hit_bonus_per_volley += (
+				unsaved_probability * get_outcome_turnover_bonus(outcome)
+			)
+			cumulative_unsaved_hit += unsaved_probability
+			no_stronger_hit_products[outcome + 1] *= maxf(1.0 - cumulative_unsaved_hit, 0.0)
+		no_unsaved_hit_probability *= maxf(1.0 - cumulative_unsaved_hit, 0.0)
 
-	# Exact absorbing count model. Every transient state is (strikes, Balls).
-	# Transitions only increase one count, apart from self-loops caused by saved
-	# hits and two-strike Fouls, so descending dynamic programming is sufficient.
+	var cache_parts: Array[String] = [
+		str(opponent_index), str(strike_requirement), str(ball_requirement),
+		str(volley_size), str(get_opponent_bat_count(opponent_index)),
+		str(get_automatic_timer_seconds(get_pitch_cooldown_seconds())),
+		str(get_automatic_timer_seconds(get_resolved_flight_seconds())),
+	]
+	for value in covered_probabilities:
+		cache_parts.append(str(float(value)))
+	for value in save_chances:
+		cache_parts.append(str(float(value)))
+	for outcome in Content.OUTCOME_NAMES.size():
+		cache_parts.append(str(get_automatic_timer_seconds(get_batter_downtime(outcome))))
+	var cache_key := "|".join(cache_parts)
+	if str(at_bat_metrics_cache.get("key", "")) == cache_key:
+		return (at_bat_metrics_cache.get("value", {}) as Dictionary).duplicate(true)
+
+	var hit_terminal_probabilities: Array[float] = []
+	hit_terminal_probabilities.resize(Content.HIT_OUTCOME_COUNT)
+	hit_terminal_probabilities.fill(0.0)
+	for outcome in Content.HIT_OUTCOME_COUNT:
+		hit_terminal_probabilities[outcome] = maxf(
+			float(no_stronger_hit_products[outcome])
+				- float(no_stronger_hit_products[outcome + 1]),
+			0.0
+		)
+
+	# Conditional on no unsaved fair hit, reduce a whole volley to the only count
+	# information that matters: total Foul/Strike advances, whether at least one
+	# called Strike exists (Fouls alone cannot strike out), and Balls. This stays
+	# compact even for the final 2,048-ball salvos.
+	var increment_distribution := {"0:0:0": 1.0}
+	if no_unsaved_hit_probability > 1.0e-300:
+		for ball_probabilities in per_ball_probabilities:
+			var unsaved_hit_probability := 0.0
+			var saved_hit_probability := 0.0
+			for outcome in Content.HIT_OUTCOME_COUNT:
+				var outcome_probability := float(ball_probabilities[outcome])
+				var saved_probability := outcome_probability * float(save_chances[outcome])
+				saved_hit_probability += saved_probability
+				unsaved_hit_probability += outcome_probability - saved_probability
+			var non_hit_probability := maxf(1.0 - unsaved_hit_probability, 0.0)
+			if non_hit_probability <= 1.0e-15:
+				increment_distribution.clear()
+				break
+			var no_op_probability := saved_hit_probability / non_hit_probability
+			var foul_probability := float(ball_probabilities[Content.FOUL_INDEX]) / non_hit_probability
+			var ball_probability := float(ball_probabilities[Content.BALL_INDEX]) / non_hit_probability
+			var strike_probability := float(ball_probabilities[Content.STRIKE_INDEX]) / non_hit_probability
+			var next_distribution := {}
+			for key_value in increment_distribution:
+				var key := str(key_value)
+				var parts := key.split(":")
+				var total_advances := int(parts[0])
+				var has_called_strike := int(parts[1])
+				var ball_advances := int(parts[2])
+				var state_probability := float(increment_distribution[key])
+				_add_probability(next_distribution, key, state_probability * no_op_probability)
+				_add_probability(
+					next_distribution,
+					"%d:%d:%d" % [mini(total_advances + 1, strike_requirement), has_called_strike, ball_advances],
+					state_probability * foul_probability
+				)
+				_add_probability(
+					next_distribution,
+					"%d:1:%d" % [mini(total_advances + 1, strike_requirement), ball_advances],
+					state_probability * strike_probability
+				)
+				_add_probability(
+					next_distribution,
+					"%d:%d:%d" % [total_advances, has_called_strike, mini(ball_advances + 1, ball_requirement)],
+					state_probability * ball_probability
+				)
+			increment_distribution = next_distribution
+
+	# Exact absorbing count model. Every transient state is (strikes, Balls), and
+	# every transition represents one independently rolled simultaneous volley.
 	var states := {}
 	for strike_count in range(strike_requirement - 1, -1, -1):
 		for ball_count in range(ball_requirement - 1, -1, -1):
@@ -2925,50 +3413,48 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 			absorption.resize(Content.OUTCOME_NAMES.size())
 			absorption.fill(0.0)
 			for outcome in Content.HIT_OUTCOME_COUNT:
-				absorption[outcome] = fair_terminal[outcome]
-			var self_probability := saved_fair_probability
+				absorption[outcome] = hit_terminal_probabilities[outcome]
+			var self_probability := 0.0
 			var expected_volleys_numerator := 1.0
-			var expected_saved_hits_numerator := saved_fair_probability * float(volley_size)
-
-			var foul_probability := float(probabilities[Content.FOUL_INDEX])
-			var foul_strikes := mini(strike_count + volley_size, strike_requirement - 1)
-			if foul_strikes == strike_count:
-				self_probability += foul_probability
-			else:
-				var foul_state: Dictionary = states["%d:%d" % [foul_strikes, ball_count]]
-				expected_volleys_numerator += foul_probability * float(foul_state.expected_volleys)
-				expected_saved_hits_numerator += foul_probability * float(foul_state.expected_saved_hits)
+			for increment_key_value in increment_distribution:
+				var increment_key := str(increment_key_value)
+				var parts := increment_key.split(":")
+				var total_advances := int(parts[0])
+				var has_called_strike := int(parts[1]) > 0
+				var ball_advances := int(parts[2])
+				var transition_probability := (
+					float(increment_distribution[increment_key])
+					* no_unsaved_hit_probability
+				)
+				if transition_probability <= 1.0e-18:
+					continue
+				var strikes_after := (
+					strike_count + total_advances
+					if has_called_strike
+					else mini(strike_count + total_advances, strike_requirement - 1)
+				)
+				var balls_after := ball_count + ball_advances
+				if has_called_strike and strikes_after >= strike_requirement:
+					absorption[Content.STRIKE_INDEX] += transition_probability
+					continue
+				if balls_after >= ball_requirement:
+					absorption[Content.BALL_INDEX] += transition_probability
+					continue
+				strikes_after = mini(strikes_after, strike_requirement - 1)
+				balls_after = mini(balls_after, ball_requirement - 1)
+				if strikes_after == strike_count and balls_after == ball_count:
+					self_probability += transition_probability
+					continue
+				var next_state: Dictionary = states["%d:%d" % [strikes_after, balls_after]]
+				expected_volleys_numerator += transition_probability * float(next_state.expected_volleys)
 				for outcome in absorption.size():
-					absorption[outcome] += foul_probability * float((foul_state.absorption as Array)[outcome])
-
-			var ball_probability := float(probabilities[Content.BALL_INDEX])
-			var next_ball_count := ball_count + volley_size
-			if next_ball_count >= ball_requirement:
-				absorption[Content.BALL_INDEX] += ball_probability
-			else:
-				var ball_state: Dictionary = states["%d:%d" % [strike_count, next_ball_count]]
-				expected_volleys_numerator += ball_probability * float(ball_state.expected_volleys)
-				expected_saved_hits_numerator += ball_probability * float(ball_state.expected_saved_hits)
-				for outcome in absorption.size():
-					absorption[outcome] += ball_probability * float((ball_state.absorption as Array)[outcome])
-
-			var strike_probability := float(probabilities[Content.STRIKE_INDEX])
-			var next_strike_count := strike_count + volley_size
-			if next_strike_count >= strike_requirement:
-				absorption[Content.STRIKE_INDEX] += strike_probability
-			else:
-				var strike_state: Dictionary = states["%d:%d" % [next_strike_count, ball_count]]
-				expected_volleys_numerator += strike_probability * float(strike_state.expected_volleys)
-				expected_saved_hits_numerator += strike_probability * float(strike_state.expected_saved_hits)
-				for outcome in absorption.size():
-					absorption[outcome] += strike_probability * float((strike_state.absorption as Array)[outcome])
+					absorption[outcome] += transition_probability * float((next_state.absorption as Array)[outcome])
 
 			var escape_probability := 1.0 - self_probability
 			if escape_probability <= 1.0e-15:
 				states["%d:%d" % [strike_count, ball_count]] = {
 					"absorption": absorption,
 					"expected_volleys": MAX_NUMBER,
-					"expected_saved_hits": MAX_NUMBER,
 				}
 				continue
 			for outcome in absorption.size():
@@ -2976,7 +3462,6 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 			states["%d:%d" % [strike_count, ball_count]] = {
 				"absorption": absorption,
 				"expected_volleys": minf(expected_volleys_numerator / escape_probability, MAX_NUMBER),
-				"expected_saved_hits": minf(expected_saved_hits_numerator / escape_probability, MAX_NUMBER),
 			}
 
 	var opening_state: Dictionary = states.get("0:0", {})
@@ -2984,7 +3469,7 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 		var impossible_terminal_probabilities: Array[float] = []
 		impossible_terminal_probabilities.resize(Content.OUTCOME_NAMES.size())
 		impossible_terminal_probabilities.fill(0.0)
-		return {
+		var impossible_result := {
 			"probabilities": probabilities,
 			"terminal_probabilities": impossible_terminal_probabilities,
 			"saved_hit_probability": 0.0,
@@ -2996,6 +3481,8 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 			"strikeouts_per_second": 0.0,
 			"active_pitches_per_second": 0.0,
 		}
+		at_bat_metrics_cache = {"key": cache_key, "value": impossible_result.duplicate(true)}
+		return impossible_result
 	var terminal_probabilities: Array = opening_state.absorption
 	var strikeout_probability := float(terminal_probabilities[Content.STRIKE_INDEX])
 	var terminal_hit_probability := 0.0
@@ -3004,24 +3491,31 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 	var active_volleys := float(opening_state.expected_volleys)
 	var active_pitches := minf(active_volleys * float(volley_size), MAX_NUMBER)
 	var saved_hit_probability := clampf(
-		float(opening_state.expected_saved_hits) / maxf(active_pitches, 0.000001),
+		expected_saved_hits_per_volley / float(volley_size),
 		0.0,
 		1.0
 	)
-	var expected_downtime := 0.0
-	for outcome in terminal_probabilities.size():
-		if outcome == Content.FOUL_INDEX:
-			continue
-		expected_downtime += (
-			float(terminal_probabilities[outcome])
-			* get_automatic_timer_seconds(get_batter_downtime(outcome))
+	var conditional_hit_downtime := 0.0
+	var per_volley_hit_probability := 1.0 - no_unsaved_hit_probability
+	if per_volley_hit_probability > 1.0e-15:
+		conditional_hit_downtime = (
+			get_base_batter_turnover_seconds()
+			+ expected_hit_bonus_per_volley / per_volley_hit_probability
 		)
+	var expected_downtime := (
+		terminal_hit_probability
+			* get_automatic_timer_seconds(conditional_hit_downtime)
+		+ strikeout_probability
+			* get_automatic_timer_seconds(get_batter_downtime(Content.STRIKE_INDEX))
+		+ float(terminal_probabilities[Content.BALL_INDEX])
+			* get_automatic_timer_seconds(get_batter_downtime(Content.BALL_INDEX))
+	)
 	var active_volley_seconds := (
 		get_automatic_timer_seconds(get_pitch_cooldown_seconds())
 		+ get_automatic_timer_seconds(get_resolved_flight_seconds())
 	)
 	var cycle_seconds := active_volleys * active_volley_seconds + expected_downtime
-	return {
+	var result := {
 		"probabilities": probabilities,
 		"terminal_probabilities": terminal_probabilities,
 		"saved_hit_probability": saved_hit_probability,
@@ -3033,6 +3527,13 @@ func get_at_bat_metrics(opponent_index: int = current_opponent) -> Dictionary:
 		"strikeouts_per_second": strikeout_probability / maxf(cycle_seconds, 0.000001),
 		"active_pitches_per_second": active_pitches / maxf(cycle_seconds, 0.000001),
 	}
+	at_bat_metrics_cache = {"key": cache_key, "value": result.duplicate(true)}
+	return result
+
+static func _add_probability(target: Dictionary, key: String, amount: float) -> void:
+	if amount <= 1.0e-18:
+		return
+	target[key] = float(target.get(key, 0.0)) + amount
 
 func get_strikeout_chance_per_at_bat(opponent_index: int = current_opponent) -> float:
 	return float(get_at_bat_metrics(opponent_index).strikeout_probability)
@@ -3423,7 +3924,7 @@ func get_prestige_income_multiplier() -> float:
 		MAX_NUMBER
 	)
 
-func get_xp_multiplier(opponent_index: int = current_opponent, distance_index: int = -1) -> float:
+func get_xp_multiplier(opponent_index: int = current_opponent, _distance_index: int = -1) -> float:
 	var bounded_index := clampi(opponent_index, 0, opponents.size() - 1)
 	var equipment := get_equipment_bonuses()
 	return minf(
@@ -3431,7 +3932,6 @@ func get_xp_multiplier(opponent_index: int = current_opponent, distance_index: i
 		float(opponents[bounded_index].reward)
 		* get_prestige_income_multiplier()
 		* get_pitch_potency()
-		* get_distance_xp_multiplier_for_index(distance_index)
 		* get_opponent_farm_xp_multiplier(bounded_index)
 		* get_body_growth_effect_multiplier("xp")
 		* (1.0 + float(maxi(int(training_levels.get("xp_training", 0)), 0)) * XP_TRAINING_PER_RANK)
@@ -3577,6 +4077,16 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			return 1.0 if cosmos_conquered or divine_ascensions > 0 else 0.0
 		"human_champion_toddler":
 			return 1.0 if human_league_completed_as_toddler else 0.0
+		"event":
+			return float(achievement_event_totals.get(str(key), 0.0))
+		"human_final_strikeout_certainty":
+			return (
+				1.0
+				if genetic_rebirths > 0
+				and current_opponent == Content.HUMAN_FINAL_INDEX
+				and get_strikeout_chance_per_at_bat(Content.HUMAN_FINAL_INDEX) >= 0.99
+				else 0.0
+			)
 		"no_hitter":
 			return 1.0 if cosmos_conquered and no_hitter_attempt_valid else 0.0
 		"divine_ascensions":
@@ -3608,7 +4118,7 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
 		"training", "body_growth", "genetic_upgrade", "eldritch_upgrade":
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
-		"genetic_offer", "eldritch_offer", "relic_owned", "illegal_pitch", "cosmos", "human_champion_toddler", "no_hitter":
+		"genetic_offer", "eldritch_offer", "relic_owned", "illegal_pitch", "cosmos", "human_champion_toddler", "no_hitter", "event", "human_final_strikeout_certainty":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
 	return {
 		"current": current,
@@ -3753,26 +4263,21 @@ func set_distance_index(_index: int) -> bool:
 	# older callers and imported saves, but always restore the level's range.
 	return _sync_distance_to_current_opponent()
 
-func get_distance_xp_multiplier_for_index(distance_index: int = -1) -> float:
-	var bounded := selected_distance_index if distance_index < 0 else clampi(
-		distance_index,
-		0,
-		Content.DISTANCE_TIERS.size() - 1
-	)
-	return minf(
-		float(Content.DISTANCE_TIERS[bounded].xp_multiplier)
-		* (1.0 + float(get_equipment_bonuses().distance_bonus)),
-		MAX_NUMBER
-	)
+func get_distance_xp_multiplier_for_index(_distance_index: int = -1) -> float:
+	# Kept as a source/save compatibility shim for older UI and tests. Range is
+	# now prescribed by the level and never changes XP.
+	return 1.0
 
 func get_distance_xp_multiplier() -> float:
 	return get_distance_xp_multiplier_for_index(selected_distance_index)
 
 func get_distance_penalty_multiplier() -> float:
 	var rank := maxi(int(training_levels.get("distance_control", 0)), 0)
-	return DISTANCE_MIN_FACTOR + (
+	var trained_factor := DISTANCE_MIN_FACTOR + (
 		1.0 - DISTANCE_MIN_FACTOR
 	) * pow(DISTANCE_REMAINING_PER_RANK, float(rank))
+	var equipment_control := maxf(float(get_equipment_bonuses().distance_bonus), 0.0)
+	return maxf(trained_factor / (1.0 + equipment_control), 0.0)
 
 func get_distance_difficulty_for_index(distance_index: int = -1) -> float:
 	var bounded := selected_distance_index if distance_index < 0 else clampi(
@@ -3900,16 +4405,7 @@ func set_current_opponent(index: int) -> bool:
 		# pitch type. Only the batter interaction is resampled for the newly chosen
 		# target, which is still unknown to the player until impact.
 		pending_volley_opponent_index = current_opponent
-		pending_volley_outcome = _sample_outcome(get_outcome_probabilities_for_pitch(
-			pending_volley_pitch_id,
-			pending_volley_speed_fps,
-			current_opponent,
-			pending_volley_distance_index
-		))
-		pending_volley_saved = (
-			pending_volley_outcome < Content.HIT_OUTCOME_COUNT
-			and rng.randf() < get_hit_save_chance(pending_volley_outcome, current_opponent)
-		)
+		_sample_pending_volley_interactions(current_opponent)
 	progression_changed.emit("Now pitching to %s." % opponents[index].name)
 	return true
 
@@ -4303,6 +4799,7 @@ func get_milestone_cost(id: String) -> float:
 	)
 	return rounded_cost(
 		float(definition.cost)
+		* MILESTONE_COST_MULTIPLIER
 		* premium_multiplier
 	)
 
@@ -4788,7 +5285,7 @@ func decode_save_text(text: String) -> Dictionary:
 		}
 	var dictionary_fields := [
 		"training_levels", "genetic_levels", "eldritch_levels", "equipped_loot",
-		"catalog_hide_purchased",
+		"catalog_hide_purchased", "achievement_event_totals",
 	]
 	for field in dictionary_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_DICTIONARY:
@@ -4796,6 +5293,7 @@ func decode_save_text(text: String) -> Dictionary:
 	var array_fields := [
 		"loot_items", "divine_blessings", "unlocked_pitches", "purchased_ball_upgrades",
 		"purchased_milestones", "purchased_body_modifiers", "opponent_mastery", "result_totals", "unlocked_achievements",
+		"pending_volley_outcomes", "pending_volley_saved_flags",
 	]
 	for field in array_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_ARRAY:
@@ -4910,6 +5408,8 @@ func to_save_data() -> Dictionary:
 		"pitch_flight_remaining": pitch_flight_remaining,
 		"pending_volley_flight_duration": pending_volley_flight_duration,
 		"pending_volley_size": pending_volley_size,
+		"pending_volley_outcomes": pending_volley_outcomes,
+		"pending_volley_saved_flags": pending_volley_saved_flags,
 		"pending_volley_outcome": pending_volley_outcome,
 		"pending_volley_saved": pending_volley_saved,
 		"pending_volley_pitch_id": pending_volley_pitch_id,
@@ -4957,6 +5457,7 @@ func to_save_data() -> Dictionary:
 		"purchased_ball_upgrades": purchased_ball_upgrades,
 		"purchased_milestones": purchased_milestones,
 		"unlocked_achievements": unlocked_achievements,
+		"achievement_event_totals": achievement_event_totals,
 		"catalog_hide_purchased": catalog_hide_purchased,
 		"achievement_hide_achieved": achievement_hide_achieved,
 		"opponent_mastery": opponent_mastery,
@@ -5187,7 +5688,11 @@ func apply_save_data(data: Dictionary) -> void:
 	plate_strikes = mini(plate_strikes, maxi(get_strikes_required(current_opponent) - 1, 0))
 	_clear_pitch_cycle()
 	if saved_version >= 10 and batter_cooldown_remaining <= 0.0:
-		var saved_pending_size := clampi(int(data.get("pending_volley_size", 0)), 0, 4096)
+		var saved_pending_size := clampi(
+			int(data.get("pending_volley_size", 0)),
+			0,
+			MAX_SAVED_VOLLEY_SIZE
+		)
 		var saved_flight := clampf(float(data.get("pitch_flight_remaining", 0.0)), 0.0, 5.0)
 		if saved_pending_size > 0 and saved_flight > 0.0:
 			pending_volley_size = saved_pending_size
@@ -5209,6 +5714,29 @@ func apply_save_data(data: Dictionary) -> void:
 				and pending_volley_outcome < Content.HIT_OUTCOME_COUNT
 				and pending_volley_outcome != Content.GRAND_SLAM_INDEX
 			)
+			var saved_outcomes: Array = data.get("pending_volley_outcomes", [])
+			var saved_flags: Array = data.get("pending_volley_saved_flags", [])
+			for ball_index in saved_pending_size:
+				var ball_outcome := pending_volley_outcome
+				var ball_saved := pending_volley_saved
+				if saved_version >= 25 and ball_index < saved_outcomes.size():
+					ball_outcome = clampi(
+						int(saved_outcomes[ball_index]),
+						0,
+						Content.OUTCOME_NAMES.size() - 1
+					)
+					ball_saved = ball_index < saved_flags.size() and bool(saved_flags[ball_index])
+				ball_saved = (
+					ball_saved
+					and ball_outcome < Content.HIT_OUTCOME_COUNT
+					and ball_outcome != Content.GRAND_SLAM_INDEX
+				)
+				pending_volley_outcomes.append(ball_outcome)
+				pending_volley_saved_flags.append(ball_saved)
+			# Keep the scalar compatibility view synchronized with the first real ball.
+			if not pending_volley_outcomes.is_empty():
+				pending_volley_outcome = pending_volley_outcomes[0]
+				pending_volley_saved = pending_volley_saved_flags[0]
 			pending_volley_pitch_id = str(data.get("pending_volley_pitch_id", "dead_fish"))
 			if Content.pitch_by_id(pending_volley_pitch_id).is_empty():
 				pending_volley_pitch_id = "dead_fish"
@@ -5333,6 +5861,17 @@ func apply_save_data(data: Dictionary) -> void:
 	else:
 		for index in mini(saved_results.size(), result_totals.size()):
 			result_totals[index] = clampf(float(saved_results[index]), 0.0, MAX_NUMBER)
+	achievement_event_totals.clear()
+	var saved_achievement_events: Dictionary = data.get("achievement_event_totals", {})
+	for event_id_value in saved_achievement_events:
+		var event_id := str(event_id_value)
+		if event_id.length() > 80:
+			continue
+		achievement_event_totals[event_id] = clampf(
+			float(saved_achievement_events[event_id_value]),
+			0.0,
+			MAX_NUMBER
+		)
 	unlocked_achievements.clear()
 	for id in data.get("unlocked_achievements", []):
 		var achievement_id := str(id)
@@ -5548,6 +6087,19 @@ static func format_number(value: float, decimals: int = 2) -> String:
 			return "%s%.0f%s" % ["-" if value < 0.0 else "", scaled, suffixes[suffix_index]]
 		return "%s%.2f%s" % ["-" if value < 0.0 else "", scaled, suffixes[suffix_index]]
 	return format_scientific(value, 1 if decimals <= 0 else 4)
+
+static func format_rating(value: float, include_sign := false) -> String:
+	var scaled := value * DISPLAY_RATING_SCALE
+	var absolute := absf(scaled)
+	# Ratings deliberately remain literal whole numbers through the range players
+	# can comfortably read: 0.039 becomes 39 and 6 becomes 6000, not 6K. Only
+	# genuinely unwieldy or sub-unit ratings switch to scientific notation.
+	var rendered := "%.0f" % scaled
+	if absolute > 0.0 and (absolute < 0.5 or absolute >= 1.0e7):
+		rendered = format_scientific(scaled, 3)
+	if include_sign and scaled > 0.0:
+		return "+%s" % rendered
+	return rendered
 
 static func format_xp_total(value: float) -> String:
 	# Fractions matter while the first point is being earned and whole XP remains

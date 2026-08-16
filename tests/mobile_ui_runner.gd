@@ -94,7 +94,7 @@ func _run() -> void:
 	_expect(main.frustration_status.get_parent() == main.outcome_footer, "The phone frustration meter should occupy the strip directly beneath the outcome cards")
 	_expect(main.outcome_footer.get_index() == main.outcomes_grid.get_index() + 1, "The frustration strip should immediately follow the outcome grid")
 	_expect(main.frustration_bar.get_combined_minimum_size().x >= 55.0, "The phone frustration meter should remain legible")
-	_expect(main.frustration_label.tooltip_text.contains("no cap") and main.frustration_label.tooltip_text.contains("Grand Slam +12"), "Phone inspection should explain the uncapped outcome-weighted Frustration bonus")
+	_expect(main.frustration_label.tooltip_text.contains("no cap") and main.frustration_label.tooltip_text.contains("Grand Slam +12,000"), "Phone inspection should explain the uncapped whole-number Frustration bonus")
 	_expect(main.previous_button.text.is_empty() and main.next_button.text.is_empty(), "Phone opponent controls should not depend on font arrow glyphs")
 	_expect(main.previous_button.icon != null and main.next_button.icon != null, "Phone opponent controls should provide rasterized back/forward icons")
 	_expect(main.previous_button.get_combined_minimum_size().y >= 44.0 and main.next_button.get_combined_minimum_size().y >= 44.0, "Phone opponent controls should remain touch-sized")
@@ -127,11 +127,11 @@ func _run() -> void:
 	await process_frame
 	_expect(main.update_banner.visible, "An available browser release should show the update banner")
 	_expect(main.update_banner.size.x <= 370.0, "The browser update banner should fit a 390-pixel phone")
-	_expect(main.update_banner_label.text.contains("BACK UP"), "The update banner should warn phone players before reloading")
+	_expect(main.update_banner_label.text == "UPDATE READY", "The phone update banner should stay concise")
 	_expect(main.update_now_button.text == "REVIEW", "A phone update should open a warning instead of updating immediately")
 	main._show_browser_update_confirmation()
 	await process_frame
-	_expect(main.browser_update_confirmation.dialog_text.contains("EXPORT") and main.browser_update_confirmation.title == "BACK UP YOUR SAVE", "The phone update confirmation should recommend exporting a backup")
+	_expect(main.browser_update_confirmation.dialog_text.contains("recovery checkpoint") and main.browser_update_confirmation.title == "INSTALL UPDATE", "The phone update confirmation should explain automatic save preservation")
 	_expect(main.browser_update_confirmation.dialog_autowrap and main.browser_update_confirmation.min_size.x <= 360, "The update warning should wrap inside a 390-pixel phone viewport")
 	_expect(
 		main.browser_update_confirmation.size.x <= 350 and main.browser_update_confirmation.size.y <= 760,
@@ -166,7 +166,7 @@ func _run() -> void:
 		main.mobile_upgrade_stat_labels.speed.text == BaseballGameState.format_speed(main.game.get_representative_pitch_speed()),
 		"The phone upgrade overlay should show the current effective speed"
 	)
-	_expect(main.mobile_upgrade_stat_labels.quality.text == "%.3f" % main.game.get_pitch_quality(), "The phone upgrade overlay should show current quality")
+	_expect(main.mobile_upgrade_stat_labels.quality.text == BaseballGameState.format_rating(main.game.get_pitch_quality()), "The phone upgrade overlay should show current whole-number Quality")
 	_expect(main.mobile_upgrade_stat_labels.tap.text == "1.7–5.7%", "The phone upgrade overlay should show both short- and long-timer field-tap limits")
 	var phone_training_row: Dictionary = main.training_buttons.velocity
 	_expect((phone_training_row.label as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE, "Phone upgrade descriptions should remain draggable scroll regions")
@@ -272,7 +272,7 @@ func _run() -> void:
 		_expect(main.mobile_inspection_dialog.visible, "Tapping enemy equipment should open mobile details")
 		_expect(main.mobile_inspection_dialog.dialog_text.contains("Batter threat"), "Enemy equipment details should include its threat modifier")
 		main.mobile_inspection_dialog.hide()
-	_expect(main.power_comparison_panel.size.x <= 82.0, "The phone Power gauge should remain narrow beside enemy equipment")
+	_expect(main.power_comparison_panel.size.x <= 64.0, "The label-only phone Power gauge should remain narrow beside enemy equipment")
 	_expect(main.power_comparison_panel.size.y > main.power_comparison_panel.size.x * 2.0, "The phone Power gauge should be vertical")
 	_expect(main.power_comparison_panel.position.x + main.power_comparison_panel.size.x <= main.opponent_loadout_dock.position.x + 1.0, "The phone Power gauge must not cover the enemy equipment strip")
 	main._show_mobile_inspection_for_control(main.power_comparison_panel)

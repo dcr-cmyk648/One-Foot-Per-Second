@@ -14,6 +14,7 @@ func _initialize() -> void:
 	_test_initial_balance_and_velocity_layers()
 	_test_body_growth()
 	_test_prestige_throwing_anatomy()
+	_test_independent_volleys()
 	_test_pitch_phase_state_machine()
 	_test_live_field_contract()
 	_test_field_tapping()
@@ -124,7 +125,7 @@ func _test_content() -> void:
 	_expect(str(Content.genetic_by_id("parallel_pitching_lobes").description).contains("Recovery ×2"), "The repurposed lobe mutation should advertise its aggressive cadence boost")
 	_expect(str(Content.eldritch_by_id("time_compression").description).contains("Recovery ×2"), "Time Compression should accelerate pitch recovery as well as batter turnover")
 	_expect(Content.DIVINE_BLESSINGS.size() == 6, "Expected six collectible divine blessings")
-	_expect(Content.ACHIEVEMENTS.size() == 109, "The achievement catalog should retain every distinct achievement")
+	_expect(Content.ACHIEVEMENTS.size() == 130, "The achievement catalog should retain every distinct achievement")
 	var achievement_ids := {}
 	var achievement_tier_counts := {"human": 0, "genetic": 0, "eldritch": 0, "divine": 0}
 	for definition in Content.ACHIEVEMENTS:
@@ -135,8 +136,8 @@ func _test_content() -> void:
 		_expect(achievement_tier_counts.has(achievement_tier), "Achievement tier should be known: %s" % achievement_tier)
 		if achievement_tier_counts.has(achievement_tier):
 			achievement_tier_counts[achievement_tier] += 1
-	_expect(achievement_tier_counts == {"human": 54, "genetic": 28, "eldritch": 20, "divine": 7}, "Achievements should span the intended four layers")
-	_expect_close(Content.DEFAULT_ACHIEVEMENT_XP_BONUS, 0.01, "Every achievement should use the shared +1% XP reward")
+	_expect(achievement_tier_counts == {"human": 54, "genetic": 44, "eldritch": 25, "divine": 7}, "Achievements should span the intended four layers")
+	_expect_close(Content.DEFAULT_ACHIEVEMENT_XP_BONUS, 0.005, "Every achievement should use the shared +0.5% XP reward")
 	_expect(Content.LOOT_SLOTS.size() == 7, "Expected six human equipment slots and one post-human Relic")
 	_expect(str(Content.LOOT_SLOTS[5].id) == "cleats", "Cleats should remain a regular equipment slot")
 	_expect(str(Content.LOOT_SLOTS[6].id) == "relic", "The seventh equipment slot should be the post-human Relic")
@@ -251,7 +252,41 @@ func _test_achievements() -> void:
 	var first_unlocks := game.check_achievements(false)
 	_expect(first_unlocks.size() == 2, "A first resolved Strike should unlock exactly its pitch and Strike achievements")
 	_expect(game.has_achievement("first_pitch") and game.has_achievement("first_strike"), "First-pitch achievement IDs should unlock deterministically")
-	_expect_close(game.get_achievement_xp_multiplier(), 1.02, "Achievement XP should stack additively at one percentage point each")
+	_expect_close(game.get_achievement_xp_multiplier(), 1.01, "Achievement XP should stack additively at half a percentage point each")
+
+	var weird_game: BaseballGameState = GameStateScript.new()
+	weird_game.genetic_rebirths = 1
+	weird_game.lifetime_genetic_rebirths = 1
+	weird_game.genetic_levels.extra_arms = 1
+	weird_game.plate_strikes = 1
+	var weird_summary := weird_game._empty_resolution_summary()
+	weird_game._apply_volley_outcomes(
+		weird_summary,
+		[Content.STRIKE_INDEX, Content.STRIKE_INDEX],
+		[false, false]
+	)
+	weird_game.check_achievements(false)
+	_expect(weird_game.has_achievement("double_strike_volley"), "Two simultaneous called Strikes should unlock their post-human joke")
+	_expect(weird_game.has_achievement("multi_ball_strikeout"), "A multi-ball count completion should unlock its strikeout achievement")
+	_expect(weird_game.has_achievement("born_again_bully"), "Returning through time to strike out the first toddler should be remembered")
+	_expect(weird_game.has_achievement("excessive_daycare_force"), "Multiple arms against a toddler should have its own achievement")
+	_expect(weird_game.has_achievement("bat_overload"), "Throwing beyond the toddler's one bat should be recorded")
+	var contradictory_summary := weird_game._empty_resolution_summary()
+	weird_game._apply_volley_outcomes(
+		contradictory_summary,
+		[4, Content.STRIKE_INDEX],
+		[false, false]
+	)
+	weird_game.check_achievements(false)
+	_expect(weird_game.has_achievement("hit_and_strike_volley"), "A simultaneous fair hit and Strike should unlock the ambiguous-rules achievement")
+	var weird_restored: BaseballGameState = GameStateScript.new()
+	weird_restored.apply_save_data(weird_game.to_save_data())
+	_expect(
+		weird_restored.achievement_event_totals == weird_game.achievement_event_totals,
+		"Durable weird-baseball event history should survive save round-trips"
+	)
+	weird_game.free()
+	weird_restored.free()
 	var permanent_ids := game.unlocked_achievements.duplicate()
 	game._reset_body_progress()
 	_expect(game.unlocked_achievements == permanent_ids, "Ordinary time travel must not erase achievements")
@@ -476,6 +511,79 @@ func _test_prestige_throwing_anatomy() -> void:
 	_expect_close(game.get_recovery_rate(), baseline_recovery * BaseballGameState.TIME_COMPRESSION_RECOVERY_PER_RANK, "Time Compression should also halve time between throws")
 	game.free()
 
+func _test_independent_volleys() -> void:
+	var game: BaseballGameState = GameStateScript.new()
+	_expect(game.get_opponent_bat_count(0) == 1, "An ordinary human should cover one simultaneous ball")
+	_expect(game.get_opponent_bat_count(33) == 4, "The four-bat alien must expose four-ball coverage")
+	_expect(game.get_opponent_bat_count(42) == 9, "The hive-mind choir must expose nine-ball coverage")
+	_expect(game.get_opponent_bat_count(44) == 8, "Octathulhu must expose eight-ball coverage")
+	var test_probabilities: Array[float] = [0.08, 0.08, 0.08, 0.08, 0.08, 0.10, 0.10, 0.40]
+	var covered := game._apply_bat_overload_penalty(test_probabilities, 0, 0)
+	var first_uncovered := game._apply_bat_overload_penalty(test_probabilities, 1, 0)
+	var second_uncovered := game._apply_bat_overload_penalty(test_probabilities, 2, 0)
+	_expect_close(float(covered[4]), 0.08, "A covered ball should retain its ordinary contact chance")
+	_expect_close(float(first_uncovered[4]), 0.08 * BaseballGameState.BAT_OVERLOAD_CONTACT_REMAINING, "The first ball beyond the bat count should take the severe contact penalty")
+	_expect(float(second_uncovered[4]) < float(first_uncovered[4]), "Every additional uncovered ball should stack another contact penalty")
+	_expect(float(second_uncovered[Content.STRIKE_INDEX]) > float(first_uncovered[Content.STRIKE_INDEX]), "Removed uncovered contact should become called Strikes")
+
+	var double_strike_summary := game._empty_resolution_summary()
+	game._apply_volley_outcomes(
+		double_strike_summary,
+		[Content.STRIKE_INDEX, Content.STRIKE_INDEX],
+		[false, false]
+	)
+	_expect(game.plate_strikes == 2, "Two independent called Strikes in one volley should add two strikes")
+	_expect_close(float(double_strike_summary.counts[Content.STRIKE_INDEX]), 2.0, "A two-ball volley should record both physical outcomes")
+	_expect(str(double_strike_summary.pitch_events.back().call_lines[0].text) == "DOUBLE STRIKE", "Two simultaneous Strikes should be called a Double Strike")
+
+	game.reset_fresh()
+	var triple_single_summary := game._empty_resolution_summary()
+	game._apply_volley_outcomes(triple_single_summary, [4, 4, 4], [false, false, false])
+	_expect(str(triple_single_summary.pitch_events.back().call_lines[0].text) == "TRIPLE SINGLE", "Three simultaneous Singles should be called a Triple Single")
+	_expect_close(game.batter_cooldown_remaining, 6.0, "Three Singles should stack all three base-delay penalties on one lineup change")
+
+	game.reset_fresh()
+	var mixed_summary := game._empty_resolution_summary()
+	game._apply_volley_outcomes(mixed_summary, [3, 4], [false, false])
+	var mixed_lines: Array = mixed_summary.pitch_events.back().call_lines
+	_expect(str(mixed_lines.back().text) == "= TRIPLE", "A Double plus a Single should total a Triple")
+	_expect_close(game.batter_cooldown_remaining, 6.0, "Mixed-hit downtime should stack each resolved hit bonus")
+
+	game.reset_fresh()
+	var powered_homer_summary := game._empty_resolution_summary()
+	game._apply_volley_outcomes(powered_homer_summary, [1, 2], [false, false])
+	_expect(str(powered_homer_summary.pitch_events.back().call_lines.back().text) == "= +3 HOME RUN", "A Home Run plus a Triple should be called a +3 Home Run")
+	_expect_close(game.batter_cooldown_remaining, 11.0, "Home Run and Triple delays should stack on the base lineup time")
+
+	game.reset_fresh()
+	game.plate_strikes = 2
+	var priority_summary := game._empty_resolution_summary()
+	game._apply_volley_outcomes(priority_summary, [Content.STRIKE_INDEX, 4], [false, false])
+	_expect_close(float(priority_summary.strikeouts), 0.0, "An unsaved fair hit should beat a simultaneous count-completing Strike")
+	_expect(game.plate_strikes == 0 and game.batter_replacement_pending, "The fair hit should reset the count and remove the batter")
+
+	var field: PitchField = _make_field(game)
+	field._trigger_result_visual({
+		"outcome": 3,
+		"outcomes": [3, Content.STRIKE_INDEX],
+		"saved_flags": [false, false],
+		"outcome_counts": [0, 0, 0, 1, 0, 0, 0, 1],
+		"call_lines": [
+			{"outcome": 3, "text": "DOUBLE"},
+			{"outcome": Content.STRIKE_INDEX, "text": "STRIKE"},
+		],
+		"call_text": "DOUBLE • STRIKE",
+		"ball_count": 2,
+		"strikeout": false,
+		"walk": false,
+		"batter_downtime": 5.0,
+	})
+	_expect(field.result_popups.size() == 2, "Mixed independent outcomes should appear together over the batter")
+	_expect(field.return_balls.size() == 2, "Every rendered ball should receive its own return path")
+	_expect(int(field.return_balls[0].outcome) != int(field.return_balls[1].outcome), "Mixed-result return paths must preserve each ball's own outcome")
+	field.free()
+	game.free()
+
 	var toddler_champion: BaseballGameState = GameStateScript.new()
 	toddler_champion.highest_unlocked = Content.HUMAN_FINAL_INDEX
 	toddler_champion.current_opponent = Content.HUMAN_FINAL_INDEX
@@ -501,6 +609,8 @@ func _test_pitch_phase_state_machine() -> void:
 	frame_sync_game.advance(BaseballGameState.SIMULATION_STEP)
 	_expect(frame_sync_game.is_pitch_in_flight(), "The frame-sync fixture should release one opening pitch")
 	frame_sync_game.pending_volley_outcome = Content.STRIKE_INDEX
+	frame_sync_game.pending_volley_outcomes = [Content.STRIKE_INDEX]
+	frame_sync_game.pending_volley_saved_flags = [false]
 	for _frame in 187:
 		frame_sync_game.advance(0.016)
 	_expect(frame_sync_game.is_pitch_in_flight(), "A visible pitch must remain unresolved before its exact three-second arrival")
@@ -536,6 +646,8 @@ func _test_pitch_phase_state_machine() -> void:
 	_expect(game.pending_volley_opponent_index == 1, "The released pitch should now resolve against the newly selected batter")
 	game.pending_volley_outcome = Content.STRIKE_INDEX
 	game.pending_volley_saved = false
+	game.pending_volley_outcomes = [Content.STRIKE_INDEX]
+	game.pending_volley_saved_flags = [false]
 	var during_flight := game._resolve_elapsed(2.9, true, true)
 	_expect_close(float(during_flight.released_pitches), 0.0, "No second human ball may launch during flight")
 	_expect_close(float(during_flight.pitches), 0.0, "A ball must remain unresolved until impact")
@@ -550,6 +662,8 @@ func _test_pitch_phase_state_machine() -> void:
 	_expect_close(float(next_release.released_pitches), 1.0, "The next pitch should release only after the post-impact cooldown completes")
 	game.pending_volley_outcome = Content.GRAND_SLAM_INDEX
 	game.pending_volley_saved = false
+	game.pending_volley_outcomes = [Content.GRAND_SLAM_INDEX]
+	game.pending_volley_saved_flags = [false]
 	var terminal_impact := game._resolve_elapsed(game.pitch_flight_remaining, true, true)
 	_expect_close(float(terminal_impact.pitches), 1.0, "The terminal ball should resolve at the plate")
 	_expect_close(game.batter_cooldown_remaining, 12.0, "Grand Slam downtime must begin at impact, not release")
@@ -578,6 +692,8 @@ func _test_live_field_contract() -> void:
 			# empty plate rather than depending on a fortunate random hit.
 			game.pending_volley_outcome = Content.GRAND_SLAM_INDEX
 			game.pending_volley_saved = false
+			game.pending_volley_outcomes = [Content.GRAND_SLAM_INDEX]
+			game.pending_volley_saved_flags = [false]
 		field.configure_from_game(game)
 		maximum_outbound = maxi(maximum_outbound, field.get_rendered_pitch_count())
 		if not plate_ready_before_simulation:
@@ -684,6 +800,11 @@ func _test_field_tapping() -> void:
 	var natural_cycle := automatic.get_pitch_cooldown_seconds()
 	var automatic_cycle := automatic.get_automatic_timer_seconds(natural_cycle)
 	_expect(automatic_cycle < natural_cycle and automatic_cycle > 0.0, "Automatic clicks should accelerate timers without an arbitrary hard floor or an instantaneous timer")
+	var automated_metrics := automatic.get_at_bat_metrics()
+	automatic.genetic_levels.autonomic_clicking_finger = 30
+	automatic.eldritch_levels.hands_beyond_the_mouse = 80
+	var faster_automated_metrics := automatic.get_at_bat_metrics()
+	_expect(float(faster_automated_metrics.cycle_seconds) < float(automated_metrics.cycle_seconds), "At-bat estimates must invalidate their timer cache when automatic-clicker power changes")
 	automatic.free()
 	field.free()
 	game.free()
@@ -697,7 +818,7 @@ func _test_distance_risk_and_reward() -> void:
 	_expect(game.set_current_opponent(5), "Selecting level 6 should also select its authored range")
 	_expect(game.selected_distance_index == game.get_prescribed_distance_index(5), "The active range should be derived only from the opponent level")
 	_expect_close(game.get_pitch_distance_feet(), 25.0, "Coach-pitch baseball should use its authored 25-foot range")
-	_expect_close(game.get_distance_xp_multiplier(), 1.85, "Farther ranges should multiply XP")
+	_expect_close(game.get_distance_xp_multiplier(), 1.0, "Level-assigned range should never multiply XP")
 	_expect_close(game.get_distance_difficulty(), 0.38, "Farther ranges should add threat")
 	_expect_close(game.get_physical_flight_seconds(), 25.0, "True flight time should be distance divided by speed")
 	var far_probabilities: Array[float] = game.get_outcome_probabilities()
@@ -961,14 +1082,14 @@ func _test_outcome_weighted_frustration() -> void:
 	for outcome in Content.OUTCOME_NAMES.size():
 		var outcome_game: BaseballGameState = GameStateScript.new()
 		var summary := outcome_game._empty_resolution_summary()
-		# One late-game volley remains one result no matter how many literal balls
-		# it contains; otherwise clones would overwhelm the adaptation curve.
+		# Every literal ball now owns an independent outcome and therefore its own
+		# small contribution to the outcome-weighted adaptation score.
 		outcome_game._apply_pitch_outcome(summary, outcome, -1.0, 2048, false)
 		outcome_game._apply_resolution(summary, false)
 		_expect_close(
 			outcome_game.frustration_points,
-			float(expected_points[outcome]),
-			"%s should add its authored Frustration severity once per volley" % Content.OUTCOME_NAMES[outcome]
+			float(expected_points[outcome]) * 2048.0,
+			"%s should add its authored Frustration severity for every resolved ball" % Content.OUTCOME_NAMES[outcome]
 		)
 		outcome_game.free()
 
@@ -1715,6 +1836,9 @@ func _test_progression_and_purchases() -> void:
 	_expect(BaseballGameState.format_xp_total(9.95e15) == "9.95e15", "Scientific XP should retain three useful digits")
 	_expect(BaseballGameState.format_scientific(0.0000000012, 3) == "1.2e-9", "Scientific formatting should use compact classic 1eN notation without padded exponents")
 	_expect(BaseballGameState.format_number(0.0004, 2) == "4e-4", "Small nonzero values should not round down to a displayed zero")
+	_expect(BaseballGameState.format_rating(0.039) == "39", "Compact internal ratings should display as satisfying whole numbers")
+	_expect(BaseballGameState.format_rating(6.0) == "6000", "Readable Quality and Threat values should remain literal whole numbers")
+	_expect(BaseballGameState.format_rating(1.0e5) == "1e8", "Unwieldy ratings should switch to scientific notation")
 	var premium_definition := Content.milestone_by_id("neighborhood_pitching_tutor")
 	_expect(
 		game.get_milestone_cost("neighborhood_pitching_tutor")
@@ -2003,6 +2127,14 @@ func _test_save_round_trip_and_migration() -> void:
 	original.unlocked_pitches.append("four_seam")
 	original.purchased_milestones.append("regulation_ball")
 	original.opponent_mastery[3] = 77.0
+	original.batter_cooldown_remaining = 0.0
+	original.pending_volley_size = 3
+	original.pitch_flight_remaining = 0.75
+	original.pending_volley_flight_duration = 1.25
+	original.pending_volley_outcomes = [Content.STRIKE_INDEX, 4, Content.BALL_INDEX]
+	original.pending_volley_saved_flags = [false, true, false]
+	original.pending_volley_outcome = Content.STRIKE_INDEX
+	original.pending_volley_saved = false
 	var restored: BaseballGameState = GameStateScript.new()
 	restored.apply_save_data(original.to_save_data())
 	_expect_close(restored.xp, original.xp, "XP should survive a save round-trip")
@@ -2016,7 +2148,7 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect_close(restored.lifetime_automatic_field_taps, 7654.0, "Automatic-click lifetime accounting should survive saves")
 	_expect_close(restored.lifetime_strikeouts, 2468.0, "Strikeout totals should survive saves")
 	_expect_close(restored.frustration_points, 47.5, "The active outcome-weighted Frustration score should survive saves")
-	_expect(restored.plate_strikes == 3 and restored.plate_balls == 2 and restored.batter_cooldown_remaining > 0.0, "The complete live count should survive saves")
+	_expect(restored.plate_strikes == 3 and restored.plate_balls == 2, "The complete live count should survive saves")
 	_expect_close(restored.get_clone_count(), 4.0, "Eldritch clones should survive saves")
 	_expect(restored.has_divine_blessing("let_there_be_fastballs") and restored.divine_halos == 1, "Divine rewards should survive saves")
 	_expect(restored.body_growth_level == 4 and restored.human_league_completed_as_toddler, "Body age and the toddler-clear proof should survive saves")
@@ -2026,6 +2158,19 @@ func _test_save_round_trip_and_migration() -> void:
 	_expect(int(restored.training_levels.field_hustle) == 4, "Field-tap training should survive saves")
 	_expect_close(restored.get_offline_xp_efficiency(), original.get_offline_xp_efficiency(), "Offline-efficiency training should survive saves")
 	_expect(restored.alien_exhibition_grand_slams == 9 and restored.alien_arrival_seen, "Alien humiliation and arrival state should survive saves")
+	_expect(restored.pending_volley_outcomes == [Content.STRIKE_INDEX, 4, Content.BALL_INDEX], "Every independently sampled in-flight outcome should survive a save round-trip")
+	_expect(restored.pending_volley_saved_flags == [false, true, false], "Every in-flight save interaction should survive a save round-trip")
+	var version_twenty_four: BaseballGameState = GameStateScript.new()
+	version_twenty_four.apply_save_data({
+		"version": 24,
+		"pending_volley_size": 3,
+		"pitch_flight_remaining": 0.5,
+		"pending_volley_flight_duration": 1.0,
+		"pending_volley_outcome": 3,
+		"pending_volley_saved": false,
+	})
+	_expect(version_twenty_four.pending_volley_outcomes == [3, 3, 3], "A v24 shared volley roll should migrate by preserving that result on every released ball")
+	_expect(version_twenty_four.pending_volley_saved_flags == [false, false, false], "A v24 shared save flag should migrate across the whole unresolved volley")
 
 	var early_v13: BaseballGameState = GameStateScript.new()
 	early_v13.apply_save_data({
@@ -2130,6 +2275,7 @@ func _test_save_round_trip_and_migration() -> void:
 	version_sixteen.free()
 	version_seventeen.free()
 	version_twenty_three.free()
+	version_twenty_four.free()
 
 func _test_cosmic_completion_and_magnitude() -> void:
 	var game: BaseballGameState = GameStateScript.new()
@@ -2172,6 +2318,9 @@ func _test_cosmic_completion_and_magnitude() -> void:
 	# CI/package hosts can briefly contend with Web export and checksum work. A
 	# half-second ceiling still catches an orders-of-magnitude regression while a
 	# seven-day idle catch-up remains effectively instantaneous to the player.
-	_expect(elapsed_ms < 500.0, "Large aggregate simulation took unexpectedly long: %.2f ms" % elapsed_ms)
+	# Headless editor startup and concurrent export work can create brief macOS
+	# scheduler spikes. Keep this strict enough to catch an order-of-magnitude
+	# regression while avoiding a flaky release gate around the half-second mark.
+	_expect(elapsed_ms < 750.0, "Large aggregate simulation took unexpectedly long: %.2f ms" % elapsed_ms)
 	print("Final form: %s/s at %s; seven-day aggregate in %.3f ms" % [BaseballGameState.format_number(rate), BaseballGameState.format_speed(game.get_velocity_fps()), elapsed_ms])
 	game.free()
