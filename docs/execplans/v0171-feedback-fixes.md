@@ -2,7 +2,7 @@
 
 ## Status
 
-M1 and M2 are implemented and accepted on top of the clean, published v0.17.0 baseline (`9f09b64`, with release documentation at `eb533aa`). Authoritative flight, opening drag, five-level pitch cadence, deferred reward presentation, focused copy, active campaign slots, compact subtitles, and dark responsive modals pass the focused automated suites and uncached desktop/phone browser acceptance. M3 packaging, parity, and synchronized release are in progress.
+The corrective update is implemented, validated, packaged, and published as v0.17.1 from app commit `a56c2dc`. Authoritative flight, opening drag, five-level pitch cadence, deferred reward presentation, focused copy, active campaign slots, compact subtitles, and dark responsive modals pass the focused and release suites plus uncached desktop/phone browser acceptance. The synchronized native/Web release, GitHub Pages deployment, and owner-only Sites version 31 are live.
 
 ## Goal
 
@@ -118,7 +118,7 @@ Ship a focused corrective update that fixes the stuck-flight state, restores bel
 - [x] Reconcile the five-level expectation with the fixed 100-level topology.
 - [x] Complete and accept M1 through a delegated Terra implementation milestone.
 - [x] Complete and accept M2 through a delegated Terra implementation milestone.
-- [ ] Complete M3 primary integration, acceptance, packaging, and synchronized deployment.
+- [x] Complete M3 primary integration, acceptance, packaging, and synchronized deployment.
 
 ### M1 accepted implementation and evidence
 
@@ -144,6 +144,15 @@ Ship a focused corrective update that fixes the stuck-flight state, restores bel
 - Independent Sol validation passed `test_runner`, desktop UI, portrait UI, and `git diff --check`.
 - Uncached local Web acceptance passed at 1280×720 and 390×844. Verified the title menu, new-game slot picker, fresh slot creation, Little Timmy/Scorebook story dialogs, opening −0.6% air drag, and a live flight resolving from its countdown back to the pitch cooldown without a persistent `0.0s` meter.
 
+### M3 accepted integration and release evidence
+
+- Bumped shared project, native executable, distribution, update-manifest, Sites adapter, README, and changelog metadata to v0.17.1 without changing save schema 28.
+- The final `package_all_platforms.sh` run passed the core, desktop-interface, and portrait-interface suites; exported browser/PWA, Universal macOS, Windows x86_64/ARM64, and Linux x86_64/ARM64; smoke-launched the exported Mac app; verified every architecture, signature, DMG, ZIP, tar archive, and checksum; and produced a verified 206 MB all-platform bundle. Superseded local v0.17.0 release artifacts were pruned automatically.
+- Final focused `overhaul_runner.gd` and `progression_audit.gd` runs passed. The progression audit reports 100 levels, 23 finite pitch drafts (five-level cadence plus authored off-cadence bosses), and unchanged 115 mph / Mach 5,000 / 5,000c physical anchors.
+- `verify_web_parity.sh` passed. The Sites adapter rebuilt from the exact Web export and passed all four route, cache, and segmented-WebAssembly tests. The published Pages `index.pck` SHA-256 is `7e017b0f6739a33412d778d31ce3575393c8e1117810fe14116b8bbb6578bc5c`, matching the packaged Sites stamp.
+- GitHub Pages workflow run `32445309837` completed successfully from `a56c2dc`. The live Pages and authenticated owner-only Sites manifests both report v0.17.1 and the matching five native download URLs.
+- GitHub release `v0.17.1` contains the verified browser, macOS, Windows x86_64/ARM64, Linux x86_64/ARM64, release-manifest, and SHA256SUMS assets. Owner-only Sites version 31 saved the tested 88-file archive and its production deployment completed successfully without changing access policy.
+
 ## Exact next action
 
-Bump the corrective release to v0.17.1, run repository-wide suites and all-platform packaging, perform final archive/Web parity checks, commit and publish GitHub Pages/release assets, deploy owner-only Sites, verify both live release pipelines, and mark the plan complete.
+Release complete. Preserve v0.17.0 and Sites version 30 as rollback points; begin later feedback from the clean, published v0.17.1 baseline.
