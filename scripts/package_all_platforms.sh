@@ -28,6 +28,7 @@ trap cleanup_ofps_all_platforms EXIT
 # packager contains this release's verified Pages tree rather than the previous
 # checked-in browser export. The desktop packager recreates the release folder,
 # so hold the browser artifacts across that step and restore them afterward.
+node "${OFPS_ROOT}/scripts/stamp_release_metadata.mjs" "${OFPS_ROOT}"
 OFPS_SKIP_TESTS=true "${OFPS_ROOT}/scripts/package_web.sh"
 # Keep the Sites adapter's manifest version and human-readable payload
 # fingerprint synchronized before the Source archive is assembled. The adapter

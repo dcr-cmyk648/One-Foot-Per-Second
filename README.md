@@ -2,7 +2,7 @@
 
 A top-down baseball idle roguelike about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the shared Godot 4.7.1 source and tested v0.17.1 exports for browser/PWA, macOS, Windows, Linux, GitHub Pages, and Codex Sites. Every platform uses the same campaign, simulation, save schema, and progression. Browser-only rendering limits reduce visual clutter without changing results.
+This repository contains the shared Godot 4.7.1 source and tested v0.17.2 exports for browser/PWA, macOS, Windows, Linux, GitHub Pages, and Codex Sites. Every platform uses the same campaign, simulation, save schema, and progression. Browser-only rendering limits reduce visual clutter without changing results.
 
 ## Play or share
 
@@ -15,7 +15,7 @@ The live browser build is published through [GitHub Pages](https://dcr-cmyk648.g
 The complete local distribution is:
 
 ```text
-release/No Hitter v0.17.1 All Platforms.zip
+release/No Hitter v0.17.2 All Platforms.zip
 ```
 
 It contains the browser ZIP, a Universal macOS DMG, x86_64 and ARM64 Windows ZIPs, x86_64 and ARM64 Linux archives, source, instructions, manifests, and checksums. Godot is not required to play an export.
@@ -60,11 +60,11 @@ The opening pitch is physically literal: one foot per second across three feet f
 
 ## The run-build layer
 
-Every numbered clear queues a saved perk draft. The defeated level sets perk level; rarity sets its strength. Three-level sub-era finales guarantee Rare-or-better choices and separately queue a Pitch draft that learns a pitch or improves one already known. Boss drafts contain the strangest options. Prestige can add offer choices, improve rarity, unlock boss perks, and eventually corrupt a card into a 2–3× positive effect with a random penalty.
+Every numbered clear queues a saved perk draft. The defeated level sets perk level; rarity sets its strength. Three-level sub-era finales guarantee Rare-or-better perk choices; every fifth level and each authored boss separately queues a Pitch draft that learns a pitch or improves one already known. Boss drafts contain the strangest options. Prestige can add offer choices, improve rarity, unlock boss perks, and eventually corrupt a card into a 2–3× positive effect with a random penalty.
 
 Offers are generated once from the saved run seed and serial. Reloading cannot reroll them. Auto-advance may queue many rewards, but all remain selectable in order.
 
-This replaces purchased ages, builds, and pitches. Skipping age perks keeps the player a toddler; chosen adjectives still compose in the subtitle. PITCH is a read-only Arsenal. BODY contains the current run and only the persistent sections the story has revealed.
+This replaces purchased ages, builds, and pitches. Skipping age perks keeps the player a toddler; the next sequential age becomes increasingly likely when the run falls behind its normal life stage, but is never forced. Age cards state their exact Speed, Quality, Recovery, and Size change. Chosen adjectives still compose in the subtitle. PITCH is a read-only Arsenal. BODY contains the current run and only the persistent sections the story has revealed.
 
 XP spending is intentionally split:
 
@@ -106,9 +106,9 @@ Native rendering reserves the complete designed 2,048-ball finite volley. The br
 
 Strikeout drops copy one visible player-wearable slot and rarity from the defeated batter. Items never auto-equip by default. Ordinary gear has one to three affixes; rarity increases magnitude, every run stat is eligible, and real positive/negative tradeoffs support builds. Each slot stores ten items; equipped/starred items are protected and overflow becomes Scrap. Relics grant one enormous stat and gain more slots through eldritch progression.
 
-The spoiler-gated Story tab keeps every revealed popup, newest first, with a saved Reverse Order switch. Names use era-specific composable grammar; authored bosses reserve their signatures.
+The spoiler-gated Story tab keeps every revealed popup, newest first, with a saved Reverse Order switch. A fresh run opens at three feet and one foot per second; each first-lifetime human chapter receives its own arrival blurb when the new level is actually entered. Names use era-specific composable grammar; authored bosses reserve their signatures.
 
-The game contains 130 permanent achievements at +0.5% XP each. Unknown secret entries occupy anonymous slots without leaking their names, conditions, progress, or future systems. The extreme secret No Hitter requires a complete post-victory campaign without a single fair hit.
+The game contains 165 permanent achievements at +0.5% XP each. Unknown secret entries occupy anonymous slots without leaking their names, conditions, progress, or future systems. The extreme secret No Hitter requires a complete post-victory campaign without a single fair hit.
 
 ## Browser, phone, and responsive behavior
 

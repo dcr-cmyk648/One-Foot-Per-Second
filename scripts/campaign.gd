@@ -405,6 +405,7 @@ static func _build_levels() -> Array[Dictionary]:
 				"subera_id": str(subera.id),
 				"subera_index": subera_index,
 				"subera_position": position,
+				"subera_start": position == 0,
 				"subera_finale": position == LEVELS_PER_SUBERA - 1,
 				"league_boss": index in [HUMAN_FINAL_INDEX, ALIEN_FINAL_INDEX, ELDRITCH_FINAL_INDEX],
 				"class_name": str(classes[position]),
@@ -421,7 +422,9 @@ static func _build_levels() -> Array[Dictionary]:
 				"bat_count": int(subera.get("bat_count", 1)),
 				"trait": "standard",
 				"signature_name": str(SIGNATURE_NAMES.get(index, "")),
-				"story_key": "arrive_%s" % str(subera.id) if position == 0 else "",
+				# The opening Backyard chapter is the fresh-run prologue. Later chapter
+				# keys are presented only when the player actually enters the sub-era.
+				"story_key": "prologue_little_timmy" if index == 0 else ("arrive_%s" % str(subera.id) if position == 0 else ""),
 				"guaranteed_rare_offer": position == LEVELS_PER_SUBERA - 1,
 				"pitch_draft": (
 					(index + 1) % PITCH_DRAFT_INTERVAL == 0

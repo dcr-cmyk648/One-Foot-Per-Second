@@ -3,6 +3,7 @@ extends SceneTree
 const Content = preload("res://scripts/content.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const GameStateScript = preload("res://scripts/game_state.gd")
+const RunContent = preload("res://scripts/run_content.gd")
 
 var failures := 0
 
@@ -21,6 +22,7 @@ func _initialize() -> void:
 	_test_training_batches_and_physical_scale()
 	_test_tap_signal_and_determination()
 	_test_prestige_and_endless_contract()
+	_test_first_run_story_and_body_copy()
 	_test_story_exhibitions()
 	if failures > 0:
 		push_error("FAIL: %d overhaul contract test(s) failed" % failures)
@@ -74,6 +76,13 @@ func _test_campaign_topology() -> void:
 	_expect(Campaign.old_index_to_new(39) == 65, "The old alien champion must map to Olympus")
 	_expect(Campaign.old_index_to_new(40) == 66, "The old eldritch exhibition must map to Earth defense")
 	_expect(Campaign.old_index_to_new(44) == 99, "The old Octathulhu must remain Octathulhu")
+	var human_subera_starts := 0
+	for level_value in levels:
+		var level: Dictionary = level_value
+		if str(level.get("league", "")) == "human" and bool(level.get("subera_start", false)):
+			human_subera_starts += 1
+			_expect(not str(level.get("story_key", "")).is_empty(), "Every human sub-era entry must author a story key")
+	_expect(human_subera_starts == 11, "Human baseball must expose eleven authored narrative entry points")
 
 func _test_deterministic_choices() -> void:
 	var first = GameStateScript.new()
@@ -492,6 +501,63 @@ func _test_prestige_and_endless_contract() -> void:
 	_expect(game.get_effective_opponent_difficulty() > first_difficulty, "Every Extra Inning must be harder than the last")
 	_expect(not game.pending_run_choices.is_empty(), "Every Extra Inning clear must continue the run-draft loop")
 	game.free()
+
+func _test_first_run_story_and_body_copy() -> void:
+	var game = GameStateScript.new()
+	game.reset_fresh()
+	_expect(bool(game.catalog_hide_purchased.pitch) and bool(game.catalog_hide_purchased.ball) and bool(game.catalog_hide_purchased.facility) and bool(game.catalog_hide_purchased.body), "Fresh catalog filters should hide purchased one-time upgrades")
+	_expect(game.get_next_story_dialog().get("id", "") == "prologue_little_timmy", "A fresh run must queue the toddler prologue before ordinary play")
+	_expect(game.story_journal.size() >= 1 and str(game.story_journal[0].body).contains("one foot per second"), "The opening story must be journaled with the one-foot-per-second premise")
+	for subera_index in range(1, 11):
+		var next_index := subera_index * Campaign.LEVELS_PER_SUBERA
+		var next_level := Campaign.level(next_index)
+		var story_id := str(next_level.story_key)
+		_expect(not RunContent.story_by_id(story_id).is_empty(), "Every human sub-era story key must have authored copy")
+		game.highest_unlocked = next_index
+		game.current_opponent = next_index - 1
+		_expect(game.set_current_opponent(next_index), "Entering %s must succeed after its rewards resolve" % str(next_level.subera))
+		_expect(story_id in game.story_seen, "Entering %s must queue its authored first-lifetime story" % str(next_level.subera))
+		var story_count: int = game.story_journal.size()
+		game.current_opponent = next_index - 1
+		game.set_current_opponent(next_index)
+		_expect(game.story_journal.size() == story_count, "A sub-era story must only record once")
+	var timing = GameStateScript.new()
+	timing.reset_fresh()
+	timing.pending_story_dialogs.clear()
+	timing.story_journal.clear()
+	timing.story_seen.clear()
+	timing.current_opponent = Campaign.LEVELS_PER_SUBERA - 1
+	timing.highest_unlocked = timing.current_opponent
+	timing.opponent_mastery[timing.current_opponent] = timing.get_mastery_requirement()
+	timing._check_opponent_unlock(1.0, true)
+	_expect("arrive_tee_ball" not in timing.story_seen, "Clearing a sub-era finale must not present the next chapter while farming")
+	while timing.has_pending_run_choices():
+		var choice := timing.get_next_pending_run_choice()
+		timing.resolve_run_choice(str(choice.id), 0)
+	_expect(timing.set_current_opponent(Campaign.LEVELS_PER_SUBERA), "The successor level must be enterable after mandatory rewards resolve")
+	_expect("arrive_tee_ball" in timing.story_seen, "Entering the successor level must queue its chapter arrival")
+	var entry_count: int = timing.story_journal.size()
+	timing.current_opponent = Campaign.LEVELS_PER_SUBERA - 1
+	timing.set_current_opponent(Campaign.LEVELS_PER_SUBERA)
+	_expect(timing.story_journal.size() == entry_count, "Entry stories must remain once-per-ID after revisiting the boundary")
+	var first_age := game.get_body_age_step_effect(1)
+	_expect(float(first_age.speed_multiplier) > 1.0 and float(first_age.quality_bonus) > 0.0 and float(first_age.recovery_multiplier) > 1.0 and float(first_age.visual_size_multiplier) > 1.0, "Age cards must expose every real first-step body bonus")
+	var age_effect := {"stat": "body_age", "operation": "body", "age_order": 1}
+	_expect(int(age_effect.age_order) == 1, "Age effects must retain their selected step metadata")
+	var explicit_false := game.to_save_data()
+	explicit_false["catalog_hide_purchased"] = {"pitch": false, "ball": false, "facility": false, "body": false}
+	var restored = GameStateScript.new()
+	restored.apply_save_data(explicit_false)
+	_expect(not bool(restored.catalog_hide_purchased.pitch) and not bool(restored.catalog_hide_purchased.body), "An explicit saved false catalog preference must survive loading")
+	var missing_filters := game.to_save_data()
+	missing_filters.erase("catalog_hide_purchased")
+	var migrated = GameStateScript.new()
+	migrated.apply_save_data(missing_filters)
+	_expect(bool(migrated.catalog_hide_purchased.pitch) and bool(migrated.catalog_hide_purchased.body), "Missing catalog preferences must receive the fresh hidden default")
+	game.free()
+	restored.free()
+	migrated.free()
+	timing.free()
 
 func _test_story_exhibitions() -> void:
 	var game = GameStateScript.new()

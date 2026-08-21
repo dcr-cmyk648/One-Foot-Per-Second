@@ -5144,7 +5144,13 @@ func _run_effect_text(effect: Dictionary) -> String:
 	var operation := str(effect.get("operation", "add"))
 	if operation == "body":
 		if str(effect.get("stat", "")) == "body_age":
-			return "Body age advances"
+			var age_step := game.get_body_age_step_effect(int(effect.get("age_order", 0)))
+			return "AGE BONUS • Speed ×%s • Quality %s • Recovery ×%s • Size ×%s" % [
+				BaseballGameState.format_number(float(age_step.get("speed_multiplier", 1.0)), 3),
+				BaseballGameState.format_rating(float(age_step.get("quality_bonus", 0.0)), true),
+				BaseballGameState.format_number(float(age_step.get("recovery_multiplier", 1.0)), 3),
+				BaseballGameState.format_number(float(age_step.get("visual_size_multiplier", 1.0)), 3),
+			]
 		return "+%s body adjective" % str(effect.get("adjective", "changed")).capitalize()
 	var value := float(effect.get("value", effect.get("magnitude", 0.0)))
 	match operation:
@@ -5664,8 +5670,8 @@ func _refresh_guide_text(
 		),
 		(
 			"RUN CHOICES\n"
-			+ "• Every cleared level queues a run perk. Sub-era finales also queue a Pitch draft; boss rewards are stranger and stronger. Unchosen rewards wait safely in order.\n"
-			+ "• Perk level matches the cleared level, rarity changes its strength, and the same perk cannot be drafted twice in one run. Aging and body builds are optional perks, so a determined toddler can remain a toddler.\n"
+			+ "• Every cleared level queues a run perk. Sub-era finales guarantee Rare-or-better perk choices; every fifth level and authored bosses also queue a Pitch draft. Unchosen rewards wait safely in order.\n"
+			+ "• Perk level matches the cleared level, rarity changes its strength, and the same perk cannot be drafted twice in one run. Aging remains optional, but the next age becomes more likely when overdue; its card shows the exact body bonus.\n"
 			+ "• Learned Pitches are called automatically. PITCH is your read-only arsenal; Pitch Calling increasingly favors its stronger options."
 		),
 		(
@@ -6850,7 +6856,10 @@ func _refresh_rebirth_buttons() -> void:
 		empty.add_theme_color_override("font_color", COLOR_MUTED)
 		empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		run_perk_list.add_child(empty)
-	elif not bool(game.catalog_hide_purchased.body):
+	else:
+		# Hide Purchased filters the BODY catalog itself.  Drafted run history is
+		# the player's permanent explanation of how this body changed, so keep it
+		# inspectable even when the catalog is compacted.
 		var displayed_perks: Array = game.selected_run_perks.duplicate(true)
 		displayed_perks.reverse()
 		for perk_value in displayed_perks:

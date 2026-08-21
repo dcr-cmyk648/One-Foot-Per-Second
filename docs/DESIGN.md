@@ -67,7 +67,7 @@ Age, physique, special training focus, and learned pitches are run-scoped choice
 - Every numbered level clear queues a deterministic saved perk offer.
 - The perk level equals the defeated level and scales its magnitude.
 - Normal rarity is random and can be improved by permanent upgrades.
-- Every sub-era finale guarantees Rare-or-better perk quality and separately queues a Pitch draft.
+- Every sub-era finale guarantees Rare-or-better perk quality. Every fifth numbered level and each authored boss separately queues a Pitch draft.
 - A Pitch draft learns a new pitch or levels an existing one; bosses offer the strangest pitches.
 - A cheap genetic license adds boss-perk rewards on future Bambino clears.
 - Auto-advance may queue multiple offers, but never discards or rerolls them.
@@ -76,7 +76,7 @@ Offer generation uses the saved run seed and choice serial. Options are serializ
 
 Corrupted perks require an eldritch unlock. Each eligible card independently has a 20% replacement chance. A corrupted card multiplies its positive effect by a saved random 2–3× and adds one meaningful negative stat.
 
-Skipping age perks keeps the player a toddler and supports the secret human-league toddler challenge. Selected adjectives compose in the subtitle. Clones pluralize only the final body noun, preserving the complete ridiculous description.
+Skipping age perks keeps the player a toddler and supports the secret human-league toddler challenge. The next sequential age remains an optional ordinary card, but gains quadratic selection weight after its authored normal level; the real two-card audit reaches full adulthood by the human finale reward in about 88% of runs that always choose an offered age. Age cards derive and display their exact Speed, Quality, Recovery, and Size step from gameplay data. Selected adjectives compose in the subtitle. Clones pluralize only the final body noun, preserving the complete ridiculous description.
 
 ## Spending and reset layers
 
@@ -124,7 +124,7 @@ Each slot stores ten items. Equipped and starred items are protected; overflow s
 
 ## Story, names, achievements, and disclosure
 
-The Story tab stores every revealed beat and popup, newest first by default, with a saved Reverse Order switch. First-run, genetic-replay, and eldritch-replay variants are separate one-time entries. The title illustration and subtitle also advance only through known history.
+The Story tab stores every revealed beat and popup, newest first by default, with a saved Reverse Order switch. A fresh slot immediately presents the one-foot-per-second prologue; each authored first-lifetime human sub-era records its distinct arrival only when the player actually enters it after resolving rewards. Genetic-replay and eldritch-replay variants remain separate one-time entries. The title illustration and subtitle also advance only through known history.
 
 Ordinary names use a broad grammar of single names, initials, multiple given names, surnames, nicknames, and era-appropriate titles. Authored bosses keep exclusive signatures. Later eras progressively relax the rules into alien and Elden-Ring-style absurdity.
 

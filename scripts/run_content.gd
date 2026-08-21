@@ -87,12 +87,12 @@ const RUN_PERKS := [
 
 	# Body age and adjectives. Ages replace the purchasable Grow Up ladder; build
 	# perks stack their adjective while retaining the current age noun.
-	{"id": "age_little_kid", "name": "Become a Little Kid", "league": "human", "stat": "body_age", "operation": "body", "age_order": 1, "base": 1.0, "level_growth": 0.0, "description": "You are now old enough to know this is weird."},
-	{"id": "age_big_kid", "name": "Become a Big Kid", "league": "human", "stat": "body_age", "operation": "body", "age_order": 2, "min_level": 3, "base": 1.0, "level_growth": 0.0, "description": "A decisive victory over being smaller."},
-	{"id": "age_preteen", "name": "Survive Preteenhood", "league": "human", "stat": "body_age", "operation": "body", "age_order": 3, "min_level": 9, "base": 1.0, "level_growth": 0.0, "description": "The uniform no longer fits for unrelated reasons."},
-	{"id": "age_teen", "name": "Puberty, Apparently", "league": "human", "stat": "body_age", "operation": "body", "age_order": 4, "min_level": 12, "base": 1.0, "level_growth": 0.0, "description": "Voice −1 octave • Fastball +awkwardness."},
-	{"id": "age_young_adult", "name": "Become a Young Adult", "league": "human", "stat": "body_age", "operation": "body", "age_order": 5, "min_level": 18, "base": 1.0, "level_growth": 0.0, "description": "Old enough to sign your own tendon waivers."},
-	{"id": "age_regular_guy", "name": "Become a Regular Ol' Guy", "league": "human", "stat": "body_age", "operation": "body", "age_order": 6, "min_level": 24, "base": 1.0, "level_growth": 0.0, "description": "Entirely ordinary, except for the baseball destiny."},
+	{"id": "age_little_kid", "name": "Become a Little Kid", "league": "human", "stat": "body_age", "operation": "body", "age_order": 1, "normal_by_level": 4, "base": 1.0, "level_growth": 0.0, "description": "You are now old enough to know this is weird."},
+	{"id": "age_big_kid", "name": "Become a Big Kid", "league": "human", "stat": "body_age", "operation": "body", "age_order": 2, "min_level": 3, "normal_by_level": 8, "base": 1.0, "level_growth": 0.0, "description": "A decisive victory over being smaller."},
+	{"id": "age_preteen", "name": "Survive Preteenhood", "league": "human", "stat": "body_age", "operation": "body", "age_order": 3, "min_level": 9, "normal_by_level": 13, "base": 1.0, "level_growth": 0.0, "description": "The uniform no longer fits for unrelated reasons."},
+	{"id": "age_teen", "name": "Puberty, Apparently", "league": "human", "stat": "body_age", "operation": "body", "age_order": 4, "min_level": 12, "normal_by_level": 18, "base": 1.0, "level_growth": 0.0, "description": "Voice −1 octave • Fastball +awkwardness."},
+	{"id": "age_young_adult", "name": "Become a Young Adult", "league": "human", "stat": "body_age", "operation": "body", "age_order": 5, "min_level": 18, "normal_by_level": 24, "base": 1.0, "level_growth": 0.0, "description": "Old enough to sign your own tendon waivers."},
+	{"id": "age_regular_guy", "name": "Become a Regular Ol' Guy", "league": "human", "stat": "body_age", "operation": "body", "age_order": 6, "min_level": 24, "normal_by_level": 30, "base": 1.0, "level_growth": 0.0, "description": "Entirely ordinary, except for the baseball destiny."},
 	{"id": "build_athletic", "name": "Look Vaguely Athletic", "league": "human", "stat": "body_build", "operation": "body", "adjective": "athletic", "base": 1.0, "level_growth": 0.0, "description": "Speed and posture improve slightly."},
 	{"id": "build_buff", "name": "Become a Buff Boi", "league": "human", "stat": "body_build", "operation": "body", "adjective": "buff", "min_level": 9, "base": 1.0, "level_growth": 0.0, "description": "The sleeves file a complaint."},
 	{"id": "build_toned", "name": "Suspiciously Toned", "league": "human", "stat": "body_build", "operation": "body", "adjective": "toned", "min_level": 15, "base": 1.0, "level_growth": 0.0, "description": "Cardio exists and you resent it."},
@@ -132,8 +132,18 @@ const BOSS_PITCHES := {
 }
 
 const STORY_BEATS := [
-	{"id": "prologue_little_timmy", "tier": "human", "title": "THE FIRST THREAT", "body": "Little Timmy raises a bent Wiffle bat. You stand three feet away, holding a ball that travels one foot per second. The universe does not yet understand what has begun."},
+	{"id": "prologue_little_timmy", "tier": "human", "title": "THREE FEET OF DESTINY", "body": "You are a toddler with one arm, a Wiffle Ball, and no compelling evidence that this is a good idea. Three feet away, Little Timmy raises a plastic bat. Your first pitch leaves at one foot per second. Baseball history begins very, very slowly."},
 	{"id": "story_tab_explained", "tier": "human", "title": "THE SCOREBOOK", "body": "Important moments are recorded in STORY. It shows newest entries first; Reverse Order restores the chronology if you are feeling responsible."},
+	{"id": "arrive_tee_ball", "tier": "human", "title": "TEE-BALL DIPLOMACY", "body": "The field gains a tee, orange slices, and an audience that believes every swing deserves applause. The competition somehow gets meaner."},
+	{"id": "arrive_coach_pitch", "tier": "human", "title": "A REAL WINDUP", "body": "A coach now throws actual pitches. The batters have started waiting for them. The distance expands; so does the amount of confidence they have in their aluminum bats."},
+	{"id": "arrive_little_league", "tier": "human", "title": "THE FIRST TRYHARDS", "body": "Matching socks appear. Private lessons appear. Somebody owns a composite bat with a warranty. Backyard baseball has become a little too organized."},
+	{"id": "arrive_middle_school", "tier": "human", "title": "THE AWKWARD LEAGUE", "body": "Everyone is suddenly larger in different directions. The strike zone is farther away, and at least one hitter has brought a laminated scouting report."},
+	{"id": "arrive_high_school", "tier": "human", "title": "FRIDAY-NIGHT LIGHTS", "body": "There are recruiters behind the backstop now. A bad pitch is no longer merely embarrassing; it is professionally documented."},
+	{"id": "arrive_small_college", "tier": "human", "title": "TUITION AND TENDONS", "body": "Community colleges and Division III programs offer classes, bus rides, and batters who study release points between assignments."},
+	{"id": "arrive_division_one", "tier": "human", "title": "THE BIG CAMPUS", "body": "Division I has video rooms, scouts, and an analytics department devoted to explaining why that last pitch was a mistake."},
+	{"id": "arrive_lower_minors", "tier": "human", "title": "THE LONG BUS", "body": "Professional baseball begins with motel bullpens, meal money, and hitters who can read spin before the ball leaves your hand."},
+	{"id": "arrive_upper_minors", "tier": "human", "title": "ONE CALL AWAY", "body": "The batters have packed for the majors. Every at-bat feels like a job interview conducted with a maple bat."},
+	{"id": "arrive_major_leagues", "tier": "human", "title": "THE SHOW", "body": "The last mortal league is waiting. Nobody here is impressed by your Wiffle-ball origin story, and they have the bats to prove it."},
 	{"id": "human_school_ball", "tier": "human", "title": "THE SCHOOL HAS A TEAM", "body": "The batters are taller, the mound is farther away, and somebody has started keeping statistics."},
 	{"id": "human_college", "tier": "human", "title": "A SCHOLARSHIP OF QUESTIONABLE VALUE", "body": "Baseball now has tuition, scouts, and an alarming amount of video analysis."},
 	{"id": "human_minors", "tier": "human", "title": "THE LONG BUS", "body": "Professional baseball begins with motel bullpens, meal money, and fourteen consecutive hours on a bus."},

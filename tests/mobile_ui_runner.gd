@@ -74,6 +74,17 @@ func _run() -> void:
 	var phone_new_game_back := main.title_new_game_stack.get_child(main.title_new_game_stack.get_child_count() - 1) as Control
 	_expect(_rect_inside(phone_new_game_back.get_global_rect(), main.title_action_panel.get_global_rect()), "The phone new-campaign Back action must remain reachable")
 	main._close_title_new_game_picker()
+	main.development_session = true
+	main._start_fresh_title_game(0)
+	await process_frame
+	await process_frame
+	_expect(main.story_dialog.visible, "A fresh phone slot must visibly present the opening story")
+	_expect(main.story_dialog.position.y + main.story_dialog.size.y <= root.size.y + 1.0, "The opening phone story dialog must remain fully reachable at 390×844")
+	_expect(main.story_dialog.dialog_text.contains("one foot per second"), "The opening phone story must explain the slow first pitch")
+	main._accept_story_dialog()
+	main.story_dialog.hide()
+	main.game.pending_story_dialogs.clear()
+	main._return_to_title_screen()
 	main._leave_title_screen(false)
 	_expect(main.mobile_layout, "Phone layout did not activate")
 	_expect(main.mobile_portrait_layout, "Portrait field orientation did not activate")

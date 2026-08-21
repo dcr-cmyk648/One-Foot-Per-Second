@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.2 — The toddler aged on schedule
+
+- Added an immediate fresh-run prologue: one toddler, one Wiffle Ball, three feet, and one foot per second. Every later human chapter now has distinct first-lifetime arrival copy that appears only after rewards are resolved and the new level is actually entered.
+- Defaulted **Hide Purchased** on for fresh one-time catalogs while preserving every explicit saved preference. Selected Body history remains visible, so filtering bought rows no longer hides the explanation of the current run.
+- Made every age card state its exact Speed, Quality, Recovery, and Size improvement from the same body-stage data used by gameplay.
+- Added deterministic overdue age weighting without forcing a card or reserving a slot. In 1,024 authoritative human draft runs, the normal two-card board reached full adulthood 87.60% of the time by the level-33 reward and 74.22% before the final human; one Expanded Draft Board rank reached 97.27%.
+- Expanded the permanent achievement catalog from 140 to 165 at the existing +0.5% XP each. New goals cover story chapters, run and pitch drafts, every life stage, adult/late/declined aging, ridiculous toddler physiques, supplements, legendary perks, pitch specialization, and boss pitches; the existing Puberty achievement now correctly unlocks at Teen.
+- Kept save schema 28. Existing v0.17.1 saves load directly, explicit filters survive, generated offers remain serialized and reroll-proof, and browser, PWA, native packages, Pages, and Sites continue to share one gameplay build.
+
 ## 0.17.1 — The flight clock remembered to land
 
 - Made authoritative pitches keep resolving when the renderer is between batter phases, and retire any visual volley that no longer exists in simulation. A rehydrated flight can no longer remain parked at `0.0s` after impact.

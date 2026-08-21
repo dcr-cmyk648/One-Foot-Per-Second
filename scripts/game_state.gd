@@ -55,6 +55,7 @@ const STRIKEOUT_POINTS_PER_REQUIRED_STRIKE := 5.0
 const OPENING_STRIKEOUT_BASE_POINTS := 5.0
 const HUMAN_CALLED_STRIKE_FLOOR := 0.025
 const BASE_VELOCITY_FPS := 1.0
+const AGE_TO_BODY_STAGE := [0, 2, 4, 5, 7, 9, 11]
 # Speed is the inexpensive backbone of ordinary progression. Its built-in
 # logarithmic quality contribution is strongest while the arm is slow, then
 # naturally gives way to Command as velocity becomes respectable.
@@ -376,10 +377,10 @@ var unlocked_achievements: Array[String] = []
 var achievement_event_totals := {}
 var achievement_revision := 0
 var catalog_hide_purchased := {
-	"pitch": false,
-	"ball": false,
-	"facility": false,
-	"body": false,
+	"pitch": true,
+	"ball": true,
+	"facility": true,
+	"body": true,
 }
 var achievement_hide_achieved := false
 var milestone_effect_cache_count := -1
@@ -606,11 +607,15 @@ func get_run_body_adjectives() -> Array[String]:
 			result.append(adjective)
 	return result
 
-func _perk_definition_is_offerable(definition: Dictionary, already_offered: Dictionary) -> bool:
+func _perk_definition_is_offerable(
+	definition: Dictionary,
+	already_offered: Dictionary,
+	selected_definitions: Dictionary = {}
+) -> bool:
 	var definition_id := str(definition.get("id", ""))
 	if definition_id.is_empty() or already_offered.has(definition_id):
 		return false
-	var selected := _selected_perk_definition_ids()
+	var selected := selected_definitions if not selected_definitions.is_empty() else _selected_perk_definition_ids()
 	if selected.has(definition_id):
 		return false
 	if str(definition.get("stat", "")) == "body_age":
@@ -618,6 +623,35 @@ func _perk_definition_is_offerable(definition: Dictionary, already_offered: Dict
 		# remain a toddler, but cannot draft adulthood before the intervening body.
 		return int(definition.get("age_order", 0)) == get_run_body_age_order() + 1
 	return true
+
+func get_perk_definition_offer_weight(definition: Dictionary, level_index: int) -> float:
+	# All ordinary definitions retain the neutral weight of one. The only weighted
+	# rule is the next sequential age: it stays optional, but an overdue childhood
+	# becomes progressively difficult for the draft board to ignore. The quadratic
+	# term makes the catch-up humane by the end of the human league without ever
+	# reserving a card or forcing the player to select it.
+	if str(definition.get("stat", "")) != "body_age":
+		return 1.0
+	var normal_by_level := maxi(int(definition.get("normal_by_level", level_index + 1)), 1)
+	var overdue := maxi(level_index + 1 - normal_by_level, 0)
+	return 1.0 + 0.15 * float(overdue * (overdue + 1))
+
+func _choose_weighted_perk_definition(
+	candidates: Array[Dictionary],
+	level_index: int,
+	local_rng: RandomNumberGenerator
+) -> Dictionary:
+	var total_weight := 0.0
+	for definition in candidates:
+		total_weight += maxf(get_perk_definition_offer_weight(definition, level_index), 0.000001)
+	if total_weight <= 0.0:
+		return candidates[0] if not candidates.is_empty() else {}
+	var roll := local_rng.randf() * total_weight
+	for definition in candidates:
+		roll -= maxf(get_perk_definition_offer_weight(definition, level_index), 0.000001)
+		if roll <= 0.0:
+			return definition
+	return candidates.back() if not candidates.is_empty() else {}
 
 func _make_perk_instance(
 	definition: Dictionary,
@@ -674,13 +708,14 @@ func create_perk_choice(
 	var local_rng := _run_choice_rng(bounded, choice_type, serial)
 	var pool := RunContent.eligible_perks(bounded, boss_offer)
 	var offered_ids := {}
+	var selected_definition_ids := _selected_perk_definition_ids()
 	var options: Array[Dictionary] = []
 	var option_count := get_run_perk_offer_count()
 	for option_index in option_count:
 		var candidates: Array[Dictionary] = []
 		for definition_value in pool:
 			var definition: Dictionary = definition_value
-			if _perk_definition_is_offerable(definition, offered_ids):
+			if _perk_definition_is_offerable(definition, offered_ids, selected_definition_ids):
 				candidates.append(definition)
 		if candidates.is_empty():
 			# A long run can own every definition. Duplicate definitions remain a
@@ -688,7 +723,7 @@ func create_perk_choice(
 			candidates = pool.duplicate()
 		if candidates.is_empty():
 			break
-		var definition: Dictionary = candidates[local_rng.randi_range(0, candidates.size() - 1)]
+		var definition := _choose_weighted_perk_definition(candidates, bounded, local_rng)
 		offered_ids[str(definition.id)] = true
 		var minimum_rank := 4 if boss_offer else (2 if guaranteed_rare else 0)
 		var rarity := _roll_run_perk_rarity(local_rng, minimum_rank)
@@ -832,7 +867,11 @@ func queue_endless_clear_rewards() -> Array[Dictionary]:
 			queued.append(pitch)
 	return queued
 
-func resolve_run_choice(choice_id: String, option_index: int) -> Dictionary:
+func resolve_run_choice(
+	choice_id: String,
+	option_index: int,
+	check_for_achievement_unlocks := true
+) -> Dictionary:
 	var choice_position := -1
 	for index in pending_run_choices.size():
 		if str(pending_run_choices[index].get("id", "")) == choice_id:
@@ -851,6 +890,21 @@ func resolve_run_choice(choice_id: String, option_index: int) -> Dictionary:
 		selected["selected_serial"] = int(choice.get("created_serial", 0))
 		selected_run_perks.append(selected)
 		_increment_achievement_event("run_perks_selected")
+		var definition := RunContent.perk_by_id(str(selected.get("definition_id", "")))
+		if int(selected.get("rarity_rank", 0)) >= 3 and type == "perk":
+			_increment_achievement_event("legendary_run_perk")
+		if str(definition.get("stat", "")) == "body_age":
+			var normal_by_level := maxi(int(definition.get("normal_by_level", 1)), 1)
+			var selected_level := int(choice.get("source_level_number", 1))
+			if selected_level >= normal_by_level + 6:
+				_increment_achievement_event("very_late_age_selected")
+		else:
+			for option_value in options:
+				var option: Dictionary = option_value
+				var offered_definition := RunContent.perk_by_id(str(option.get("definition_id", "")))
+				if str(offered_definition.get("stat", "")) == "body_age":
+					_increment_achievement_event("age_offers_declined")
+					break
 		if bool(selected.get("corrupted", false)):
 			_increment_achievement_event("selected_corrupted_perk")
 		if type == "boss_perk":
@@ -866,10 +920,13 @@ func resolve_run_choice(choice_id: String, option_index: int) -> Dictionary:
 		if pitch_id not in unlocked_pitches:
 			unlocked_pitches.append(pitch_id)
 		_increment_achievement_event("pitch_drafts_selected")
+		if type == "boss_pitch":
+			_increment_achievement_event("boss_pitch_selected")
 	else:
 		return {}
 	pending_run_choices.remove_at(choice_position)
-	check_achievements()
+	if check_for_achievement_unlocks:
+		check_achievements()
 	return selected
 
 func get_run_stat_multiplier(stat_id: String) -> float:
@@ -1821,10 +1878,10 @@ func reset_fresh() -> void:
 	achievement_event_totals.clear()
 	achievement_revision += 1
 	catalog_hide_purchased = {
-		"pitch": false,
-		"ball": false,
-		"facility": false,
-		"body": false,
+		"pitch": true,
+		"ball": true,
+		"facility": true,
+		"body": true,
 	}
 	achievement_hide_achieved = false
 	_invalidate_milestone_effect_cache()
@@ -5072,8 +5129,37 @@ func _get_drafted_body_stage_index() -> int:
 	# The six drafted age cards map onto the useful beats of the old, more
 	# granular age ladder.  Old schema-25 bodies retain their exact stage for the
 	# migrated run; future rebirths start as toddlers and use only these drafts.
-	const AGE_TO_STAGE := [0, 2, 4, 5, 7, 9, 11]
-	return int(AGE_TO_STAGE[clampi(get_run_body_age_order(), 0, AGE_TO_STAGE.size() - 1)])
+	return int(AGE_TO_BODY_STAGE[clampi(get_run_body_age_order(), 0, AGE_TO_BODY_STAGE.size() - 1)])
+
+func get_body_age_step_effect(age_order: int) -> Dictionary:
+	# Age cards jump across the legacy stage ladder.  Resolve the same incremental
+	# stage data used by live gameplay so the displayed card cannot drift from the
+	# actual body bonus.  A migrated body already beyond this age receives no
+	# additional gameplay benefit, which is reflected as an identity step.
+	var bounded_order := clampi(age_order, 1, AGE_TO_BODY_STAGE.size() - 1)
+	var previous_stage := maxi(
+		clampi(body_growth_level, 0, Content.BODY_GROWTH_STAGES.size() - 1),
+		int(AGE_TO_BODY_STAGE[bounded_order - 1])
+	)
+	var target_stage := maxi(previous_stage, int(AGE_TO_BODY_STAGE[bounded_order]))
+	var speed_multiplier := 1.0
+	var quality_bonus := 0.0
+	var recovery_multiplier := 1.0
+	for index in range(previous_stage + 1, target_stage + 1):
+		var effects: Dictionary = Content.BODY_GROWTH_STAGES[index].get("effects", {})
+		speed_multiplier *= float(effects.get("speed", 1.0))
+		quality_bonus += float(effects.get("quality", 0.0))
+		recovery_multiplier *= float(effects.get("recovery", 1.0))
+	var previous_size := float(Content.BODY_GROWTH_STAGES[previous_stage].get("visual_size", 1.0))
+	var target_size := float(Content.BODY_GROWTH_STAGES[target_stage].get("visual_size", previous_size))
+	return {
+		"speed_multiplier": speed_multiplier,
+		"quality_bonus": quality_bonus,
+		"recovery_multiplier": recovery_multiplier,
+		"visual_size_multiplier": target_size / maxf(previous_size, 0.000001),
+		"from_stage": previous_stage,
+		"to_stage": target_stage,
+	}
 
 func _drafted_body_modifier_ids() -> Array[String]:
 	var result: Array[String] = []
@@ -5522,6 +5608,37 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			return float(training_levels.get(str(key), 0))
 		"body_growth":
 			return float(maxi(body_growth_level, get_run_body_age_order()))
+		"run_perks":
+			return float(achievement_event_totals.get("run_perks_selected", 0.0))
+		"pitch_drafts":
+			return float(achievement_event_totals.get("pitch_drafts_selected", 0.0))
+		"human_story_chapters":
+			var chapters := 0
+			var human_chapter_ids := [
+				"prologue_little_timmy", "arrive_tee_ball", "arrive_coach_pitch",
+				"arrive_little_league", "arrive_middle_school", "arrive_high_school",
+				"arrive_small_college", "arrive_division_one", "arrive_lower_minors",
+				"arrive_upper_minors", "arrive_major_leagues",
+			]
+			for story_id in story_seen:
+				if story_id in human_chapter_ids:
+					chapters += 1
+			return float(chapters)
+		"body_adjectives":
+			return float(get_run_body_adjectives().size())
+		"toddler_buff_toned":
+			var adjectives := get_run_body_adjectives()
+			return 1.0 if get_run_body_age_order() == 0 and "buff" in adjectives and "toned" in adjectives else 0.0
+		"supplement_stack":
+			var supplements := get_run_body_adjectives()
+			return 1.0 if "creatine-loaded" in supplements and "suspiciously vitaminized" in supplements else 0.0
+		"roided_toddler":
+			return 1.0 if get_run_body_age_order() == 0 and "roided-out" in get_run_body_adjectives() else 0.0
+		"pitch_specialization":
+			var highest_pitch_level := 0
+			for pitch_level_value in pitch_levels.values():
+				highest_pitch_level = maxi(highest_pitch_level, int(pitch_level_value))
+			return float(highest_pitch_level)
 		"pitches_owned":
 			return float(unlocked_pitches.size())
 		"illegal_pitch":
@@ -5629,6 +5746,8 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			progress_text = "Campaign level %d / %d" % [int(current) + 1, int(threshold) + 1]
 		"training", "body_growth", "genetic_upgrade", "eldritch_upgrade":
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
+		"run_perks", "pitch_drafts", "human_story_chapters", "body_adjectives", "pitch_specialization":
+			progress_text = "%d / %d" % [int(current), int(threshold)]
 		"genetic_offer", "eldritch_offer", "relic_owned", "illegal_pitch", "cosmos", "human_champion_toddler", "no_hitter", "event", "human_final_strikeout_certainty":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
 	return {
@@ -5998,6 +6117,7 @@ func set_current_opponent(index: int) -> bool:
 		# Changing levels makes them lose targeting; they never curve into a newly
 		# selected opponent or inherit that opponent's probabilities.
 		_lose_target_for_active_volleys("level_changed")
+	_record_campaign_entry_story(index)
 	progression_changed.emit("Now pitching to %s." % opponents[index].name)
 	return true
 
@@ -6066,25 +6186,20 @@ func _record_campaign_clear_story(cleared_index: int) -> void:
 			record_story("ball_rog")
 		Content.FINAL_BOSS_INDEX:
 			record_story("cosmic_victory")
-			return
-	var next_index := cleared_index + 1
-	if next_index < 0 or next_index >= Content.CAMPAIGN_LEVEL_COUNT:
+
+func _record_campaign_entry_story(index: int) -> void:
+	if index < 0 or index >= Content.CAMPAIGN_LEVEL_COUNT:
 		return
-	var next_descriptor := Content.campaign_level(next_index)
-	if not bool(next_descriptor.get("subera_start", false)):
+	var descriptor := Content.campaign_level(index)
+	if not bool(descriptor.get("subera_start", false)):
 		return
-	var story_id := str(next_descriptor.get("story_key", "arrive_%d" % next_index))
-	var subera := str(next_descriptor.get("subera", "THE NEXT LEAGUE"))
-	var league := str(next_descriptor.get("league", "human"))
-	var body := ""
-	match league:
-		"human":
-			body = "The sign now says %s. The mound is farther away, the batters are less forgiving, and somebody has begun taking this much too seriously." % subera
-		"alien":
-			body = "%s recognizes your eligibility under rules translated from seventeen incompatible species. The distance is regulation somewhere." % subera
-		_:
-			body = "%s drifts toward Earth. The orbital mound turns to face it; the rules remain three parts baseball and one part existential threat." % subera
-	record_story(story_id, body, subera)
+	# The Preschool chapter is already the queued opening prologue. Re-entering it
+	# after prestige therefore stays quiet, while every later authored chapter is
+	# recorded when it is actually entered—not when its prior batter is farmed.
+	var story_id := str(descriptor.get("story_key", ""))
+	if story_id.is_empty():
+		return
+	record_story(story_id)
 
 func _record_campaign_speedrun(cleared_index: int) -> void:
 	if cleared_index == Content.HUMAN_FINAL_INDEX and current_run_seconds <= 60.0:
@@ -6158,6 +6273,12 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 		human_league_completed_as_toddler = true
 	if (
 		cleared_index == Content.HUMAN_FINAL_INDEX
+		and lifetime_genetic_rebirths <= 0
+		and get_run_body_age_order() >= 6
+	):
+		_increment_achievement_event("adult_first_human_finale")
+	if (
+		cleared_index == Content.HUMAN_FINAL_INDEX
 		and genetic_rebirths <= 0
 		and not genetic_offer_unlocked
 	):
@@ -6190,14 +6311,8 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 		and pending_run_choices.is_empty()
 		and can_auto_advance_to(highest_unlocked)
 	):
-		current_opponent = highest_unlocked
-		_sync_distance_to_current_opponent()
-		plate_strikes = 0
-		plate_balls = 0
-		_reset_batter_identity()
-		batter_replacement_pending = batter_cooldown_remaining > 0.0
-		consecutive_home_runs = 0
-		message += " • auto-advanced"
+		if set_current_opponent(highest_unlocked):
+			message += " • auto-advanced"
 	progression_changed.emit(message)
 	check_achievements()
 	return message
@@ -7547,7 +7662,9 @@ func apply_save_data(data: Dictionary) -> void:
 	var saved_auto_catalog_settings: Dictionary = data.get("auto_catalog_settings", {})
 	var saved_catalog_filters: Dictionary = data.get("catalog_hide_purchased", {})
 	for catalog_id in catalog_hide_purchased.keys():
-		catalog_hide_purchased[catalog_id] = bool(saved_catalog_filters.get(catalog_id, false))
+		# Existing explicit preferences remain authoritative. Missing filter fields
+		# adopt the current fresh-run default rather than silently exposing owned rows.
+		catalog_hide_purchased[catalog_id] = bool(saved_catalog_filters.get(catalog_id, true))
 	achievement_hide_achieved = bool(data.get("achievement_hide_achieved", false))
 
 	var saved_training: Dictionary = data.get("training_levels", {})

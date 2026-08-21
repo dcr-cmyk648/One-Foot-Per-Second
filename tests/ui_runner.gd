@@ -86,6 +86,17 @@ func _run() -> void:
 	var new_game_back := main.title_new_game_stack.get_child(main.title_new_game_stack.get_child_count() - 1) as Control
 	_expect(_rect_inside(new_game_back.get_global_rect(), main.title_action_panel.get_global_rect()), "The desktop new-campaign Back action must remain reachable")
 	main._close_title_new_game_picker()
+	main.development_session = true
+	main._start_fresh_title_game(0)
+	await process_frame
+	await process_frame
+	_expect(main.story_dialog.visible, "Starting a fresh title slot must visibly present the queued prologue")
+	_expect(main.story_dialog.dialog_text.contains("one foot per second"), "The visible fresh-slot prologue must establish the opening pitch")
+	_expect(main.game.story_journal.any(func(entry: Dictionary) -> bool: return str(entry.get("id", "")) == "prologue_little_timmy"), "The fresh-slot prologue must remain recorded in STORY")
+	main._accept_story_dialog()
+	main.story_dialog.hide()
+	main.game.pending_story_dialogs.clear()
+	main._return_to_title_screen()
 	var slot_metadata: Dictionary = main.game.to_save_data()
 	slot_metadata["active_campaign_slot"] = 2
 	var slot_round_trip = main.game.get_script().new()
@@ -115,13 +126,27 @@ func _run() -> void:
 	_expect(main.game.current_opponent == 1, "Choosing the queued reward should enter the requested next level")
 	main.game.reset_fresh()
 	main.game.pending_story_dialogs.clear()
+	# This fixture intentionally suppresses the fresh prologue modal. Remove its
+	# recorded discovery too, so a later field tap cannot be credited for reading
+	# a story that this synthetic player never saw.
+	main.game.story_seen.erase("prologue_little_timmy")
 	main.run_choice_dialog.hide()
+	# The preceding synthetic draft used the real resolver so it intentionally
+	# queued an achievement toast. A fresh-game fixture must clear that UI-only
+	# deferred queue alongside the reset game state before asserting the first
+	# active field-tap toast.
+	main._clear_achievement_toasts()
 	main._refresh_interface()
 	var pitch_choice_text: String = main._run_choice_option_text(
 		{"type": "pitch"},
 		{"name": "Test Ball", "rarity_name": "COMMON", "next_level": 1, "quality_gain": 0.1, "description": "Quality +0.2."}
 	)
 	_expect(pitch_choice_text.contains("DRAFT BONUS") and pitch_choice_text.contains("BASE PROFILE"), "Pitch drafts must label their randomized bonus separately from the base profile")
+	var age_choice_text: String = main._run_choice_option_text(
+		{"type": "perk", "source_level_number": 1},
+		{"name": "Become a Little Kid", "rarity_name": "COMMON", "level": 1, "effect": {"stat": "body_age", "operation": "body", "age_order": 1}}
+	)
+	_expect(age_choice_text.contains("AGE BONUS") and age_choice_text.contains("Speed") and age_choice_text.contains("Quality") and age_choice_text.contains("Recovery") and age_choice_text.contains("Size"), "Age draft cards must state their exact four-part body bonus")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -211,9 +236,9 @@ func _run() -> void:
 	main._refresh_interface()
 	_expect(main.run_perk_list.get_child_count() == 1, "Selected run perks should be inspectable in BODY")
 	main._toggle_catalog_hide_purchased(true, "body")
-	_expect(main.run_perk_list.get_child_count() == 0, "BODY Hide Purchased should collapse selected run perks")
+	_expect(main.run_perk_list.get_child_count() == 1, "BODY Hide Purchased should preserve the readable drafted-body history")
 	main._toggle_catalog_hide_purchased(false, "body")
-	_expect(main.run_perk_list.get_child_count() == 1, "Disabling BODY Hide Purchased should restore selected run perks")
+	_expect(main.run_perk_list.get_child_count() == 1, "BODY history should remain readable when catalog filtering changes")
 	main.game.selected_run_perks.clear()
 	main._refresh_interface()
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
