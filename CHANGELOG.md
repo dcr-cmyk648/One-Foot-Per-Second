@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.17.1 — The flight clock remembered to land
+
+- Made authoritative pitches keep resolving when the renderer is between batter phases, and retire any visual volley that no longer exists in simulation. A rehydrated flight can no longer remain parked at `0.0s` after impact.
+- Added a small real atmospheric loss to the opening Wiffle Ball while preserving its one-foot-per-second release and roughly three-second trip across three feet.
+- Decoupled pitch drafts from three-opponent story groupings. Ordinary drafts now arrive every five levels, while authored league bosses retain their separate boss-pitch rewards.
+- Deferred saved level-clear choices until **Next Level** is pressed. Players may keep pitching the mastered opponent; resolving the queued choice now completes the requested transition without passive popup interruption.
+- Clarified pitch cards with separate **Draft Bonus** and **Base Profile** labels, and reduced Payload help to its actual mathematical effect.
+- Replaced unbounded title adjective chains with a compact build class and optional conditioning descriptor while retaining the full detailed Body name.
+- Rebuilt **Start New Game** around three campaign slots. Empty slots begin directly, occupied slots use a slot-specific confirmation, active slots receive automatic snapshots, and the typed global reset remains confined to **Reset Progress**.
+- Restyled app-owned dialogs as responsive navy/teal game surfaces with visible in-content headings and phone-safe controls. Native file pickers remain native.
+- Kept save schema 28. Existing v0.17.0 saves load directly, and browser, PWA, native packages, Pages, and Sites remain one shared gameplay build.
+
 ## 0.17.0 — The scouting report became a roguelike
 
 - Replaced the 45-opponent ladder with exactly 100 finite levels: 33 human, 33 alien, 33 eldritch, and level-100 Octathulhu. Added eleven authored sub-eras per league, a sticky Bambino Rex finale, Olympus Mound’s playable Xylophax championship, Earth’s orbital defense campaign, and separate unnumbered Xylophax/Octathulhu first-contact exhibitions.

@@ -55,13 +55,17 @@ func _audit_campaign_topology() -> void:
 			_expect(Content.OPPONENT_BAT_COUNTS[index] >= 1 and Content.OPPONENT_BAT_COUNTS[index] <= 4, "Alien bat progression escaped its one-to-four range")
 		else:
 			_expect(Content.BASE_STRIKES_REQUIRED[index] >= 12, "Eldritch Level %d should demand a visibly nonhuman count" % (index + 1))
-	_expect(pitch_draft_count == 34, "Every three-level sub-era plus Octathulhu should queue a pitch draft")
+	_expect(pitch_draft_count == 23, "Every fifth finite level plus the three off-cadence league bosses should queue a pitch draft")
+	for level_number in range(1, 101):
+		var index := level_number - 1
+		var expected_pitch := level_number % Campaign.PITCH_DRAFT_INTERVAL == 0 or index in [32, 65, 98]
+		_expect(bool(Content.campaign_level(index).pitch_draft) == expected_pitch, "Pitch draft cadence mismatch at Level %d" % level_number)
 	_expect(str(Content.campaign_level(32).signature_name).contains("Bambino Rex"), "The human finale is not sticky-boss Bambino Rex")
 	_expect(str(Content.campaign_level(65).signature_name).contains("Xylophax"), "The alien finale is not playable Xylophax")
 	_expect(str(Content.campaign_level(99).signature_name).contains("Octathulhu"), "Level 100 is not Octathulhu")
 	_expect(Content.OPPONENT_BAT_COUNTS[65] == 4 and Content.OPPONENT_BAT_COUNTS[99] == 8, "Final bosses need four and eight visible bats")
 	_expect(Content.BASE_STRIKES_REQUIRED[99] == 64 and Content.BASE_BALLS_REQUIRED[99] == 2, "Octathulhu's final count changed unexpectedly")
-	print("100 levels • 34 pitch drafts • K counts 3 → 8 → 64 • bats 1 → 4 → 8")
+	print("100 levels • 23 pitch drafts • K counts 3 → 8 → 64 • bats 1 → 4 → 8")
 
 func _audit_physical_anchors() -> void:
 	print("\n=== Physical anchors ===")
@@ -77,8 +81,10 @@ func _audit_physical_anchors() -> void:
 	var fresh := GameStateScript.new()
 	fresh.reset_fresh()
 	_expect(is_equal_approx(fresh.get_representative_pitch_speed(), 1.0), "A new run no longer releases at one foot per second")
-	_expect(is_equal_approx(fresh.get_resolved_flight_seconds(), 3.0), "The opening three-foot throw should physically take three seconds")
-	_expect(is_equal_approx(fresh.get_representative_plate_speed(), 1.0), "An untouched opening Wiffle Ball should not change speed invisibly")
+	var opening_drag_loss := fresh.get_pitch_drag_loss_fraction()
+	_expect(opening_drag_loss >= 0.005 and opening_drag_loss <= 0.010, "The opening Wiffle Ball should lose roughly 0.5–1% to air drag")
+	_expect(fresh.get_resolved_flight_seconds() >= 3.0 and fresh.get_resolved_flight_seconds() <= 3.02, "The opening three-foot throw should remain roughly three seconds")
+	_expect(fresh.get_representative_plate_speed() < 1.0 and fresh.get_representative_plate_speed() > 0.99, "An untouched opening Wiffle Ball should lose a small real amount of speed")
 	fresh.free()
 	print("115 mph • Mach 5000 from Olympus Mound • 5000c from Earth to Pluto")
 

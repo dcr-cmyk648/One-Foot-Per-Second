@@ -198,6 +198,7 @@ var run_choice_title: Label
 var run_choice_subtitle: Label
 var run_choice_options: VBoxContainer
 var active_run_choice_id := ""
+var pending_level_transition_target := -1
 var offline_progress_dialog: AcceptDialog
 var browser_update_confirmation: ConfirmationDialog
 var browser_update_export_button: Button
@@ -220,6 +221,7 @@ var first_genetic_offer_prompted_this_session := false
 var pending_import_save: Dictionary = {}
 var pending_import_name := ""
 var pending_import_returns_from_title := false
+var pending_import_campaign_slot := -1
 var pending_title_offline_summary: Dictionary = {}
 var pending_title_offline_prefix := "Welcome back"
 var pending_new_game_from_title := false
@@ -306,11 +308,14 @@ var return_to_title_button: Button
 var title_screen: ColorRect
 var title_panel: PanelContainer
 var title_root_stack: VBoxContainer
+var title_update_spacer: Control
 var title_heading_label: Label
 var title_layout_grid: GridContainer
 var title_hero_stack: VBoxContainer
 var title_action_panel: PanelContainer
 var title_action_heading: Label
+var title_action_spacer: Control
+var title_action_bottom_spacer: Control
 var title_art
 var title_art_frame: PanelContainer
 var title_subtitle_label: Label
@@ -320,6 +325,10 @@ var title_resume_stack: VBoxContainer
 var title_autosave_label: Label
 var title_autosave_button: Button
 var title_manual_slot_entries: Array[Dictionary] = []
+var title_new_game_stack: VBoxContainer
+var title_new_game_slot_entries: Array[Dictionary] = []
+var new_game_overwrite_dialog: ConfirmationDialog
+var pending_new_game_slot := -1
 var title_screen_active := false
 
 func _ready() -> void:
@@ -386,13 +395,10 @@ func _process(delta: float) -> void:
 		web_last_wall_clock = Time.get_unix_time_from_system()
 		return
 	var simulation_delta := _consume_browser_wall_clock(delta)
-	# The simulation may know a terminal result as soon as a ball is released,
-	# while the top-down field still has to show that immutable ball reaching the
-	# plate and the replacement batter entering. Do not resolve hidden pitches in
-	# that visual gap.
-	game.live_pitching_enabled = (
-		pitch_field == null or pitch_field.is_simulation_clock_available()
-	)
+	# GameState owns immutable volley clocks. The renderer may be between batter
+	# phases or rehydrating after a resize, but it must never freeze an
+	# authoritative pitch at the plate.
+	game.live_pitching_enabled = true
 	game.advance(simulation_delta)
 	if pitch_field != null:
 		pitch_field.sync_active_volley_clocks(game.active_volleys)
@@ -647,7 +653,28 @@ func _load_browser_slot(slot_index: int) -> void:
 	var data := _read_browser_save_slot(slot_index)
 	if data.is_empty():
 		return
-	_stage_import_save(JSON.stringify(data), "Phone Slot %d" % (slot_index + 1))
+	_stage_import_save(JSON.stringify(data), "Slot %d" % (slot_index + 1), slot_index)
+
+func _write_active_campaign_slot_snapshot() -> void:
+	if game == null or development_session or game.save_writes_locked:
+		return
+	var slot_index := clampi(int(game.active_campaign_slot), -1, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1)
+	if slot_index < 0:
+		return
+	var save_text := game.get_save_json()
+	var file := FileAccess.open(_manual_save_slot_path(slot_index), FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(save_text)
+	file.close()
+	if is_web_build:
+		var storage: Variant = JavaScriptBridge.get_interface("localStorage")
+		if storage != null:
+			storage.setItem(_browser_save_slot_key(slot_index), save_text)
+			JavaScriptBridge.force_fs_sync()
+	_refresh_browser_save_slots()
+	if title_screen_active and title_resume_stack.visible:
+		_refresh_title_save_picker()
 
 func _input(event: InputEvent) -> void:
 	# Observe without consuming the event. The embedded ScrollContainer keeps its
@@ -1633,6 +1660,10 @@ func _build_title_screen() -> void:
 	title_root_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	title_root_stack.add_theme_constant_override("separation", 12)
 	title_panel.add_child(title_root_stack)
+	title_update_spacer = Control.new()
+	title_update_spacer.name = "TitleUpdateBannerClearance"
+	title_update_spacer.visible = false
+	title_root_stack.add_child(title_update_spacer)
 
 	title_heading_label = Label.new()
 	title_heading_label.text = "NO HITTER"
@@ -1708,9 +1739,9 @@ func _build_title_screen() -> void:
 	title_action_heading.add_theme_font_size_override("font_size", 13)
 	title_action_heading.add_theme_color_override("font_color", COLOR_GOLD)
 	action_stack.add_child(title_action_heading)
-	var action_spacer := Control.new()
-	action_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_stack.add_child(action_spacer)
+	title_action_spacer = Control.new()
+	title_action_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_stack.add_child(title_action_spacer)
 
 	title_menu_stack = VBoxContainer.new()
 	title_menu_stack.add_theme_constant_override("separation", 9)
@@ -1719,7 +1750,7 @@ func _build_title_screen() -> void:
 	resume_button.pressed.connect(_open_title_resume_picker)
 	title_menu_stack.add_child(resume_button)
 	var new_game_button := _title_menu_button("START NEW GAME")
-	new_game_button.tooltip_text = "Begin from the backyard. Existing progress requires a typed RESET; manual slots and exported backups remain."
+	new_game_button.tooltip_text = "Choose a campaign slot. Empty slots begin immediately; occupied slots ask before only that slot is replaced."
 	new_game_button.pressed.connect(_request_new_game_from_title)
 	title_menu_stack.add_child(new_game_button)
 	var import_button := _title_menu_button("IMPORT SAVE")
@@ -1750,9 +1781,35 @@ func _build_title_screen() -> void:
 	var back_button := _title_menu_button("BACK")
 	back_button.pressed.connect(_close_title_resume_picker)
 	title_resume_stack.add_child(back_button)
-	var action_bottom_spacer := Control.new()
-	action_bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_stack.add_child(action_bottom_spacer)
+
+	title_new_game_stack = VBoxContainer.new()
+	title_new_game_stack.visible = false
+	title_new_game_stack.add_theme_constant_override("separation", 6)
+	action_stack.add_child(title_new_game_stack)
+	var new_game_heading := Label.new()
+	new_game_heading.text = "START A NEW CAMPAIGN"
+	new_game_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	new_game_heading.add_theme_font_size_override("font_size", 15)
+	new_game_heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	title_new_game_stack.add_child(new_game_heading)
+	var new_game_note := Label.new()
+	new_game_note.text = "Choose a slot. Existing slots are overwritten only after confirmation."
+	new_game_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	new_game_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	new_game_note.add_theme_font_size_override("font_size", 10)
+	new_game_note.add_theme_color_override("font_color", COLOR_MUTED)
+	title_new_game_stack.add_child(new_game_note)
+	for slot_index in BROWSER_MANUAL_SAVE_SLOT_COUNT:
+		var new_slot_row := _title_save_row("SLOT %d" % (slot_index + 1), "BEGIN")
+		title_new_game_stack.add_child(new_slot_row.container)
+		(new_slot_row.button as Button).pressed.connect(_request_new_game_slot.bind(slot_index))
+		title_new_game_slot_entries.append(new_slot_row)
+	var new_game_back_button := _title_menu_button("BACK")
+	new_game_back_button.pressed.connect(_close_title_new_game_picker)
+	title_new_game_stack.add_child(new_game_back_button)
+	title_action_bottom_spacer = Control.new()
+	title_action_bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_stack.add_child(title_action_bottom_spacer)
 	var transfer_hint := Label.new()
 	transfer_hint.text = "AUTOSAVE ON  •  BACKUPS ARE PORTABLE JSON"
 	transfer_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1782,7 +1839,7 @@ func _title_menu_button(text_value: String, primary := false) -> Button:
 		button.add_theme_color_override("font_color", Color.WHITE)
 	return button
 
-func _title_save_row(default_text: String) -> Dictionary:
+func _title_save_row(default_text: String, action_text := "LOAD") -> Dictionary:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _compact_panel_style(8.0, 5.0, 7))
 	var row := HBoxContainer.new()
@@ -1796,7 +1853,7 @@ func _title_save_row(default_text: String) -> Dictionary:
 	label.add_theme_color_override("font_color", COLOR_TEXT)
 	row.add_child(label)
 	var button := Button.new()
-	button.text = "LOAD"
+	button.text = action_text
 	button.custom_minimum_size = Vector2(72.0, 44.0)
 	button.focus_mode = Control.FOCUS_ALL
 	row.add_child(button)
@@ -1813,6 +1870,7 @@ func _show_title_screen(save_current := true) -> void:
 	title_screen_active = true
 	title_menu_stack.visible = true
 	title_resume_stack.visible = false
+	title_new_game_stack.visible = false
 	title_action_heading.text = "YOUR RUN AWAITS"
 	_refresh_title_screen()
 	_refresh_title_layout()
@@ -1829,6 +1887,7 @@ func _leave_title_screen(show_pending_offline := true) -> void:
 	title_screen.visible = false
 	title_menu_stack.visible = true
 	title_resume_stack.visible = false
+	title_new_game_stack.visible = false
 	title_action_heading.text = "YOUR RUN AWAITS"
 	if show_pending_offline and not pending_title_offline_summary.is_empty():
 		var summary := pending_title_offline_summary.duplicate(true)
@@ -1869,7 +1928,10 @@ func _configure_title_layout(viewport_size: Vector2) -> void:
 		return
 	var portrait := _is_portrait_viewport(viewport_size)
 	var compact_title := portrait or viewport_size.x < 760.0
-	var choosing_save := title_resume_stack != null and title_resume_stack.visible
+	var choosing_save := (
+		(title_resume_stack != null and title_resume_stack.visible)
+		or (title_new_game_stack != null and title_new_game_stack.visible)
+	)
 	var panel_width := (
 		clampf(viewport_size.x - 24.0, 300.0, 620.0)
 		if compact_title
@@ -1889,9 +1951,10 @@ func _configure_title_layout(viewport_size: Vector2) -> void:
 	var reserve_update_banner := (
 		is_web_build and update_banner != null and update_banner.visible
 	)
-	title_heading_label.custom_minimum_size.y = (
-		(66.0 if compact_title else 86.0) if reserve_update_banner else 0.0
-	)
+	title_heading_label.custom_minimum_size.y = 0.0
+	if title_update_spacer != null:
+		title_update_spacer.visible = reserve_update_banner
+		title_update_spacer.custom_minimum_size.y = (64.0 if compact_title else 76.0) if reserve_update_banner else 0.0
 	title_subtitle_label.add_theme_font_size_override("font_size", 14 if compact_title else 16)
 	title_subtitle_label.autowrap_mode = (
 		TextServer.AUTOWRAP_WORD_SMART if compact_title else TextServer.AUTOWRAP_OFF
@@ -1901,6 +1964,13 @@ func _configure_title_layout(viewport_size: Vector2) -> void:
 	title_action_panel.size_flags_vertical = (
 		Control.SIZE_EXPAND_FILL if choosing_save or not compact_title else Control.SIZE_FILL
 	)
+	# A menu can be vertically centered with flexible space above and below it;
+	# a concrete save-slot list cannot. Hiding both spacers keeps every row inside
+	# its action panel at short desktop and phone heights.
+	if title_action_spacer != null:
+		title_action_spacer.visible = not choosing_save
+	if title_action_bottom_spacer != null:
+		title_action_bottom_spacer.visible = not choosing_save
 	# The art gives way to the save list only on a narrow portrait screen. A wide
 	# title keeps its matchup tableau visible, so desktop no longer looks like a
 	# stretched phone menu.
@@ -1916,12 +1986,28 @@ func _configure_title_layout(viewport_size: Vector2) -> void:
 func _open_title_resume_picker() -> void:
 	_refresh_title_save_picker()
 	title_menu_stack.visible = false
+	title_new_game_stack.visible = false
 	title_resume_stack.visible = true
 	title_action_heading.text = "CHOOSE A SAVE"
 	_refresh_title_layout()
 
 func _close_title_resume_picker() -> void:
 	title_resume_stack.visible = false
+	title_menu_stack.visible = true
+	title_action_heading.text = "YOUR RUN AWAITS"
+	_refresh_title_layout()
+
+func _open_title_new_game_picker() -> void:
+	_refresh_title_new_game_picker()
+	title_menu_stack.visible = false
+	title_resume_stack.visible = false
+	title_new_game_stack.visible = true
+	title_action_heading.text = "CHOOSE A CAMPAIGN SLOT"
+	_refresh_title_layout()
+
+func _close_title_new_game_picker() -> void:
+	pending_new_game_slot = -1
+	title_new_game_stack.visible = false
 	title_menu_stack.visible = true
 	title_action_heading.text = "YOUR RUN AWAITS"
 	_refresh_title_layout()
@@ -1945,6 +2031,13 @@ func _refresh_title_save_picker() -> void:
 		var data := _read_browser_save_slot(slot_index)
 		(entry.label as Label).text = _format_browser_save_slot(slot_index, data)
 		(entry.button as Button).disabled = data.is_empty()
+
+func _refresh_title_new_game_picker() -> void:
+	for slot_index in title_new_game_slot_entries.size():
+		var entry: Dictionary = title_new_game_slot_entries[slot_index]
+		var data := _read_browser_save_slot(slot_index)
+		(entry.label as Label).text = _format_browser_save_slot(slot_index, data)
+		(entry.button as Button).text = "BEGIN" if data.is_empty() else "REPLACE"
 
 func _format_named_save(name: String, data: Dictionary) -> String:
 	if data.is_empty():
@@ -2045,22 +2138,31 @@ func _resume_loaded_autosave() -> void:
 	_leave_title_screen()
 
 func _request_new_game_from_title() -> void:
-	var has_current_progress := (
-		game.save_writes_locked
-		or game.last_load_succeeded
-		or _browser_save_has_progress(game.to_save_data())
-		or FileAccess.file_exists(BaseballGameState.SAVE_PATH)
-		or FileAccess.file_exists(BaseballGameState.SAVE_BACKUP_PATH)
-	)
-	if not has_current_progress:
-		_start_fresh_title_game()
-		return
-	pending_new_game_from_title = true
-	_request_hard_reset()
+	_open_title_new_game_picker()
 
-func _start_fresh_title_game() -> void:
+func _request_new_game_slot(slot_index: int) -> void:
+	var data := _read_browser_save_slot(slot_index)
+	if data.is_empty():
+		_start_fresh_title_game(slot_index)
+		return
+	pending_new_game_slot = slot_index
+	new_game_overwrite_dialog.dialog_text = (
+		"Replace Slot %d with a fresh toddler campaign?\n\n"
+		+ "Only this slot and the active autosave mirror will be replaced. Your other campaign slots remain intact."
+	) % (slot_index + 1)
+	new_game_overwrite_dialog.popup_centered_clamped(Vector2i(600, 250), 0.94)
+
+func _confirm_new_game_slot_overwrite() -> void:
+	if pending_new_game_slot < 0:
+		return
+	var slot_index := pending_new_game_slot
+	pending_new_game_slot = -1
+	_start_fresh_title_game(slot_index)
+
+func _start_fresh_title_game(slot_index := -1) -> void:
 	pending_title_offline_summary.clear()
 	game.reset_fresh()
+	game.active_campaign_slot = clampi(slot_index, -1, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1)
 	game.save_writes_locked = false
 	browser_save_regression_allowed = true
 	pitch_field.reset_visual_state()
@@ -2072,6 +2174,7 @@ func _start_fresh_title_game() -> void:
 	event_log.clear()
 	if not development_session:
 		game.save_game()
+		_write_active_campaign_slot_snapshot()
 	_leave_title_screen(false)
 	_log_event("A new backyard career begins at one foot per second.")
 
@@ -2476,6 +2579,16 @@ func _recenter_visible_dialogs() -> void:
 		run_choice_dialog.popup_centered_clamped(_run_choice_popup_size(), 0.96)
 	if locker_dialog != null and locker_dialog.visible:
 		_position_locker_dialog()
+	for dialog in [
+		hard_reset_dialog, body_limit_dialog, genetic_confirmation, eldritch_confirmation,
+		divine_confirmation, story_dialog, offline_progress_dialog, browser_update_confirmation,
+		native_update_confirmation, alien_help_dialog, alien_arrival_dialog,
+		eldritch_arrival_dialog, genetic_rebirth_explanation_dialog, mobile_install_dialog,
+		mobile_inspection_dialog, import_save_confirmation, save_transfer_message_dialog,
+		new_game_overwrite_dialog,
+	]:
+		if dialog != null and (dialog as Window).visible:
+			(dialog as Window).popup_centered_clamped((dialog as Window).size, 0.94)
 
 func _sync_browser_content_scale(reported_scale := -1.0) -> void:
 	if not is_web_build:
@@ -4139,7 +4252,7 @@ func _build_ball_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "BALL")
 	_section_label(content, "BALL UPGRADES — POWER WITHOUT PHANTOM PROJECTILES")
 	var ball_explainer := Label.new()
-	ball_explainer.text = "Each shell replaces the previous shell. Payload multiplies XP per result while the visual ball count stays honest."
+	ball_explainer.text = "Each shell replaces the previous shell. Payload multiplies XP from completed strikeouts."
 	ball_explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ball_explainer.add_theme_font_size_override("font_size", 13)
 	ball_explainer.add_theme_color_override("font_color", COLOR_MUTED)
@@ -4864,6 +4977,93 @@ func _build_confirmation_dialog() -> void:
 	divine_confirmation.get_cancel_button().custom_minimum_size.y = 44.0
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
+	new_game_overwrite_dialog = ConfirmationDialog.new()
+	new_game_overwrite_dialog.name = "NewGameSlotOverwrite"
+	new_game_overwrite_dialog.title = "REPLACE THIS CAMPAIGN?"
+	new_game_overwrite_dialog.dialog_autowrap = true
+	new_game_overwrite_dialog.min_size = Vector2i(320, 220)
+	new_game_overwrite_dialog.ok_button_text = "REPLACE SLOT"
+	new_game_overwrite_dialog.cancel_button_text = "KEEP SLOT"
+	new_game_overwrite_dialog.confirmed.connect(_confirm_new_game_slot_overwrite)
+	new_game_overwrite_dialog.canceled.connect(func() -> void: pending_new_game_slot = -1)
+	add_child(new_game_overwrite_dialog)
+	_style_app_owned_dialogs()
+
+func _style_app_owned_dialogs() -> void:
+	var dialogs: Array[Window] = [
+		locker_dialog, loot_item_dialog, hard_reset_dialog, body_limit_dialog,
+		genetic_confirmation, eldritch_confirmation, divine_confirmation,
+		story_dialog, run_choice_dialog, offline_progress_dialog,
+		browser_update_confirmation, native_update_confirmation,
+		alien_help_dialog, alien_arrival_dialog, eldritch_arrival_dialog,
+		genetic_rebirth_explanation_dialog, mobile_install_dialog,
+		mobile_inspection_dialog, import_save_confirmation,
+		save_transfer_message_dialog, new_game_overwrite_dialog,
+	]
+	for dialog in dialogs:
+		_style_app_dialog(dialog)
+
+func _style_app_dialog(dialog: Window) -> void:
+	if dialog == null:
+		return
+	# Godot's platform title bar is the gray chrome visible in browser and mobile
+	# captures. App-owned dialogs use a panel surface instead; native file pickers
+	# are intentionally excluded from this helper.
+	dialog.borderless = true
+	dialog.unresizable = false
+	dialog.add_theme_stylebox_override("panel", _dialog_panel_style())
+	dialog.add_theme_color_override("title_color", COLOR_ACCENT)
+	dialog.add_theme_font_size_override("title_font_size", 18)
+	if dialog is AcceptDialog:
+		var accept := dialog as AcceptDialog
+		accept.dialog_autowrap = true
+		_ensure_accept_dialog_heading(accept)
+		accept.get_ok_button().custom_minimum_size.y = maxf(accept.get_ok_button().custom_minimum_size.y, 44.0)
+		accept.get_ok_button().add_theme_color_override("font_color", COLOR_ACCENT)
+		if accept is ConfirmationDialog:
+			(accept as ConfirmationDialog).get_cancel_button().custom_minimum_size.y = maxf((accept as ConfirmationDialog).get_cancel_button().custom_minimum_size.y, 44.0)
+
+func _ensure_accept_dialog_heading(dialog: AcceptDialog) -> void:
+	var content_label := dialog.get_label()
+	if content_label == null:
+		return
+	var content_parent := content_label.get_parent()
+	if content_parent == null or content_parent.get_node_or_null("AppDialogHeading") != null:
+		return
+	var heading := Label.new()
+	heading.name = "AppDialogHeading"
+	heading.text = dialog.title.to_upper()
+	heading.visible = true
+	heading.custom_minimum_size.y = 26.0
+	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	heading.add_theme_font_size_override("font_size", 18)
+	heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	content_parent.add_child(heading)
+	content_parent.move_child(heading, content_label.get_index(true))
+	dialog.about_to_popup.connect(_refresh_accept_dialog_heading.bind(dialog, heading))
+
+func _refresh_accept_dialog_heading(dialog: AcceptDialog, heading: Label) -> void:
+	var title_text := dialog.title.to_upper()
+	heading.text = title_text
+	heading.visible = true
+	# The internal AcceptDialog layout is a separate window tree on some Web
+	# exports, where an inserted sibling can be measured but not painted above the
+	# built-in text. Prefix the same heading into that guaranteed visible body
+	# label as a rendering fallback, without accumulating it across popups.
+	var previous_prefix := str(dialog.get_meta("app_dialog_heading_prefix", ""))
+	var body := dialog.dialog_text
+	if not previous_prefix.is_empty() and body.begins_with(previous_prefix):
+		body = body.trim_prefix(previous_prefix)
+	var prefix := "%s\n\n" % title_text
+	dialog.set_meta("app_dialog_heading_prefix", prefix)
+	dialog.dialog_text = prefix + body
+
+func _dialog_panel_style() -> StyleBoxFlat:
+	var style := _compact_panel_style(18.0, 14.0, 12)
+	style.bg_color = Color("0b1422")
+	style.border_color = Color("3a5c7e")
+	style.set_border_width_all(2)
+	return style
 
 func _build_story_dialog() -> void:
 	story_dialog = AcceptDialog.new()
@@ -4964,7 +5164,7 @@ func _run_effect_text(effect: Dictionary) -> String:
 func _run_choice_option_text(choice: Dictionary, option: Dictionary) -> String:
 	var choice_type := str(choice.get("type", "perk"))
 	if choice_type in ["pitch", "boss_pitch"]:
-		return "%s  •  %s  •  LEVEL %d\n%s Quality\n%s" % [
+		return "%s  •  %s  •  LEVEL %d\nDRAFT BONUS • %s Quality\nBASE PROFILE • %s" % [
 			str(option.get("name", "Unknown Pitch")),
 			str(option.get("rarity_name", "COMMON")),
 			int(option.get("next_level", 1)),
@@ -5042,6 +5242,10 @@ func _select_run_choice_option(choice_id: String, option_index: int) -> void:
 	if not development_session and not game.save_writes_locked:
 		game.save_game()
 	_refresh_interface()
+	if game.has_pending_run_choices():
+		_show_run_choice(game.get_next_pending_run_choice())
+		return
+	_complete_pending_level_transition()
 	call_deferred("_maybe_show_pending_overlay")
 
 func _accept_story_dialog() -> void:
@@ -5213,7 +5417,7 @@ func _build_hard_reset_dialog() -> void:
 	hard_reset_dialog = Window.new()
 	hard_reset_dialog.name = "HardResetWindow"
 	hard_reset_dialog.title = "RESET ALL PROGRESS"
-	hard_reset_dialog.min_size = Vector2i(520, 250)
+	hard_reset_dialog.min_size = Vector2i(320, 250)
 	hard_reset_dialog.size = Vector2i(560, 270)
 	hard_reset_dialog.transient = true
 	hard_reset_dialog.exclusive = true
@@ -5223,14 +5427,20 @@ func _build_hard_reset_dialog() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_bottom", 22)
+	margin.add_theme_constant_override("margin_left", 14)
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_bottom", 14)
 	hard_reset_dialog.add_child(margin)
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 14)
 	margin.add_child(stack)
+	var heading := Label.new()
+	heading.name = "HardResetHeading"
+	heading.text = "RESET ALL PROGRESS"
+	heading.add_theme_font_size_override("font_size", 20)
+	heading.add_theme_color_override("font_color", COLOR_BAD)
+	stack.add_child(heading)
 	var warning := Label.new()
 	warning.text = (
 		"This permanently erases the local save: XP, equipment, mastery, every prestige layer, "
@@ -5414,8 +5624,8 @@ func _get_game_subtitle() -> String:
 	# Each line describes only a milestone the player has already discovered.
 	# Keeping this separate from reveal headings avoids advertising future layers.
 	var plural_body := game.get_clone_count() > 1.0
-	var body_noun := game.get_body_growth_noun(plural_body)
-	var body_subject := body_noun if plural_body else "a %s" % body_noun
+	var body_descriptor := game.get_compact_body_descriptor(plural_body)
+	var body_subject := body_descriptor if plural_body else "a %s" % body_descriptor
 	if game.cosmos_conquered or game.divine_ascensions > 0:
 		return "A baseball game about saving the universe, somehow"
 	if game.eldritch_ascensions > 0 or game.lifetime_eldritch_ascensions > 0:
@@ -5423,16 +5633,12 @@ func _get_game_subtitle() -> String:
 	if game.eldritch_offer_unlocked or game.highest_unlocked >= Content.ELDRITCH_EXHIBITION_INDEX:
 		return "A baseball game about %s versus the void" % body_subject
 	if game.genetic_rebirths > 0 or game.lifetime_genetic_rebirths > 0:
-		return "A baseball game about %s" % (
-			"genetically modified %s" % body_noun
-			if plural_body
-			else "a genetically modified %s" % body_noun
-		)
+		return "A baseball game about %s" % body_subject
 	if game.genetic_offer_unlocked or game.highest_unlocked >= Content.ALIEN_EXHIBITION_INDEX:
 		return "A baseball game about %s who found aliens" % body_subject
-	if game.has_body_modifier("steroids"):
-		return "A baseball game about a big boi"
-	return "A baseball game about a regular ol’ %s" % body_noun
+	if game.get_compact_body_descriptor(false) == str(game.get_body_growth_stage().get("noun", "pitcher")):
+		return "A baseball game about a regular ol’ %s" % body_descriptor
+	return "A baseball game about %s" % body_subject
 
 func _refresh_guide_text(
 	genetic_revealed: bool,
@@ -6986,6 +7192,7 @@ func _on_progression_changed(message: String) -> void:
 func _on_save_status_changed(message: String) -> void:
 	if message == "Saved":
 		_write_browser_save_mirror()
+		_write_active_campaign_slot_snapshot()
 		_clear_browser_update_checkpoint_if_safe()
 	if is_web_build and not web_storage_persistent:
 		save_label.text = "temporary save"
@@ -7001,10 +7208,23 @@ func _previous_opponent() -> void:
 	game.set_current_opponent(game.current_opponent - 1)
 
 func _next_opponent() -> void:
+	if game.has_pending_run_choices():
+		pending_level_transition_target = game.current_opponent + 1
+		_show_run_choice(game.get_next_pending_run_choice())
+		return
+	_complete_pending_level_transition(game.current_opponent + 1)
+
+func _complete_pending_level_transition(fallback_target := -1) -> void:
+	var target := pending_level_transition_target
+	if target < 0:
+		target = fallback_target
+	pending_level_transition_target = -1
+	if target < 0:
+		return
 	if game.can_begin_endless_mode():
 		game.begin_endless_mode()
-	else:
-		game.set_current_opponent(game.current_opponent + 1)
+	elif target <= game.highest_unlocked:
+		game.set_current_opponent(target)
 
 func _accept_alien_help() -> void:
 	if not game.accept_alien_help():
@@ -7041,9 +7261,6 @@ func _maybe_show_pending_overlay() -> void:
 		story_dialog.dialog_text = str(story_entry.get("body", ""))
 		var story_size := Vector2i(350, 330) if mobile_layout else Vector2i(620, 330)
 		story_dialog.popup_centered_clamped(story_size, 0.92)
-		return
-	if game.has_pending_run_choices():
-		_show_run_choice(game.get_next_pending_run_choice())
 		return
 	_maybe_show_alien_story()
 
@@ -7436,7 +7653,7 @@ func _clear_web_file_handles() -> void:
 	web_file_loaded_callback = null
 	web_file_error_callback = null
 
-func _stage_import_save(text: String, source_name: String) -> void:
+func _stage_import_save(text: String, source_name: String, campaign_slot := -1) -> void:
 	var decoded := game.decode_save_text(text)
 	if not bool(decoded.get("ok", false)):
 		_show_save_transfer_error(str(decoded.get("message", "The selected save is invalid.")))
@@ -7444,6 +7661,7 @@ func _stage_import_save(text: String, source_name: String) -> void:
 	pending_import_save = (decoded.data as Dictionary).duplicate(true)
 	pending_import_name = source_name
 	pending_import_returns_from_title = title_screen_active
+	pending_import_campaign_slot = clampi(campaign_slot, -1, BROWSER_MANUAL_SAVE_SLOT_COUNT - 1)
 	var saved_level := clampi(
 		int(pending_import_save.get("current_opponent", 0)) + 1,
 		1,
@@ -7469,11 +7687,14 @@ func _confirm_import_save() -> void:
 	var imported := pending_import_save.duplicate(true)
 	var imported_name := pending_import_name
 	var should_resume_from_title := pending_import_returns_from_title
+	var imported_campaign_slot := pending_import_campaign_slot
 	_discard_pending_import()
 	# The replacement confirmation is the explicit authority to retire every
 	# automatic generation. Without it, unreadable/newer saves stay protected.
 	game.delete_save()
 	game.apply_save_data(imported)
+	if imported_campaign_slot >= 0:
+		game.active_campaign_slot = imported_campaign_slot
 	var saved_at := float(imported.get("saved_at", Time.get_unix_time_from_system()))
 	var offline_seconds := maxf(Time.get_unix_time_from_system() - saved_at, 0.0)
 	var offline_summary := game.simulate_offline(offline_seconds)
@@ -7488,6 +7709,7 @@ func _confirm_import_save() -> void:
 	game.save_writes_locked = false
 	browser_save_regression_allowed = true
 	game.save_game()
+	_write_active_campaign_slot_snapshot()
 	autosave_elapsed = 0.0
 	_log_event("Loaded portable backup %s." % imported_name)
 	if should_resume_from_title:
@@ -7500,6 +7722,7 @@ func _discard_pending_import() -> void:
 	pending_import_save.clear()
 	pending_import_name = ""
 	pending_import_returns_from_title = false
+	pending_import_campaign_slot = -1
 
 func _show_save_transfer_error(message: String) -> void:
 	save_transfer_message_dialog.dialog_text = message
@@ -7526,7 +7749,7 @@ func _request_hard_reset() -> void:
 		return
 	hard_reset_input.clear()
 	hard_reset_confirm_button.disabled = true
-	hard_reset_dialog.popup_centered(Vector2i(560, 270))
+	hard_reset_dialog.popup_centered_clamped(Vector2i(560, 270), 0.94)
 	hard_reset_input.call_deferred("grab_focus")
 
 func _close_hard_reset_dialog() -> void:
@@ -7547,6 +7770,10 @@ func _confirm_hard_reset() -> void:
 	_clear_browser_recovery_mirrors()
 	game.delete_save()
 	game.reset_fresh()
+	# Global Reset is deliberately separate from campaign-slot replacement. Keep
+	# every manual slot intact and return the fresh autosave to the unassigned
+	# recovery lane.
+	game.active_campaign_slot = -1
 	game.save_writes_locked = false
 	browser_save_regression_allowed = true
 	pitch_field.reset_visual_state()

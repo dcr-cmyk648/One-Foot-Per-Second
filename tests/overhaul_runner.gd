@@ -15,6 +15,7 @@ func _initialize() -> void:
 	_test_mastery_and_strikeout_gate()
 	_test_sticky_boss_and_choice_queue()
 	_test_active_volley_queue()
+	_test_deferred_level_choices()
 	_test_bats_and_clone_fielding()
 	_test_loot_and_relic_contract()
 	_test_training_batches_and_physical_scale()
@@ -222,6 +223,9 @@ func _test_active_volley_queue() -> void:
 	restored.apply_save_data(saved)
 	_expect(restored.active_volleys == game.active_volleys, "Every in-flight volley must survive a save round-trip")
 	_expect(restored.next_volley_id == game.next_volley_id, "Volley identity allocation must survive saves")
+	var rehydrated_duration := float(restored.active_volleys[0].duration)
+	restored.simulate_active_time(rehydrated_duration + 0.2)
+	_expect(restored.active_volleys.is_empty(), "A rehydrated authoritative volley must resolve without a rendered field clock")
 
 	var first_id := int(game.active_volleys[0].id)
 	game.active_volleys[0].ball_count = 2
@@ -246,6 +250,27 @@ func _test_active_volley_queue() -> void:
 	_expect(lost_events.size() == 1, "Every orphaned volley must emit one target-lost visual event")
 	game.free()
 	restored.free()
+
+func _test_deferred_level_choices() -> void:
+	var game = GameStateScript.new()
+	game.reset_fresh()
+	game.pending_story_dialogs.clear()
+	var requirement := game.get_mastery_requirement(0)
+	game.opponent_mastery[0] = requirement
+	var clear_summary: Dictionary = game._empty_resolution_summary()
+	game._apply_pitch_outcome(clear_summary, Content.STRIKE_INDEX, -1.0, 3, false)
+	game._apply_resolution(clear_summary, true)
+	_expect(game.highest_unlocked == 1, "A cleared ordinary level should unlock its successor immediately")
+	_expect(game.current_opponent == 0, "A cleared level should remain active for voluntary farming")
+	_expect(game.has_pending_run_choices(), "A clear should serialize its mandatory reward before transition")
+	_expect(not game.set_current_opponent(1), "Direct level movement must not bypass an unresolved draft")
+	var farm_summary := game.simulate_active_time(8.0)
+	_expect(float(farm_summary.released_pitches) > 0.0 or game.get_active_volley_count() > 0, "A cleared level must keep pitching while draft choices wait")
+	while game.has_pending_run_choices():
+		var choice := game.get_next_pending_run_choice()
+		_expect(not game.resolve_run_choice(str(choice.id), 0).is_empty(), "A queued reward must remain resolvable after farming")
+	_expect(game.set_current_opponent(1), "Resolving choices should reopen the requested next-level transition")
+	game.free()
 
 func _test_bats_and_clone_fielding() -> void:
 	var game = GameStateScript.new()
@@ -389,8 +414,8 @@ func _test_training_batches_and_physical_scale() -> void:
 	game.reset_fresh()
 	game.pending_story_dialogs.clear()
 	_expect(is_equal_approx(game.get_pitch_distance_feet(), 3.0), "The opening range must be three physical feet")
-	_expect(is_equal_approx(game.get_physical_flight_seconds(), 3.0), "The one-foot-per-second opening pitch must physically take three seconds")
-	_expect(is_equal_approx(game.get_representative_plate_speed(), 1.0), "The untouched Wiffle Ball must not invent drag")
+	_expect(game.get_physical_flight_seconds() >= 3.0 and game.get_physical_flight_seconds() <= 3.02, "The one-foot-per-second opening pitch must remain roughly three seconds")
+	_expect(game.get_representative_plate_speed() < 1.0 and game.get_representative_plate_speed() > 0.99, "The untouched Wiffle Ball must lose a small real amount of speed to air")
 	game.highest_unlocked = Content.HUMAN_FINAL_INDEX
 	_expect(is_equal_approx(game.get_velocity_cap_fps(), BaseballGameState.HUMAN_SPEED_CAP_FPS), "A first body must retain the 115 mph human ceiling")
 	game.genetic_rebirths = 1

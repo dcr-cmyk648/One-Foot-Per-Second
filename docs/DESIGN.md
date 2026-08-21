@@ -23,7 +23,7 @@ The finite campaign contains exactly 100 numbered levels.
 | Eldritch | 67–99 | approaching 5,000c from Earth toward Pluto | Ball-rog, the Unstrikeable |
 | Final | 100 | Earth-to-Pluto causality trial | Octathulhu, God of the Eightfold Swing |
 
-Each league has eleven three-level sub-eras. A sub-era changes the class, range, visual scale, threat curve, story context, guaranteed reward quality, and available one-time projects. Human sub-eras move through backyard play, tee ball, youth and school leagues, college, the minors, and professional baseball. Alien baseball expands from local planetary leagues to the Olympus championship. Eldritch baseball begins with Earth’s orbital defense platform and meets approaching gods across the solar system.
+Each league has eleven three-level sub-eras. A sub-era changes the class, range, visual scale, threat curve, story context, guaranteed reward quality, and available one-time projects. Pitch drafts use a separate, predictable cadence: every five cleared numbered levels, plus each off-cadence league boss. Human sub-eras move through backyard play, tee ball, youth and school leagues, college, the minors, and professional baseball. Alien baseball expands from local planetary leagues to the Olympus championship. Eldritch baseball begins with Earth’s orbital defense platform and meets approaching gods across the solar system.
 
 Xylophax and Octathulhu also have unnumbered first-contact exhibitions. These are witnessed story gates, not lottery fights. The opponent repeatedly hits guaranteed Grand Slams while a visible humiliation/doom meter fills. Offline play cannot fill either meter, and pitching does not begin before the introductory dialog closes.
 

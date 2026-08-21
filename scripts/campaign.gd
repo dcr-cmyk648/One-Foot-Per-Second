@@ -14,6 +14,9 @@ const ELDRITCH_FINAL_INDEX := 98
 const FINAL_BOSS_INDEX := 99
 const FINITE_LEVEL_COUNT := 100
 const LEVELS_PER_SUBERA := 3
+# Narrative remains in authored three-opponent sub-eras. Pitch drafts use a
+# separate, predictable reward cadence.
+const PITCH_DRAFT_INTERVAL := 5
 
 const LEAGUE_HUMAN := "human"
 const LEAGUE_ALIEN := "alien"
@@ -403,7 +406,7 @@ static func _build_levels() -> Array[Dictionary]:
 				"subera_index": subera_index,
 				"subera_position": position,
 				"subera_finale": position == LEVELS_PER_SUBERA - 1,
-				"league_boss": index in [HUMAN_FINAL_INDEX, ALIEN_FINAL_INDEX],
+				"league_boss": index in [HUMAN_FINAL_INDEX, ALIEN_FINAL_INDEX, ELDRITCH_FINAL_INDEX],
 				"class_name": str(classes[position]),
 				"bat_name": str(bats[position]),
 				"quirk": str(quirks[position]),
@@ -420,8 +423,11 @@ static func _build_levels() -> Array[Dictionary]:
 				"signature_name": str(SIGNATURE_NAMES.get(index, "")),
 				"story_key": "arrive_%s" % str(subera.id) if position == 0 else "",
 				"guaranteed_rare_offer": position == LEVELS_PER_SUBERA - 1,
-				"pitch_draft": position == LEVELS_PER_SUBERA - 1,
-				"boss_pitch": index in [HUMAN_FINAL_INDEX, ALIEN_FINAL_INDEX],
+				"pitch_draft": (
+					(index + 1) % PITCH_DRAFT_INTERVAL == 0
+					or index in [HUMAN_FINAL_INDEX, ALIEN_FINAL_INDEX, ELDRITCH_FINAL_INDEX]
+				),
+				"boss_pitch": index in [HUMAN_FINAL_INDEX, ALIEN_FINAL_INDEX, ELDRITCH_FINAL_INDEX],
 				"speed_anchor_fps": _speed_anchor_for_index(index),
 				"body_scale": _body_scale_for_index(index),
 			})

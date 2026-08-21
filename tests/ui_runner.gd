@@ -12,6 +12,14 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
 
+func _rect_inside(inner: Rect2, outer: Rect2) -> bool:
+	return (
+		inner.position.x >= outer.position.x - 1.0
+		and inner.position.y >= outer.position.y - 1.0
+		and inner.end.x <= outer.end.x + 1.0
+		and inner.end.y <= outer.end.y + 1.0
+	)
+
 func _run() -> void:
 	var main = MainScene.instantiate()
 	root.add_child(main)
@@ -39,6 +47,14 @@ func _run() -> void:
 	await process_frame
 	_expect(main.title_layout_grid.columns == 2 and main.title_panel.size.x >= 900.0, "A desktop title should use a wide two-column composition instead of a stretched phone card")
 	_expect(main.title_action_panel.position.x > main.title_art_frame.position.x, "Desktop title actions should sit beside the matchup art")
+	main.is_web_build = true
+	main.update_banner.visible = true
+	main._configure_title_layout(Vector2(1280.0, 720.0))
+	await process_frame
+	_expect(not main.update_banner.get_global_rect().intersects(main.title_heading_label.get_global_rect()), "A desktop update banner must not overlap the NO HITTER title")
+	main.update_banner.visible = false
+	main.is_web_build = false
+	main._configure_title_layout(Vector2(1600.0, 900.0))
 	var desktop_title_stage: Rect2 = main.title_art._stage_rect(Vector2(700.0, 440.0))
 	_expect(absf(desktop_title_stage.size.x / desktop_title_stage.size.y - 1.52) < 0.02 and desktop_title_stage.size.x > 620.0, "Desktop title art should enlarge the icon-style matchup in a landscape frame")
 	if "--capture-title" in OS.get_cmdline_user_args():
@@ -58,12 +74,54 @@ func _run() -> void:
 	})
 	_expect(title_prestige_summary.contains("DNA 7 (19 earned)"), "The title-screen save picker should expose revealed prestige point history")
 	main._close_title_resume_picker()
+	main._request_new_game_from_title()
+	main._configure_title_layout(Vector2(1280.0, 720.0))
+	await process_frame
+	_expect(main.title_new_game_stack.visible and not main.title_menu_stack.visible, "Start New Game should open a slot picker rather than the global reset dialog")
+	_expect(not main.hard_reset_dialog.visible, "Title Start New Game must never route through typed RESET")
+	_expect(main.title_hero_stack.visible and main.title_art_frame.get_global_rect().get_area() > 1000.0, "The desktop title matchup art should remain laid out while choosing a new campaign")
+	_expect(main.title_new_game_slot_entries.size() == 3, "New campaigns should offer the same three named slots as loading")
+	for new_slot_entry in main.title_new_game_slot_entries:
+		_expect(_rect_inside((new_slot_entry.button as Control).get_global_rect(), main.title_action_panel.get_global_rect()), "Every desktop BEGIN/REPLACE action must stay visibly inside the title action panel")
+	var new_game_back := main.title_new_game_stack.get_child(main.title_new_game_stack.get_child_count() - 1) as Control
+	_expect(_rect_inside(new_game_back.get_global_rect(), main.title_action_panel.get_global_rect()), "The desktop new-campaign Back action must remain reachable")
+	main._close_title_new_game_picker()
+	var slot_metadata: Dictionary = main.game.to_save_data()
+	slot_metadata["active_campaign_slot"] = 2
+	var slot_round_trip = main.game.get_script().new()
+	root.add_child(slot_round_trip)
+	slot_round_trip.apply_save_data(slot_metadata)
+	_expect(slot_round_trip.active_campaign_slot == 2, "The selected campaign slot should survive autosave serialization and loading")
+	slot_round_trip.queue_free()
 	main._leave_title_screen(false)
 	_expect(not main.title_screen.visible and main.return_to_title_button.text == "TITLE", "Desktop play should retain a path back to the title screen")
 	main.return_to_title_button.pressed.emit()
 	await process_frame
 	_expect(main.title_screen_active and main.title_screen.visible, "The in-game TITLE button should save and return to the title screen")
 	main._leave_title_screen(false)
+	# Clearing a level may queue deterministic draft cards, but farming the cleared
+	# batter must not summon a modal until the player asks to advance.
+	main.game.pending_run_choices.clear()
+	main.game.pending_story_dialogs.clear()
+	main.game.highest_unlocked = 1
+	main.game.current_opponent = 0
+	main.game.create_perk_choice(0, false, false, true)
+	main._maybe_show_pending_overlay()
+	_expect(not main.run_choice_dialog.visible, "Queued rewards must not passively interrupt a cleared-level farm")
+	main._next_opponent()
+	_expect(main.run_choice_dialog.visible, "NEXT LEVEL should present the queued mandatory reward")
+	var queued_choice: Dictionary = main.game.get_next_pending_run_choice()
+	main._select_run_choice_option(str(queued_choice.id), 0)
+	_expect(main.game.current_opponent == 1, "Choosing the queued reward should enter the requested next level")
+	main.game.reset_fresh()
+	main.game.pending_story_dialogs.clear()
+	main.run_choice_dialog.hide()
+	main._refresh_interface()
+	var pitch_choice_text: String = main._run_choice_option_text(
+		{"type": "pitch"},
+		{"name": "Test Ball", "rarity_name": "COMMON", "next_level": 1, "quality_gain": 0.1, "description": "Quality +0.2."}
+	)
+	_expect(pitch_choice_text.contains("DRAFT BONUS") and pitch_choice_text.contains("BASE PROFILE"), "Pitch drafts must label their randomized bonus separately from the base profile")
 	var margin: MarginContainer
 	for child in main.get_children():
 		if child is MarginContainer:
@@ -162,8 +220,8 @@ func _run() -> void:
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
 	_expect(main.field_stat_labels.size() == 7, "The live throw profile should contain only facts about the current or next pitch")
 	_expect(str(main.field_stat_labels.release.text).contains("1.00 ft/s"), "The field overlay should begin with the game's literal one-foot-per-second release speed")
-	_expect(str(main.field_stat_labels.plate.text).contains("1.00 ft/s"), "The untouched Wiffle Ball should arrive at the same one-foot-per-second speed")
-	_expect(main.field_stat_labels.drag.text.ends_with("NONE"), "The untouched opening Wiffle Ball should disclose that it has no air-drag model")
+	_expect(str(main.field_stat_labels.plate.text).contains("0.99 ft/s"), "The untouched Wiffle Ball should lose a small real amount of atmospheric speed")
+	_expect(not main.field_stat_labels.drag.text.ends_with("NONE"), "The untouched opening Wiffle Ball should disclose its small atmospheric drag")
 	_expect(main.field_stat_labels.distance.text.contains("3 ft"), "The live profile should show the immutable release distance")
 	_expect(main.field_stat_labels.pitch.text == "AUTOMATIC MIX", "The live throw profile should show the pitch name without a redundant PITCH prefix")
 	for stat_id in main.field_stat_labels:
@@ -324,13 +382,42 @@ func _run() -> void:
 		"effect": {"stat": "body_build", "operation": "body", "adjective": "roided-out"},
 	})
 	main._refresh_interface()
-	_expect(main.header_subtitle.text == "A baseball game about a big boi", "The first steroid use should update the subtitle")
+	_expect(main.header_subtitle.text == "A baseball game about a roided-out toddler", "The first steroid use should update the compact body subtitle")
+	main.game.selected_run_perks.append({
+		"definition_id": "build_toned", "name": "Running Laps", "level": 1,
+		"rarity_name": "COMMON", "color": "a9b6c5",
+		"effect": {"stat": "body_build", "operation": "body", "adjective": "toned"},
+	})
+	main.game.eldritch_levels.mirror_clones = 1
+	_expect(main.game.get_compact_body_descriptor(true) == "roided-out, toned toddlers", "Subtitle composition should keep one build class, one conditioning adjective, and clone pluralization")
+	_expect(main.game.get_body_growth_name().contains("Roid") or main.game.get_body_growth_name().contains("roid"), "Detailed BODY text should retain the complete modifier chain")
+	main.game.eldritch_levels.mirror_clones = 0
 	main.game.selected_run_perks.clear()
 	main._refresh_interface()
 	main.development_session = false
 	main._request_hard_reset()
 	await process_frame
 	_expect(main.hard_reset_dialog.visible, "Reset Progress should open a hard-stop confirmation window")
+	_expect(main.hard_reset_dialog.borderless and main.hard_reset_dialog.has_theme_stylebox_override("panel"), "The destructive reset window should use the borderless game modal treatment")
+	_expect(main.hard_reset_dialog.find_child("HardResetHeading", true, false) != null, "Borderless custom windows must retain an in-content heading")
+	var offline_heading_parent: Node = main.offline_progress_dialog.get_label().get_parent()
+	var offline_heading := offline_heading_parent.get_node_or_null("AppDialogHeading") as Control
+	main._close_hard_reset_dialog()
+	main.offline_progress_dialog.title = "WELCOME BACK"
+	main.offline_progress_dialog.dialog_text = "A small test return."
+	main.offline_progress_dialog.popup_centered_clamped(Vector2i(420, 220), 0.94)
+	await process_frame
+	var offline_dialog_rect := Rect2(Vector2(main.offline_progress_dialog.position), Vector2(main.offline_progress_dialog.size))
+	var offline_heading_global := Rect2()
+	if offline_heading != null:
+		# Window-internal Controls report coordinates inside their own dialog tree;
+		# translate them to the root canvas before comparing to the popup rect.
+		offline_heading_global = Rect2(offline_heading.get_global_rect().position + Vector2(main.offline_progress_dialog.position), offline_heading.get_global_rect().size)
+	_expect(offline_heading != null and offline_heading.text == "WELCOME BACK" and offline_heading.visible and offline_heading_global.get_area() > 1.0 and _rect_inside(offline_heading_global, offline_dialog_rect) and main.offline_progress_dialog.dialog_text.begins_with("WELCOME BACK\n\n"), "Borderless accept dialogs must render their current title as a visible in-content heading")
+	var dialog_surface := main.offline_progress_dialog.get_theme_stylebox("panel") as StyleBoxFlat
+	_expect(dialog_surface != null and dialog_surface.bg_color.a > 0.95 and dialog_surface.bg_color.b < 0.25, "App-owned dialog surfaces should be opaque navy rather than native gray")
+	main.offline_progress_dialog.hide()
+	main._request_hard_reset()
 	main.hard_reset_input.text = "reset"
 	main._update_hard_reset_confirmation(main.hard_reset_input.text)
 	_expect(main.hard_reset_confirm_button.disabled, "The reset button should reject the wrong capitalization")

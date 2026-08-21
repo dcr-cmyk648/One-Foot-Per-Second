@@ -13,6 +13,14 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
 
+func _rect_inside(inner: Rect2, outer: Rect2) -> bool:
+	return (
+		inner.position.x >= outer.position.x - 1.0
+		and inner.position.y >= outer.position.y - 1.0
+		and inner.end.x <= outer.end.x + 1.0
+		and inner.end.y <= outer.end.y + 1.0
+	)
+
 func _run() -> void:
 	root.size = Vector2i(390, 844)
 	var main = MainScene.instantiate()
@@ -36,6 +44,14 @@ func _run() -> void:
 	_expect(main.title_screen_active and main.title_screen.visible, "Phone launches should begin on the title screen")
 	_expect(main.title_panel.size.x <= 366.0 and main.title_panel.position.x >= 0.0 and main.title_panel.position.x + main.title_panel.size.x <= main.title_screen.size.x, "The phone title panel should fit horizontally: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
 	_expect(main.title_panel.size.y <= 820.0 and main.title_panel.position.y >= 0.0 and main.title_panel.position.y + main.title_panel.size.y <= main.title_screen.size.y, "The phone title panel should fit vertically: %s at %s" % [str(main.title_panel.size), str(main.title_panel.position)])
+	main.is_web_build = true
+	main.update_banner.visible = true
+	main._configure_title_layout(Vector2(390.0, 844.0))
+	await process_frame
+	_expect(not main.update_banner.get_global_rect().intersects(main.title_heading_label.get_global_rect()), "A phone update banner must not overlap the NO HITTER title")
+	main.update_banner.visible = false
+	main.is_web_build = false
+	main._configure_title_layout(Vector2(390.0, 844.0))
 	_expect(main.title_art._visible_era() == 0, "Fresh phone title art must remain spoiler-free")
 	var phone_title_stage: Rect2 = main.title_art._stage_rect(Vector2(340.0, 420.0))
 	_expect(absf(phone_title_stage.size.x / phone_title_stage.size.y - 0.92) < 0.02 and phone_title_stage.size.x > 310.0, "Phone title art should enlarge the icon-style matchup in a portrait frame")
@@ -48,6 +64,16 @@ func _run() -> void:
 	await process_frame
 	_expect(main.title_resume_stack.visible and not main.title_art_frame.visible, "The phone save picker should replace the art instead of overflowing beneath it")
 	main._close_title_resume_picker()
+	main._request_new_game_from_title()
+	main._configure_title_layout(Vector2(390.0, 844.0))
+	await process_frame
+	_expect(main.title_new_game_stack.visible and not main.hard_reset_dialog.visible, "Phone Start New Game should present slots instead of a typed global reset")
+	_expect(main.title_panel.position.y + main.title_panel.size.y <= main.title_screen.size.y, "The phone new-game slot picker should keep every title action in frame")
+	for new_slot_entry in main.title_new_game_slot_entries:
+		_expect(_rect_inside((new_slot_entry.button as Control).get_global_rect(), main.title_action_panel.get_global_rect()), "Every phone BEGIN/REPLACE action must stay visibly inside the title action panel")
+	var phone_new_game_back := main.title_new_game_stack.get_child(main.title_new_game_stack.get_child_count() - 1) as Control
+	_expect(_rect_inside(phone_new_game_back.get_global_rect(), main.title_action_panel.get_global_rect()), "The phone new-campaign Back action must remain reachable")
+	main._close_title_new_game_picker()
 	main._leave_title_screen(false)
 	_expect(main.mobile_layout, "Phone layout did not activate")
 	_expect(main.mobile_portrait_layout, "Portrait field orientation did not activate")
@@ -85,6 +111,14 @@ func _run() -> void:
 	_expect(main.mobile_install_dialog.dialog_text.contains("ADD TO HOME SCREEN"), "The iPhone guide should name Apple's Add to Home Screen action")
 	_expect(main.mobile_install_dialog.dialog_text.contains("EXPORT"), "The iPhone guide should protect players from browser-storage surprises")
 	main.mobile_install_dialog.hide()
+	main.development_session = false
+	main._request_hard_reset()
+	await process_frame
+	_expect(main.hard_reset_dialog.visible and main.hard_reset_dialog.borderless, "Phone reset confirmation should use the game modal instead of gray window chrome")
+	_expect(main.hard_reset_dialog.position.x >= 0.0 and main.hard_reset_dialog.position.x + main.hard_reset_dialog.size.x <= root.size.x, "Phone reset confirmation should fit horizontally")
+	_expect(main.hard_reset_dialog.position.y >= 0.0 and main.hard_reset_dialog.position.y + main.hard_reset_dialog.size.y <= root.size.y, "Phone reset confirmation actions should remain reachable")
+	main._close_hard_reset_dialog()
+	main.development_session = true
 	main._configure_mobile_install_dialog("android")
 	_expect(main.mobile_install_dialog.title == "INSTALL ON ANDROID", "The Android install guide should identify its platform")
 	_expect(main.mobile_install_dialog.dialog_text.contains("INSTALL APP"), "The Android fallback should name Chrome's install action")

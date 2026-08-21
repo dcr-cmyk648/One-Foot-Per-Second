@@ -194,7 +194,7 @@ const STAT_HELP := {
 	"offline": "Offline efficiency is the share of normal strikeout XP and called-Strike mastery deposited while the game is closed or suspended.",
 	"tap": "Tapping builds a short rolling input signal that accelerates Recovery, flight, and lineup clocks. Long timers gain more than short timers; ultra-fast tapping has diminishing returns instead of teleporting a timer.",
 	"auto_tap": "Automatic clickers feed the same rolling signal and rapid-tap diminishing curve as manual taps. Genetic ranks raise each clicker's cadence and tolerance; Eldritch ranks add more clickers.",
-	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
+	"payload": "Payload multiplies XP from completed strikeouts.",
 	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
 	"determination": "Bad results build Determination by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Every doubling adds Quality; a completed strikeout resets it.",
 	"drag": "Air drag slows a released ball continuously on its trip to the plate. Lower drag preserves more of its release speed.",
@@ -1090,7 +1090,7 @@ const TRAINING := [
 		"required_level": 12,
 		"stats": ["payload"],
 		"description": "Base payload +0.01×.",
-		"details": "Each rank adds 0.01× to base Payload. Payload multiplies strikeout XP without creating extra visual balls.",
+		"details": "Each rank adds 0.01× to base Payload. Payload multiplies XP from completed strikeouts.",
 	},
 	{
 		"id": "mastery_training",

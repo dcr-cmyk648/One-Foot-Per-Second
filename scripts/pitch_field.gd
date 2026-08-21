@@ -649,9 +649,11 @@ func sync_active_volley_clocks(authoritative_volleys: Array) -> void:
 	# immutable volley's authoritative remaining time after each simulation frame.
 	# This changes only its progress clock; source, target, pitch, curve, color,
 	# duration, and sampled outcome remain the released snapshot.
+	var authoritative_ids := {}
 	for volley_value in authoritative_volleys:
 		var volley: Dictionary = volley_value
 		var volley_id := int(volley.get("id", 0))
+		authoritative_ids[volley_id] = true
 		if not active_visual_volleys.has(volley_id):
 			continue
 		_sync_visual_volley_clock(
@@ -659,6 +661,19 @@ func sync_active_volley_clocks(authoritative_volleys: Array) -> void:
 			float(volley.get("remaining", 0.0)),
 			float(volley.get("duration", 0.001))
 		)
+	# The field is only a projection of GameState's immutable volley queue. A
+	# resolved volley can disappear from the authoritative queue before a field
+	# rehydrate spawns its next frame, so retire stale projections instead of
+	# leaving a FLIGHT meter frozen at 0.0 seconds.
+	for visual_id_value in active_visual_volleys.keys():
+		var visual_id := int(visual_id_value)
+		if authoritative_ids.has(visual_id):
+			continue
+		for slot_value in active_pitch_slots.keys():
+			var slot := int(slot_value)
+			if int(slot_launch_data[slot].get("volley_id", -1)) == visual_id:
+				_retire_pitch_slot(slot)
+		active_visual_volleys.erase(visual_id)
 	_refresh_visual_volley_compatibility()
 
 func _sync_visual_volley_clock(volley_id: int, remaining_seconds: float, duration_seconds: float) -> void:

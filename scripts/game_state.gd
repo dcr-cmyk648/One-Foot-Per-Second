@@ -369,6 +369,9 @@ var unlocked_pitches: Array[String] = ["dead_fish"]
 var purchased_ball_upgrades: Array[String] = []
 var purchased_milestones: Array[String] = []
 var purchased_body_modifiers: Array[String] = []
+# UI-owned save metadata. The normal autosave remains the recovery source; the
+# selected manual campaign slot receives an additional automatic mirror.
+var active_campaign_slot := -1
 var unlocked_achievements: Array[String] = []
 var achievement_event_totals := {}
 var achievement_revision := 0
@@ -816,7 +819,7 @@ func queue_endless_clear_rewards() -> Array[Dictionary]:
 	if not (perk.get("options", []) as Array).is_empty():
 		pending_run_choices.append(perk.duplicate(true))
 		queued.append(perk)
-	if endless_level % 3 == 0:
+	if endless_level % Campaign.PITCH_DRAFT_INTERVAL == 0:
 		var pitch := create_pitch_choice(Content.FINAL_BOSS_INDEX, false, false)
 		pitch.source_level_number = effective_level_number
 		for option_value in pitch.get("options", []):
@@ -5136,6 +5139,33 @@ func get_body_growth_noun(plural := false) -> String:
 		lowered.append(adjective.to_lower())
 	return "%s %s" % [", ".join(lowered), noun]
 
+func get_compact_body_descriptor(plural := false) -> String:
+	# Title/header copy is intentionally a readable snapshot rather than the full
+	# build history printed in BODY. Pick one build class and (only when useful)
+	# one conditioning adjective.
+	var ids := _all_body_modifier_ids()
+	var strength := ""
+	if "steroids" in ids:
+		strength = "roided-out"
+	elif "suspicious_vitamins" in ids:
+		strength = "suspiciously buff"
+	elif "creatine" in ids:
+		strength = "creatine-loaded"
+	elif "pushup_phase" in ids:
+		strength = "buff"
+	elif "playground_conditioning" in ids:
+		strength = "athletic"
+	var conditioning := ""
+	if "running_laps" in ids and not strength.is_empty():
+		conditioning = "toned"
+	var noun := str(get_body_growth_stage().get("noun", "pitcher"))
+	if plural:
+		noun += "s"
+	var modifier := strength
+	if not conditioning.is_empty():
+		modifier += ", %s" % conditioning
+	return noun if modifier.is_empty() else "%s %s" % [modifier, noun]
+
 func get_body_growth_visual_size() -> float:
 	return minf(
 		float(get_body_growth_stage().get("visual_size", 1.0))
@@ -5862,9 +5892,9 @@ func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
 			/ maxf(1.0 + float(get_equipment_bonuses().drag_bonus), 0.05)
 		)
 	var shell_count := purchased_ball_upgrades.size()
-	var base_drag := 0.0
+	var base_drag := 0.002
 	if shell_count <= 0:
-		return 0.0
+		base_drag = 0.002
 	if shell_count == 1:
 		base_drag = 0.012
 	elif shell_count == 2:
@@ -6152,7 +6182,14 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 		return contact_message
 	highest_unlocked += 1
 	var message := "UNLOCKED: %s" % opponents[highest_unlocked].name
-	if auto_advance_enabled and can_auto_advance_to(highest_unlocked):
+	# Draft rewards are mandatory transition boundaries. Auto-advance may farm
+	# the cleared opponent, but it must never cross a queued choice on the
+	# player's behalf.
+	if (
+		auto_advance_enabled
+		and pending_run_choices.is_empty()
+		and can_auto_advance_to(highest_unlocked)
+	):
 		current_opponent = highest_unlocked
 		_sync_distance_to_current_opponent()
 		plate_strikes = 0
@@ -7272,6 +7309,7 @@ func to_save_data() -> Dictionary:
 		"active_volleys": active_volleys,
 		"next_volley_id": next_volley_id,
 		"current_opponent": current_opponent,
+		"active_campaign_slot": active_campaign_slot,
 		"highest_unlocked": highest_unlocked,
 		"selected_distance_index": selected_distance_index,
 		"dna": dna,
@@ -7341,6 +7379,7 @@ func apply_save_data(data: Dictionary) -> void:
 	# Tap fatigue is deliberately a brief input condition, not permanent progress.
 	# Loading or importing a run always begins with rested fingers.
 	field_tap_burst_rate = 0.0
+	active_campaign_slot = clampi(int(data.get("active_campaign_slot", -1)), -1, 2)
 	xp = clampf(float(data.get("xp", 0.0)), 0.0, MAX_NUMBER)
 	run_xp = clampf(float(data.get("run_xp", 0.0)), 0.0, MAX_NUMBER)
 	lifetime_xp = clampf(float(data.get("lifetime_xp", xp)), 0.0, MAX_NUMBER)
