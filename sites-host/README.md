@@ -3,7 +3,7 @@
 This is the production hosting adapter for the shared Godot game in the parent
 repository. It contains no separate gameplay implementation.
 
-Current synced game package: v0.16.5. Its index.pck SHA-256 is d6ee93b5c7c96369d4c86edbe23f4d5ded96060aaaf94960fa87c29bdb0d77b0.
+Current synced game package: v0.17.0. Its index.pck SHA-256 is 25154445585cf986bde344cc86753c48d8b5052202bd09ebcae84eadc7702c96.
 
 `npm run build` first verifies that `../web/` matches the current Godot source,
 then copies that exact browser export into `public/game/`. The large WebAssembly

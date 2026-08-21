@@ -1,6 +1,8 @@
 class_name GameContent
 extends RefCounted
 
+const Campaign = preload("res://scripts/campaign.gd")
+
 const OUTCOME_NAMES := [
 	"GRAND SLAM",
 	"HOME RUN",
@@ -16,6 +18,7 @@ const OUTCOME_NAMES := [
 # opponent's unmodified count.
 const OUTCOME_XP := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 const GRAND_SLAM_INDEX := 0
+const SINGLE_INDEX := 4
 const HIT_OUTCOME_COUNT := 5
 const FOUL_INDEX := 5
 const BALL_INDEX := 6
@@ -31,54 +34,41 @@ const OUTCOME_COLORS := [
 	Color("62d9ff"),
 ]
 
+static func _campaign_count_table(field: String, fallback: int) -> Array[int]:
+	var result: Array[int] = []
+	for level_value in Campaign.levels():
+		var level: Dictionary = level_value
+		result.append(maxi(int(level.get(field, fallback)), 1))
+	return result
+
 # Human baseball keeps the sacred three-strike count. Alien rules escalate
 # cautiously enough to remain beatable with high strike odds; eldritch counts
 # become absurd because clones, genetic fielders, and portals can preserve a
 # partially completed count through ordinary hits. Grand Slams always reset it.
-const BASE_STRIKES_REQUIRED := [
-	3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3,
-	4, 4, 5, 5, 6,
-	6, 7, 7, 8, 9,
-	12, 18, 28, 42, 64,
-]
+static var BASE_STRIKES_REQUIRED: Array[int] = _campaign_count_table("strikes_required", 3)
 
 # Human baseball always uses the familiar four-ball walk. Stranger leagues
 # gradually shrink the zone's mercy; this makes a Ball increasingly dangerous
 # without adding another hidden prestige requirement.
-const BASE_BALLS_REQUIRED := [
-	4, 4, 4, 4, 4,
-	4, 4, 4, 4, 4,
-	4, 4, 4, 4, 4,
-	4, 4, 4, 4, 4,
-	4, 4, 4, 4, 4,
-	4, 4, 4, 4, 4,
-	4, 4, 4, 4, 4,
-	3, 3, 3, 3, 3,
-	3, 3, 3, 2, 2,
-]
+static var BASE_BALLS_REQUIRED: Array[int] = _campaign_count_table("balls_required", 4)
 
 # Simultaneous coverage is a real post-human defensive stat. Ordinary batters
 # own one bat; authored multi-bat opponents visibly carry the matching count.
 # A pitcher who releases beyond this capacity forces each uncovered ball through
 # a sharply worsening independent contact check.
-const OPPONENT_BAT_COUNTS := [
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 4, 1, 1, 1, 1, 1, 1,
-	1, 1, 9, 1, 8,
-]
+static var OPPONENT_BAT_COUNTS: Array[int] = _campaign_count_table("bat_count", 1)
 
-const HUMAN_FINAL_INDEX := 29
-const ALIEN_EXHIBITION_INDEX := 30
-const ALIEN_FINAL_INDEX := 39
-const ELDRITCH_EXHIBITION_INDEX := 40
-const FINAL_BOSS_INDEX := 44
+const HUMAN_FINAL_INDEX := Campaign.HUMAN_FINAL_INDEX
+# Compatibility names for systems that still treat the first post-league level
+# as the location of its unnumbered first-contact exhibition.  The campaign
+# descriptor marks these as ordinary playable levels once the matching prestige
+# has occurred; story state decides which presentation is active.
+const ALIEN_EXHIBITION_INDEX := Campaign.ALIEN_START_INDEX
+const ALIEN_FINAL_INDEX := Campaign.ALIEN_FINAL_INDEX
+const ELDRITCH_EXHIBITION_INDEX := Campaign.ELDRITCH_START_INDEX
+const ELDRITCH_FINAL_INDEX := Campaign.ELDRITCH_FINAL_INDEX
+const FINAL_BOSS_INDEX := Campaign.FINAL_BOSS_INDEX
+const CAMPAIGN_LEVEL_COUNT := Campaign.FINITE_LEVEL_COUNT
 
 const ERA_NAMES := [
 	"BACKYARD",
@@ -158,30 +148,39 @@ const LOOT_SLOTS := [
 ]
 
 const LOOT_RARITIES := [
-	{"id": "common", "name": "COMMON", "family": "human", "family_rank": 0, "color": Color("a9b6c5"), "probability": 0.7800, "affix_count": 0, "strength": 0.72},
-	{"id": "magic", "name": "MAGIC", "family": "human", "family_rank": 1, "color": Color("66a6ff"), "probability": 0.1800, "affix_count": 1, "strength": 0.88},
-	{"id": "rare", "name": "RARE", "family": "human", "family_rank": 2, "color": Color("ffd45c"), "probability": 0.0370, "affix_count": 2, "strength": 1.00},
-	{"id": "legendary", "name": "LEGENDARY", "family": "human", "family_rank": 3, "color": Color("ff914d"), "probability": 0.0027, "affix_count": 3, "strength": 1.14},
-	{"id": "unique", "name": "UNIQUE", "family": "human", "family_rank": 4, "color": Color("d68cff"), "probability": 0.0003, "affix_count": 4, "strength": 1.28},
-	{"id": "alien_common", "name": "ALIEN COMMON", "family": "alien", "family_rank": 0, "color": Color("b7dacb"), "probability": 0.0, "affix_count": 0, "strength": 1.05},
-	{"id": "alien_magic", "name": "ALIEN MAGIC", "family": "alien", "family_rank": 1, "color": Color("52e3bf"), "probability": 0.0, "affix_count": 1, "strength": 1.17},
-	{"id": "alien_rare", "name": "ALIEN RARE", "family": "alien", "family_rank": 2, "color": Color("82f266"), "probability": 0.0, "affix_count": 2, "strength": 1.31},
-	{"id": "alien_legendary", "name": "ALIEN LEGENDARY", "family": "alien", "family_rank": 3, "color": Color("1dffd2"), "probability": 0.0, "affix_count": 3, "strength": 1.47},
-	{"id": "alien_unique", "name": "ALIEN UNIQUE", "family": "alien", "family_rank": 4, "color": Color("e8ff63"), "probability": 0.0, "affix_count": 4, "strength": 1.65},
-	{"id": "eldritch_common", "name": "ELDRITCH COMMON", "family": "eldritch", "family_rank": 0, "color": Color("c2b7d6"), "probability": 0.0, "affix_count": 0, "strength": 1.35},
-	{"id": "eldritch_magic", "name": "ELDRITCH MAGIC", "family": "eldritch", "family_rank": 1, "color": Color("9c78ff"), "probability": 0.0, "affix_count": 1, "strength": 1.52},
-	{"id": "eldritch_rare", "name": "ELDRITCH RARE", "family": "eldritch", "family_rank": 2, "color": Color("df67ff"), "probability": 0.0, "affix_count": 2, "strength": 1.72},
-	{"id": "eldritch_legendary", "name": "ELDRITCH LEGENDARY", "family": "eldritch", "family_rank": 3, "color": Color("ff53ba"), "probability": 0.0, "affix_count": 3, "strength": 1.95},
-	{"id": "eldritch_unique", "name": "ELDRITCH UNIQUE", "family": "eldritch", "family_rank": 4, "color": Color("fff0ff"), "probability": 0.0, "affix_count": 4, "strength": 2.20},
+	{"id": "common", "name": "COMMON", "family": "human", "family_rank": 0, "color": Color("a9b6c5"), "probability": 0.7800, "strength": 0.72},
+	{"id": "magic", "name": "MAGIC", "family": "human", "family_rank": 1, "color": Color("66a6ff"), "probability": 0.1800, "strength": 0.88},
+	{"id": "rare", "name": "RARE", "family": "human", "family_rank": 2, "color": Color("ffd45c"), "probability": 0.0370, "strength": 1.00},
+	{"id": "legendary", "name": "LEGENDARY", "family": "human", "family_rank": 3, "color": Color("ff914d"), "probability": 0.0027, "strength": 1.14},
+	{"id": "unique", "name": "UNIQUE", "family": "human", "family_rank": 4, "color": Color("d68cff"), "probability": 0.0003, "strength": 1.28},
+	{"id": "alien_common", "name": "ALIEN COMMON", "family": "alien", "family_rank": 0, "color": Color("b7dacb"), "probability": 0.0, "strength": 1.05},
+	{"id": "alien_magic", "name": "ALIEN MAGIC", "family": "alien", "family_rank": 1, "color": Color("52e3bf"), "probability": 0.0, "strength": 1.17},
+	{"id": "alien_rare", "name": "ALIEN RARE", "family": "alien", "family_rank": 2, "color": Color("82f266"), "probability": 0.0, "strength": 1.31},
+	{"id": "alien_legendary", "name": "ALIEN LEGENDARY", "family": "alien", "family_rank": 3, "color": Color("1dffd2"), "probability": 0.0, "strength": 1.47},
+	{"id": "alien_unique", "name": "ALIEN UNIQUE", "family": "alien", "family_rank": 4, "color": Color("e8ff63"), "probability": 0.0, "strength": 1.65},
+	{"id": "eldritch_common", "name": "ELDRITCH COMMON", "family": "eldritch", "family_rank": 0, "color": Color("c2b7d6"), "probability": 0.0, "strength": 1.35},
+	{"id": "eldritch_magic", "name": "ELDRITCH MAGIC", "family": "eldritch", "family_rank": 1, "color": Color("9c78ff"), "probability": 0.0, "strength": 1.52},
+	{"id": "eldritch_rare", "name": "ELDRITCH RARE", "family": "eldritch", "family_rank": 2, "color": Color("df67ff"), "probability": 0.0, "strength": 1.72},
+	{"id": "eldritch_legendary", "name": "ELDRITCH LEGENDARY", "family": "eldritch", "family_rank": 3, "color": Color("ff53ba"), "probability": 0.0, "strength": 1.95},
+	{"id": "eldritch_unique", "name": "ELDRITCH UNIQUE", "family": "eldritch", "family_rank": 4, "color": Color("fff0ff"), "probability": 0.0, "strength": 2.20},
 ]
 
 const LOOT_STATS := [
 	{"id": "speed_bonus", "name": "Speed", "format": "multiplier"},
 	{"id": "rate_bonus", "name": "Recovery", "format": "multiplier"},
 	{"id": "quality_bonus", "name": "Quality", "format": "additive"},
+	{"id": "lineup_bonus", "name": "Lineup time", "format": "reduction"},
+	{"id": "hit_delay_bonus", "name": "Hit delay", "format": "reduction"},
+	{"id": "calling_bonus", "name": "Pitch calling", "format": "multiplier"},
+	{"id": "offline_bonus", "name": "Offline efficiency", "format": "multiplier"},
+	{"id": "payload_bonus", "name": "Payload", "format": "multiplier"},
 	{"id": "xp_bonus", "name": "Strikeout XP", "format": "multiplier"},
 	{"id": "mastery_bonus", "name": "Opponent mastery", "format": "multiplier"},
 	{"id": "distance_bonus", "name": "Distance Control", "format": "multiplier"},
+	{"id": "drag_bonus", "name": "Drag reduction", "format": "reduction"},
+	{"id": "loot_bonus", "name": "Loot chance", "format": "multiplier"},
+	{"id": "determination_bonus", "name": "Determination", "format": "multiplier"},
+	{"id": "tap_bonus", "name": "Field tap", "format": "multiplier"},
 ]
 
 const STAT_HELP := {
@@ -193,11 +192,11 @@ const STAT_HELP := {
 	"calling": "Calling biases the random arsenal toward stronger learned pitch types without removing weaker ones.",
 	"distance": "Distance control reduces the added batter threat from the range assigned to the current opponent level.",
 	"offline": "Offline efficiency is the share of normal strikeout XP and called-Strike mastery deposited while the game is closed or suspended.",
-	"tap": "Tapping the open field advances the active recovery, flight, or lineup timer. Long waits get a larger percentage than short waits. A normal tapping rhythm stays fresh; ultra-fast bursts build quarter-second fatigue, and every tap on the same timer leaves less work for the next one.",
-	"auto_tap": "Automatic clickers use the same duration scaling, rapid-tap fatigue, and same-timer diminishing returns as manual Field Taps. Autonomic Clicking Finger ranks logarithmically improve both click speed and fatigue tolerance; Eldritch ranks add clickers.",
+	"tap": "Tapping builds a short rolling input signal that accelerates Recovery, flight, and lineup clocks. Long timers gain more than short timers; ultra-fast tapping has diminishing returns instead of teleporting a timer.",
+	"auto_tap": "Automatic clickers feed the same rolling signal and rapid-tap diminishing curve as manual taps. Genetic ranks raise each clicker's cadence and tolerance; Eldritch ranks add more clickers.",
 	"payload": "Payload multiplies the XP awarded by a completed strikeout without creating invisible balls.",
 	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
-	"frustration": "Bad results build Frustration by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Its uncapped logarithmic quality bonus resets on a completed strikeout.",
+	"determination": "Bad results build Determination by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Every doubling adds Quality; a completed strikeout resets it.",
 	"drag": "Air drag slows a released ball continuously on its trip to the plate. Lower drag preserves more of its release speed.",
 	"xp": "Strikeout XP multiplies the payout awarded only when the required strike count is completed.",
 	"loot": "Loot chance is the chance that an eligible strikeout copies one player-wearable item from the batter's visible loadout, keeping its slot and rarity. The pity rule still ends long dry streaks.",
@@ -229,6 +228,15 @@ const LOOT_SUFFIXES := {
 	"xp_bonus": ["Heavy Payouts", "Contract Incentives", "XP Arbitration"],
 	"mastery_bonus": ["Scouting Reports", "Dominion", "Unreasonable Reputation"],
 	"distance_bonus": ["Long Toss", "The Far Mound", "Geometric Ambition"],
+	"lineup_bonus": ["Organized Dugouts", "Next Batter Energy", "No Commercial Breaks"],
+	"hit_delay_bonus": ["Short Memories", "Emotional Recovery", "Shake-It-Off Science"],
+	"calling_bonus": ["Better Ideas", "Pitch Selection", "Strategic Bias"],
+	"offline_bonus": ["Closed Tabs", "Background Baseball", "Unwatched Labor"],
+	"payload_bonus": ["Heavy Baseballs", "Compressed Rewards", "Payload Arbitration"],
+	"drag_bonus": ["Slippery Air", "Aerodynamic Crimes", "Absent Atmospheres"],
+	"loot_bonus": ["Sticky Fingers", "Better Laundry", "Suspicious Pockets"],
+	"determination_bonus": ["Spite", "Adaptation", "Refusal to Learn Normally"],
+	"tap_bonus": ["Screen Smudges", "Active Idling", "Unlicensed Fingers"],
 }
 
 # Hand-tuned around the quality a reasonably purchasing first-season pitcher
@@ -238,21 +246,7 @@ const LOOT_SUFFIXES := {
 const OPPONENT_DIFFICULTY_ANCHORS := [2.60, 6.0, 10.5, 15.2, 20.4, 31.0, 41.0, 59.0, 81.0, 110.0]
 const HUMAN_FINAL_DIFFICULTY_TARGET := 38.0
 
-const DISTANCE_TIERS := [
-	{"name": "PRESCHOOL POINT-BLANK", "label": "3 ft", "feet": 3.0, "required_level": 0, "difficulty": 0.0},
-	{"name": "TEE-BALL COACH DISTANCE", "label": "10 ft", "feet": 10.0, "required_level": 3, "difficulty": 0.18},
-	{"name": "COACH-PITCH FRONT LINE", "label": "25 ft", "feet": 25.0, "required_level": 5, "difficulty": 0.38},
-	{"name": "LITTLE-LEAGUE MOUND", "label": "46 ft", "feet": 46.0, "required_level": 7, "difficulty": 0.68},
-	{"name": "INTERMEDIATE 50/70 MOUND", "label": "50 ft", "feet": 50.0, "required_level": 10, "difficulty": 0.82},
-	{"name": "JUNIOR-LEAGUE MOUND", "label": "54 ft", "feet": 54.0, "required_level": 11, "difficulty": 0.96},
-	{"name": "REGULATION MOUND", "label": "60 ft 6 in", "feet": 60.5, "required_level": 12, "difficulty": 1.15},
-	{"name": "ONE-MILE MOUND", "label": "1 mile", "feet": 5280.0, "required_level": 31, "difficulty": 3.1},
-	{"name": "LOW-ORBIT BULLPEN", "label": "250 miles", "feet": 1320000.0, "required_level": 34, "difficulty": 4.0},
-	{"name": "LUNAR SERIES", "label": "Earth to Moon", "feet": 1.261e9, "required_level": 36, "difficulty": 5.0},
-	{"name": "SOLAR MOUND", "label": "1 AU", "feet": 4.908e11, "required_level": 38, "difficulty": 6.0},
-	{"name": "INTERSTELLAR CLASSIC", "label": "1 light-year", "feet": 3.104e16, "required_level": 40, "difficulty": 7.5},
-	{"name": "GALAXY-WIDTH WORLD SERIES", "label": "100,000 light-years", "feet": 3.104e21, "required_level": 43, "difficulty": 10.0},
-]
+const DISTANCE_TIERS := Campaign.DISTANCE_TIERS
 
 const OPPONENT_NAMES := [
 	"Wiffle-Bat Toddler",
@@ -713,7 +707,8 @@ const ACHIEVEMENTS := [
 	{"id": "reach_level_20", "tier": "human", "name": "College Material", "metric": "level", "threshold": 19.0, "description": "Reach Level 20."},
 	{"id": "reach_level_25", "tier": "human", "name": "The Long Bus Ride", "metric": "level", "threshold": 24.0, "description": "Reach Level 25."},
 	{"id": "human_champion_toddler", "tier": "human", "name": "Past Your Bedtime", "metric": "human_champion_toddler", "threshold": 1.0, "secret": true, "description": "Complete the entire human league without growing up."},
-	{"id": "complete_human_baseball", "tier": "human", "name": "The Human Limit", "metric": "level", "threshold": 30.0, "reveal_level": 29, "description": "Master the final human batter."},
+	{"id": "complete_human_baseball", "tier": "human", "name": "The Human Limit", "metric": "level", "threshold": 32.0, "reveal_level": 32, "description": "Reach Bambino Rex, the final human batter."},
+	{"id": "human_speedrun", "tier": "genetic", "name": "Tickle My Dopamine", "metric": "event", "key": "human_clear_under_minute", "threshold": 1.0, "secret": true, "description": "Clear all 33 human levels within one minute of reincarnation."},
 	{"id": "distance_6ft", "tier": "human", "name": "Personal Space", "metric": "distance", "threshold": 1.0, "description": "Pitch from the 10-foot tee-ball line."},
 	{"id": "distance_30ft", "tier": "human", "name": "There Is Now a Mound", "metric": "distance", "threshold": 3.0, "description": "Pitch from a 46-foot Little League mound."},
 	{"id": "distance_regulation", "tier": "human", "name": "Sixty Feet, Six Inches, Somehow", "metric": "distance", "threshold": 6.0, "description": "Pitch from a regulation mound."},
@@ -762,19 +757,24 @@ const ACHIEVEMENTS := [
 	{"id": "compressed_count", "tier": "genetic", "name": "Three Strikes, Eventually", "metric": "genetic_upgrade", "key": "compressed_strike_genome", "threshold": 1.0, "description": "Buy Compressed Strike Genome."},
 	{"id": "saved_hits_100", "tier": "genetic", "name": "Catch, Return, Reuse", "metric": "saved_hits", "threshold": 100.0, "description": "Preserve the count through 100 ordinary hits."},
 	{"id": "auto_advance", "tier": "genetic", "name": "The Legs Know the Schedule", "metric": "genetic_upgrade", "key": "migratory_instinct", "threshold": 1.0, "description": "Auto-advance through your first human level."},
-	{"id": "auto_advance_human_full", "tier": "genetic", "name": "Human League on Rails", "metric": "genetic_upgrade", "key": "migratory_instinct", "threshold": 29.0, "description": "License Auto-advance through every human level."},
+	{"id": "auto_advance_human_full", "tier": "genetic", "name": "Human League on Rails", "metric": "genetic_upgrade", "key": "migratory_instinct", "threshold": 32.0, "description": "License Auto-advance through every human level."},
 	{"id": "auto_coach", "tier": "genetic", "name": "Coach in the Medulla", "metric": "genetic_upgrade", "key": "autonomic_coach", "threshold": 1.0, "description": "Unlock Auto-coach."},
 	{"id": "auto_scout", "tier": "genetic", "name": "Apex Sabermetrician", "metric": "genetic_upgrade", "key": "predator_scouting", "threshold": 1.0, "description": "Unlock Auto-scout."},
 	{"id": "auto_wardrobe", "tier": "genetic", "name": "Dressed by Reflex", "metric": "genetic_upgrade", "key": "autonomic_wardrobe", "threshold": 1.0, "description": "Unlock automatic equipment selection."},
 	{"id": "first_relic", "tier": "genetic", "name": "Post-Human Pocket", "metric": "relic_owned", "threshold": 1.0, "description": "Find your first Relic-slot item."},
-	{"id": "reach_four_armed_hitter", "tier": "genetic", "name": "Four Arms, No Waiting", "metric": "level", "threshold": 33.0, "reveal_level": 33, "description": "Reach the Four-Armed Cleanup Hitter."},
-	{"id": "reach_moonballer", "tier": "genetic", "name": "Moonball Is Now Literal", "metric": "level", "threshold": 35.0, "reveal_level": 35, "description": "Reach the Low-Gravity Moonballer."},
-	{"id": "reach_plasma_slugger", "tier": "genetic", "name": "Plasma Burns Are Still Burns", "metric": "level", "threshold": 37.0, "reveal_level": 37, "description": "Reach the Plasma-Bat Slugger."},
-	{"id": "reach_alien_champion", "tier": "genetic", "name": "Champion Beneath All Suns", "metric": "level", "threshold": 39.0, "reveal_level": 39, "description": "Reach the Interstellar Champion."},
-	{"id": "complete_alien_baseball", "tier": "genetic", "name": "Solar-System Champions", "metric": "level", "threshold": 40.0, "reveal_level": 39, "description": "Master the final alien batter."},
+	{"id": "reach_four_armed_hitter", "tier": "genetic", "name": "Four Arms, No Waiting", "metric": "level", "threshold": 59.0, "reveal_level": 59, "description": "Reach the Galactic League and its four-bat hitters."},
+	{"id": "reach_moonballer", "tier": "genetic", "name": "Moonball Is Now Literal", "metric": "level", "threshold": 36.0, "reveal_level": 36, "description": "Reach the Lunar Minors."},
+	{"id": "reach_plasma_slugger", "tier": "genetic", "name": "Plasma Burns Are Still Burns", "metric": "level", "threshold": 51.0, "reveal_level": 51, "description": "Reach the Solar Circuit."},
+	{"id": "reach_alien_champion", "tier": "genetic", "name": "Champion Beneath All Suns", "metric": "level", "threshold": 62.0, "reveal_level": 62, "description": "Reach the Olympus Championship."},
+	{"id": "complete_alien_baseball", "tier": "genetic", "name": "Solar-System Champions", "metric": "level", "threshold": 65.0, "reveal_level": 65, "description": "Reach Xylophax, the final alien batter."},
+	{"id": "alien_speedrun", "tier": "eldritch", "name": "Five-Minute Galaxy", "metric": "event", "key": "alien_clear_under_five_minutes", "threshold": 1.0, "secret": true, "description": "Clear the human and alien campaigns within five minutes of rebirth."},
+	{"id": "upper_management", "tier": "eldritch", "name": "Upper Management", "metric": "automation", "threshold": 5.0, "description": "Fully automate five major baseball jobs."},
+	{"id": "is_this_fun", "tier": "eldritch", "name": "Is This… Fun? Yes.", "metric": "automation", "threshold": 7.0, "secret": true, "description": "Fully automate every currently automatable baseball job."},
+	{"id": "first_corrupted_perk", "tier": "eldritch", "name": "The Build Has Side Effects", "metric": "event", "key": "selected_corrupted_perk", "threshold": 1.0, "description": "Choose a Corrupted perk from a doomed timeline."},
+	{"id": "boss_perk_selected", "tier": "genetic", "name": "Arm-a-Gettin’", "metric": "event", "key": "selected_boss_perk", "threshold": 1.0, "description": "Keep a boss-tier habit for the rest of a run."},
 	{"id": "speed_mach_1", "tier": "genetic", "name": "Sound Barrier: Optional", "metric": "speed", "threshold": 1125.33, "description": "Throw a pitch at Mach 1."},
 	{"id": "speed_mach_3", "tier": "genetic", "name": "Licensed for Mach Three", "metric": "speed", "threshold": 3375.99, "reveal_level": 39, "description": "Throw a pitch at Mach 3."},
-	{"id": "speed_mach_12", "tier": "genetic", "name": "Atmosphere Not Included", "metric": "speed", "threshold": 13503.96, "secret": true, "description": "Reach the Mach 12 genetic limit."},
+	{"id": "speed_mach_12", "tier": "genetic", "name": "Atmosphere Not Included", "metric": "speed", "threshold": 13503.96, "secret": true, "description": "Throw a pitch at Mach 12."},
 	{"id": "born_again_bully", "tier": "genetic", "name": "Back to Preschool", "metric": "event", "key": "post_rebirth_toddler_strikeout", "threshold": 1.0, "description": "After time travel, strike out a Wiffle-Bat Toddler again."},
 	{"id": "excessive_daycare_force", "tier": "genetic", "name": "Excessive Force, Daycare Division", "metric": "event", "key": "multi_arm_toddler_strikeout", "threshold": 1.0, "description": "Strike out a Wiffle-Bat Toddler while pitching with multiple arms."},
 	{"id": "eight_arm_daycare", "tier": "genetic", "name": "Eight Arms, One Nap Time", "metric": "event", "key": "eight_arm_toddler_strikeout", "threshold": 1.0, "secret": true, "description": "Strike out a Wiffle-Bat Toddler with eight pitching arms."},
@@ -790,7 +790,7 @@ const ACHIEVEMENTS := [
 	{"id": "posthuman_bambino", "tier": "genetic", "name": "Revisiting Former Coworkers", "metric": "event", "key": "posthuman_human_champion_strikeout", "threshold": 1.0, "description": "Return after time travel and strike out the final human champion."},
 	{"id": "solved_human_baseball", "tier": "genetic", "name": "The Humans Have a Problem", "metric": "human_final_strikeout_certainty", "threshold": 1.0, "secret": true, "description": "Reach at least a 99% strikeout chance against the final human champion after time travel."},
 	{"id": "saved_hit_and_strike", "tier": "genetic", "name": "The Fielder Also Says Strike", "metric": "event", "key": "saved_hit_and_strike", "threshold": 1.0, "description": "Save a fair hit and record a called Strike in the same volley."},
-	{"id": "fourfold_overwhelmed", "tier": "genetic", "name": "Four Bats Were Not Enough", "metric": "event", "key": "fourfold_overwhelmed", "threshold": 1.0, "reveal_level": 33, "description": "Overload and strike out the Four-Armed Cleanup Hitter."},
+	{"id": "fourfold_overwhelmed", "tier": "genetic", "name": "Four Bats Were Not Enough", "metric": "event", "key": "fourfold_overwhelmed", "threshold": 1.0, "reveal_level": 65, "description": "Overload all four of Xylophax’s bats and strike out the alien commissioner."},
 
 	# Eldritch baseball.
 	{"id": "eldritch_offer", "tier": "eldritch", "name": "The Rookie Explains Reality", "metric": "eldritch_offer", "threshold": 1.0, "description": "Hear N’Kthra’s complete explanation of reality."},
@@ -801,21 +801,22 @@ const ACHIEVEMENTS := [
 	{"id": "clones_8", "tier": "eldritch", "name": "Eight Me’s and a Scorekeeper", "metric": "clones", "threshold": 8.0, "description": "Pitch with eight versions of yourself."},
 	{"id": "clones_32", "tier": "eldritch", "name": "Thirty-Two Pitchers, One Soul", "metric": "clones", "threshold": 32.0, "description": "Pitch with 32 versions of yourself."},
 	{"id": "time_layers_8", "tier": "eldritch", "name": "Eight Innings at Once", "metric": "time_layers", "threshold": 8.0, "description": "Stack eight time-compressed innings."},
-	{"id": "auto_advance_alien_full", "tier": "eldritch", "name": "No Away Games, Only Away Planets", "metric": "eldritch_upgrade", "key": "interstellar_itinerary", "threshold": 10.0, "description": "License Auto-advance through every alien level."},
+	{"id": "auto_advance_alien_full", "tier": "eldritch", "name": "No Away Games, Only Away Planets", "metric": "eldritch_upgrade", "key": "interstellar_itinerary", "threshold": 33.0, "description": "License Auto-advance through every alien level."},
 	{"id": "volley_16", "tier": "eldritch", "name": "Anime Bullpen Initiated", "metric": "volley", "threshold": 16.0, "description": "Release 16 real balls in one volley."},
 	{"id": "volley_256", "tier": "eldritch", "name": "Missile Budget Exceeded", "metric": "volley", "threshold": 256.0, "description": "Release 256 real balls in one volley."},
 	{"id": "volley_2048", "tier": "eldritch", "name": "Two Thousand Forty-Eight Problems", "metric": "volley", "threshold": 2048.0, "description": "Release the designed maximum 2,048-ball volley."},
 	{"id": "first_portal", "tier": "eldritch", "name": "The Ball Was Never There", "metric": "eldritch_upgrade", "key": "portal_outfield", "threshold": 1.0, "description": "Open your first bullpen portal."},
 	{"id": "reverse_terminator", "tier": "eldritch", "name": "Reverse Terminator", "metric": "eldritch_upgrade", "key": "reverse_terminator", "threshold": 1.0, "description": "Teach one outfit to time travel."},
-	{"id": "reach_phase_hitter", "tier": "eldritch", "name": "Phase Me Once", "metric": "level", "threshold": 41.0, "reveal_level": 41, "description": "Reach the Phase-Shift Hitter."},
-	{"id": "reach_nine_body_collective", "tier": "eldritch", "name": "The Nine Share One Strike Zone", "metric": "level", "threshold": 42.0, "reveal_level": 42, "description": "Reach the Nine-Body Batting Collective."},
-	{"id": "reach_ball_rog", "tier": "eldritch", "name": "You Shall Not Ball", "metric": "level", "threshold": 43.0, "reveal_level": 43, "description": "Reach Ball-rog the Unstrikeable."},
-	{"id": "reach_octathulhu", "tier": "eldritch", "name": "Eight Bats Enter", "metric": "level", "threshold": 44.0, "reveal_level": 44, "description": "Reach Octathulhu."},
-	{"id": "speed_of_light", "tier": "eldritch", "name": "At the Speed of Plot", "metric": "speed", "threshold": 983571056.0, "reveal_level": 44, "description": "Throw a pitch at exactly light speed."},
-	{"id": "cosmos_conquered", "tier": "eldritch", "name": "The Oldest Rule of Baseball", "metric": "cosmos", "threshold": 1.0, "reveal_level": 44, "description": "Defeat Octathulhu and save the universe."},
+	{"id": "reach_phase_hitter", "tier": "eldritch", "name": "Phase Me Once", "metric": "level", "threshold": 72.0, "reveal_level": 72, "description": "Reach the Venus defense line and its phase-shifting gods."},
+	{"id": "reach_nine_body_collective", "tier": "eldritch", "name": "The Nine Share One Strike Zone", "metric": "level", "threshold": 84.0, "reveal_level": 84, "description": "Reach the Saturn defense line and a collective strike zone."},
+	{"id": "reach_ball_rog", "tier": "eldritch", "name": "You Shall Not Ball", "metric": "level", "threshold": 98.0, "reveal_level": 98, "description": "Reach Ball-rog the Unstrikeable."},
+	{"id": "reach_octathulhu", "tier": "eldritch", "name": "Eight Bats Enter", "metric": "level", "threshold": 99.0, "reveal_level": 99, "description": "Reach Octathulhu."},
+	{"id": "speed_of_light", "tier": "eldritch", "name": "At the Speed of Plot", "metric": "speed", "threshold": 983571056.0, "reveal_level": 96, "description": "Throw a pitch at light speed."},
+	{"id": "cosmos_conquered", "tier": "eldritch", "name": "The Oldest Rule of Baseball", "metric": "cosmos", "threshold": 1.0, "reveal_level": 99, "description": "Defeat Octathulhu and save the universe."},
+	{"id": "cosmic_speedrun", "tier": "divine", "name": "Fifteen-Minute Creation", "metric": "event", "key": "cosmos_clear_under_fifteen_minutes", "threshold": 1.0, "secret": true, "description": "Save an entire universe within fifteen minutes of rebirth."},
 	{"id": "rainbow_volley", "tier": "eldritch", "name": "Chromatic Box Score", "metric": "event", "key": "rainbow_volley", "threshold": 1.0, "description": "Produce at least four different outcomes in one volley."},
 	{"id": "box_score_bingo", "tier": "eldritch", "name": "Box Score Bingo", "metric": "event", "key": "all_outcome_volley", "threshold": 1.0, "secret": true, "description": "Produce all eight possible pitch outcomes in one volley."},
-	{"id": "octathulhu_overwhelmed", "tier": "eldritch", "name": "Nine Is Greater Than Eight", "metric": "event", "key": "octathulhu_overwhelmed", "threshold": 1.0, "reveal_level": 44, "description": "Strike out Octathulhu with more than eight simultaneous balls."},
+	{"id": "octathulhu_overwhelmed", "tier": "eldritch", "name": "Nine Is Greater Than Eight", "metric": "event", "key": "octathulhu_overwhelmed", "threshold": 1.0, "reveal_level": 99, "description": "Strike out Octathulhu with more than eight simultaneous balls."},
 	{"id": "thousand_strike_volley", "tier": "eldritch", "name": "The Umpire’s Hand Fell Off", "metric": "event", "key": "thousand_strike_volley", "threshold": 1.0, "description": "Record at least 1,000 called Strikes in one volley."},
 	{"id": "fielding_department_infinite", "tier": "eldritch", "name": "Department of Infinite Fielding", "metric": "event", "key": "eight_saved_hits_volley", "threshold": 1.0, "description": "Save at least eight fair hits from one simultaneous volley."},
 
@@ -826,6 +827,9 @@ const ACHIEVEMENTS := [
 	{"id": "all_divine_blessings", "tier": "divine", "name": "Six Days, Six Blessings", "metric": "divine_blessings", "threshold": 6.0, "description": "Collect every named divine blessing."},
 	{"id": "divine_halo_1", "tier": "divine", "name": "After the Afterlife", "metric": "divine_halos", "threshold": 1.0, "description": "Earn your first extra Halo."},
 	{"id": "divine_halo_5", "tier": "divine", "name": "Halo Hall of Fame", "metric": "divine_halos", "threshold": 5.0, "description": "Earn five extra Halos."},
+	{"id": "extra_innings_entered", "tier": "divine", "name": "The Scorebook Has No More Pages", "metric": "endless", "threshold": 1.0, "description": "Enter the first procedural Extra Inning."},
+	{"id": "extra_innings_10", "tier": "divine", "name": "Bottom of the Nineteenth Dimension", "metric": "endless", "threshold": 10.0, "description": "Reach Extra Inning 10."},
+	{"id": "extra_innings_100", "tier": "divine", "name": "Please Let the Umpire Go Home", "metric": "endless", "threshold": 100.0, "secret": true, "description": "Reach Extra Inning 100."},
 	{"id": "no_hitter", "tier": "divine", "name": "No Hitter", "metric": "no_hitter", "threshold": 1.0, "secret": true, "description": "Defeat the entire campaign through Octathulhu without allowing a single fair hit."},
 ]
 
@@ -1129,14 +1133,14 @@ const TRAINING := [
 		"details": "Each rank removes 0.5% of the remaining gap between strikeout loot chance and 100%. Drops still follow the defeated batter's visible equipment slots and rarities.",
 	},
 	{
-		"id": "frustration_training",
+		"id": "determination_training",
 		"name": "Competitive Memory",
 		"base_cost": 2500000.0,
 		"growth": 1.92,
 		"required_level": 20,
-		"stats": ["frustration"],
-		"description": "Frustration bonus +1% per doubling.",
-		"details": "Each rank raises the Quality gained per doubling of Frustration by 1%. Frustration grows from bad outcomes, scales logarithmically without a cap, and resets on a strikeout.",
+		"stats": ["determination"],
+		"description": "Determination Quality +1% per doubling.",
+		"details": "Each rank raises the Quality gained per doubling of Determination by 1%. Determination grows from bad outcomes, scales logarithmically without a cap, and resets on a strikeout.",
 	},
 ]
 
@@ -2503,7 +2507,7 @@ const GENETIC_UPGRADES := [
 		"name": "Fast-Twitch Everything",
 		"base_cost": 2.0,
 		"growth": 3.0,
-		"max_level": 6,
+		"max_level": 8,
 		"description": "Speed ×1.80.",
 	},
 	{
@@ -2555,19 +2559,11 @@ const GENETIC_UPGRADES := [
 		"description": "Post-human strike requirement −1 (minimum 3).",
 	},
 	{
-		"id": "prehensile_outfield",
-		"name": "Prehensile Outfield Reflex",
-		"base_cost": 8.0,
-		"growth": 5.0,
-		"max_level": 3,
-		"description": "Protect SINGLE, then DOUBLE, then TRIPLE; protected hits keep the count.",
-	},
-	{
 		"id": "migratory_instinct",
 		"name": "Migratory Baseball Instinct",
 		"base_cost": 1.0,
 		"growth": 1.0,
-		"max_level": 29,
+		"max_level": 32,
 		"description": "Auto-advance through 1 additional human level per rank.",
 	},
 	{
@@ -2584,6 +2580,30 @@ const GENETIC_UPGRADES := [
 		"base_cost": 2.0,
 		"growth": 1.70,
 		"description": "One automatic field clicker; click speed and rapid-tap tolerance grow logarithmically.",
+	},
+	{
+		"id": "expanded_draft_board",
+		"name": "Expanded Draft Board",
+		"base_cost": 7.0,
+		"growth": 8.0,
+		"max_level": 3,
+		"description": "+1 perk choice per level.",
+	},
+	{
+		"id": "loaded_draft_dice",
+		"name": "Loaded Draft Dice",
+		"base_cost": 5.0,
+		"growth": 4.0,
+		"max_level": 3,
+		"description": "Perk rarity floor +1 tier per rank; higher tiers also become more likely.",
+	},
+	{
+		"id": "boss_perk_license",
+		"name": "Keep the Boss's Weirdest Habit",
+		"base_cost": 3.0,
+		"growth": 1.0,
+		"max_level": 1,
+		"description": "League bosses add a strongest-tier Boss perk draft.",
 	},
 	{
 		"id": "predator_scouting",
@@ -2626,7 +2646,7 @@ const ELDRITCH_UPGRADES := [
 		"base_cost": 1.0,
 		"growth": 4.0,
 		"max_level": 5,
-		"description": "Bodies ×2; potential throwing sources ×2; remaining ordinary-hit failure ×0.60.",
+		"description": "Bodies ×2; sources ×2; extra clones expand immutable field coverage.",
 	},
 	{
 		"id": "time_compression",
@@ -2644,6 +2664,14 @@ const ELDRITCH_UPGRADES := [
 		"description": "+1 automatic clicker per rank; every clicker inherits genetic speed and fatigue tolerance.",
 	},
 	{
+		"id": "corrupted_drafts",
+		"name": "Draft From a Doomed Timeline",
+		"base_cost": 5.0,
+		"growth": 1.0,
+		"max_level": 1,
+		"description": "Each offered perk has a 20% chance to become Corrupted: 2–3× stronger with a random penalty.",
+	},
+	{
 		"id": "non_euclidean_bullpen",
 		"name": "Non-Euclidean Bullpen Geometry",
 		"base_cost": 2.0,
@@ -2652,11 +2680,19 @@ const ELDRITCH_UPGRADES := [
 		"description": "Maximum simultaneous balls ×4 (up to throwing sources).",
 	},
 	{
+		"id": "unbound_windup",
+		"name": "Windup Outside Flight Time",
+		"base_cost": 8.0,
+		"growth": 1.0,
+		"max_level": 1,
+		"description": "Begin another windup while earlier volleys are still crossing the field.",
+	},
+	{
 		"id": "velocity_without_distance",
 		"name": "Velocity Without Distance",
 		"base_cost": 1.0,
 		"growth": 4.0,
-		"max_level": 4,
+		"max_level": 6,
 		"description": "Speed ×12.",
 	},
 	{
@@ -2677,11 +2713,26 @@ const ELDRITCH_UPGRADES := [
 	},
 	{
 		"id": "portal_outfield",
-		"name": "Bullpen Portals",
+		"name": "Impossible Catching Practice",
 		"base_cost": 3.0,
+		"growth": 2.5,
+		"description": "Clone catch chance improves with diminishing returns.",
+	},
+	{
+		"id": "fielding_clearance",
+		"name": "Fielding Jurisdiction",
+		"base_cost": 4.0,
 		"growth": 5.0,
 		"max_level": 4,
-		"description": "Portal save chance +20 percentage points; saved hits keep the count.",
+		"description": "Catch Singles, then Doubles, Triples, and Home Runs. Grand Slams remain absolute.",
+	},
+	{
+		"id": "many_angled_pockets",
+		"name": "Many-Angled Relic Pockets",
+		"base_cost": 7.0,
+		"growth": 4.0,
+		"max_level": 7,
+		"description": "+1 Relic slot.",
 	},
 	{
 		"id": "memory_of_flesh",
@@ -2721,14 +2772,14 @@ const ELDRITCH_UPGRADES := [
 		"base_cost": 4.0,
 		"growth": 1.0,
 		"max_level": 1,
-		"description": "Unlock independent auto-buy toggles for Pitches, Balls, Facilities, and Grow Up.",
+		"description": "Unlock independent auto-buy toggles for Balls and Facilities.",
 	},
 	{
 		"id": "interstellar_itinerary",
 		"name": "Interstellar Road-Trip Itinerary",
 		"base_cost": 1.0,
 		"growth": 1.0,
-		"max_level": 10,
+		"max_level": 33,
 		"description": "Auto-advance through 1 additional alien level per rank.",
 	},
 ]
@@ -2768,100 +2819,92 @@ const DIVINE_BLESSINGS := [
 
 static func opponents() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	for index in OPPONENT_NAMES.size():
-		var era_index := int(index / 5)
-		var distance := 3.0
-		if era_index == 1:
-			distance = 20.0
-		elif era_index == 2:
-			distance = 44.0
-		elif era_index >= 3 and era_index <= 5:
-			distance = 60.5
-		elif era_index == 6:
-			distance = 72.0
-		elif era_index == 7:
-			distance = 120.0
-		elif era_index == 8:
-			distance = 300.0
-		# Per-Strike mastery keeps every called Strike useful, while authored targets
-		# describe a readable number of completed-count equivalents instead of an
-		# exponential pile of nearly identical strikeouts. Later opponents carry more
-		# of the campaign's resistance in their matchup difficulty and longer counts.
-		var strikeout_bounty := minf(
-			float(BASE_STRIKES_REQUIRED[index]) * 5.0,
-			5.0 + float(index)
-		)
-		var completed_count_equivalents := 5.6 * pow(1.075, index)
-		if index >= 20 and index <= HUMAN_FINAL_INDEX:
-			# The major-league ladder gets harder by matchup, not by demanding an
-			# extra pile of nearly identical successful counts. Its mastery target
-			# stays nearly flat relative to the base curve instead of receiving the
-			# former additional 2% compounding surcharge per late-human level.
-			completed_count_equivalents *= lerpf(
-				0.98,
-				0.96,
-				float(index - 20) / float(maxi(HUMAN_FINAL_INDEX - 20, 1))
-			)
-		if index > HUMAN_FINAL_INDEX and index <= ALIEN_FINAL_INDEX:
-			completed_count_equivalents = 50.0 * pow(1.13, index - ALIEN_EXHIBITION_INDEX)
-		elif index > ALIEN_FINAL_INDEX:
-			completed_count_equivalents = 160.0 * pow(1.30, index - ELDRITCH_EXHIBITION_INDEX)
-		var mastery_required := strikeout_bounty * completed_count_equivalents
-		var reward := pow(2.015, mini(index, HUMAN_FINAL_INDEX))
-		if index > HUMAN_FINAL_INDEX:
-			# Level-assigned distance is a physical challenge, not a second payout
-			# axis. Post-human bounties therefore grow directly with the opponent:
-			# smoothly through alien baseball, then much faster once eldritch counts
-			# and facilities enter cosmic notation.
-			reward *= pow(3.50, mini(index, ALIEN_FINAL_INDEX) - HUMAN_FINAL_INDEX)
-		if index > ALIEN_FINAL_INDEX:
-			reward *= pow(14.0, index - ALIEN_FINAL_INDEX)
+	for authored_value in Campaign.levels():
+		var authored: Dictionary = authored_value
+		var distance_tier := clampi(int(authored.distance_tier), 0, DISTANCE_TIERS.size() - 1)
+		var distance: Dictionary = DISTANCE_TIERS[distance_tier]
+		# Keep the historic opponent dictionary shape while exposing the richer
+		# descriptor fields.  Existing probability/UI code can migrate one subsystem
+		# at a time without ever seeing a partially authored level.
 		result.append({
-			"id": "opponent_%02d" % (index + 1),
-			"name": OPPONENT_NAMES[index],
-			"era": ERA_NAMES[era_index],
-			"era_index": era_index,
-			"difficulty": _opponent_difficulty_for_index(index),
-			# Fewer repeated strikeouts now gate each level, so each successful
-			# frontier count carries more of that level's former total income. Range
-			# never multiplies this value; all income belongs to the batter bounty.
-			"reward": reward,
-			"mastery_required": mastery_required,
-			"distance": distance,
-			"quirk": OPPONENT_QUIRKS[index],
-			"trait": _trait_for_index(index),
+			"id": str(authored.id),
+			"name": str(authored.class_name),
+			"class_name": str(authored.class_name),
+			"bat_name": str(authored.bat_name),
+			"era": str(authored.era),
+			"subera": str(authored.subera),
+			"subera_id": str(authored.subera_id),
+			"era_index": int(authored.name_pool),
+			"name_pool": int(authored.name_pool),
+			"league": str(authored.league),
+			"league_index": int(authored.league_index),
+			"difficulty": float(authored.difficulty),
+			"reward": float(authored.reward),
+			"mastery_required": float(authored.mastery_required),
+			"distance": float(distance.feet),
+			"distance_tier": distance_tier,
+			"quirk": str(authored.quirk),
+			"trait": str(authored.trait),
+			"strikes_required": int(authored.strikes_required),
+			"balls_required": int(authored.balls_required),
+			"bat_count": int(authored.bat_count),
+			"subera_finale": bool(authored.subera_finale),
+			"league_boss": bool(authored.league_boss),
+			"guaranteed_rare_offer": bool(authored.guaranteed_rare_offer),
+			"pitch_draft": bool(authored.pitch_draft),
+			"boss_pitch": bool(authored.boss_pitch),
+			"story_key": str(authored.story_key),
+			"speed_anchor_fps": float(authored.speed_anchor_fps),
+			"body_scale": float(authored.body_scale),
 		})
 	return result
 
 static func _opponent_difficulty_for_index(index: int) -> float:
-	var bounded_index := clampi(index, 0, OPPONENT_NAMES.size() - 1)
-	var era_index := int(bounded_index / 5)
-	var within_era := bounded_index % 5
-	if era_index == 5:
-		# Keep the best humans formidable without pinning a normal first lifetime
-		# to the emergency 1% Strike floor. The alien exhibition then makes a clear
-		# upward jump to its own authored anchor instead of inheriting a soft MLB.
-		return lerpf(
-			float(OPPONENT_DIFFICULTY_ANCHORS[era_index]),
-			HUMAN_FINAL_DIFFICULTY_TARGET,
-			float(within_era) / 5.0
-		)
-	if era_index >= ERA_NAMES.size() - 1:
-		return lerpf(
-			float(OPPONENT_DIFFICULTY_ANCHORS[era_index]),
-			float(OPPONENT_DIFFICULTY_ANCHORS[era_index + 1]),
-			float(within_era) / 4.0
-		)
-	return lerpf(
-		float(OPPONENT_DIFFICULTY_ANCHORS[era_index]),
-		float(OPPONENT_DIFFICULTY_ANCHORS[era_index + 1]),
-		float(within_era) / 5.0
-	)
+	return float(Campaign.level(index).get("difficulty", 0.0))
+
+static func campaign_level(index: int) -> Dictionary:
+	return Campaign.level(index)
+
+static func catalog_required_level(definition: Dictionary) -> int:
+	# Ball shells and Facilities were authored against the former 30/10/5
+	# ladder. Preserve their relative place while spreading them over the new
+	# 33/33/33+1 campaign rather than dumping every cosmic purchase into level 45.
+	var legacy_level := maxi(int(definition.get("required_level", 0)), 0)
+	if legacy_level <= 44:
+		return Campaign.old_index_to_new(legacy_level)
+	return clampi(legacy_level, 0, FINAL_BOSS_INDEX)
+
+static func opponent_class_name(index: int) -> String:
+	return str(Campaign.level(index).get("class_name", "Unknown Batter"))
+
+static func opponent_bat_name(index: int) -> String:
+	return str(Campaign.level(index).get("bat_name", "Unknown Bat"))
+
+static func opponent_quirk(index: int) -> String:
+	return str(Campaign.level(index).get("quirk", ""))
+
+static func strikes_required_for(index: int) -> int:
+	return maxi(int(Campaign.level(index).get("strikes_required", 3)), 1)
+
+static func balls_required_for(index: int) -> int:
+	return maxi(int(Campaign.level(index).get("balls_required", 4)), 1)
+
+static func opponent_bat_count(index: int) -> int:
+	return maxi(int(Campaign.level(index).get("bat_count", 1)), 1)
+
+static func name_pool_for(index: int) -> int:
+	return clampi(int(Campaign.level(index).get("name_pool", 0)), 0, BATTER_NAME_POOLS.size() - 1)
+
+static func prescribed_distance_tier(index: int) -> int:
+	return clampi(int(Campaign.level(index).get("distance_tier", 0)), 0, DISTANCE_TIERS.size() - 1)
 
 static func batter_display_name(opponent_index: int, generation: int) -> String:
-	if generation <= 0 and SIGNATURE_BATTER_NAMES.has(opponent_index):
-		return str(SIGNATURE_BATTER_NAMES[opponent_index])
-	var era_index := clampi(int(opponent_index / 5), 0, BATTER_NAME_POOLS.size() - 1)
+	var authored := Campaign.level(opponent_index)
+	if generation <= 0 and not str(authored.get("signature_name", "")).is_empty():
+		return str(authored.signature_name)
+	if generation <= 0 and Campaign.SIGNATURE_NAMES.has(opponent_index):
+		return str(Campaign.SIGNATURE_NAMES[opponent_index])
+	var era_index := name_pool_for(opponent_index)
 	var legacy_pool: Array = BATTER_NAME_POOLS[era_index]
 	var parts: Dictionary = BATTER_NAME_COMPONENTS[era_index]
 	if legacy_pool.is_empty() or parts.is_empty():

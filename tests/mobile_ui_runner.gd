@@ -22,6 +22,9 @@ func _run() -> void:
 	main.set_process(false)
 	main.pitch_field.set_process(false)
 	main.game.reset_fresh()
+	main.pitch_field.reset_visual_state()
+	main.game.pending_story_dialogs.clear()
+	main.story_dialog.hide()
 	main.offline_progress_dialog.hide()
 	main._refresh_interface()
 	main._set_mobile_layout(true, true)
@@ -58,6 +61,11 @@ func _run() -> void:
 	_expect(not main._mobile_install_offer_for_state(true, false, false, false), "Non-mobile browsers should not receive phone-specific instructions")
 	_expect(main.header_subtitle.visible, "The milestone subtitle should remain visible beneath the title on phone")
 	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ toddler", "Phone and desktop should share the current toddler-body subtitle")
+	if "--capture-ui" in OS.get_cmdline_user_args():
+		await process_frame
+		var phone_play_image := root.get_texture().get_image()
+		var phone_play_error := phone_play_image.save_png("/private/tmp/no-hitter-play-phone.png")
+		_expect(phone_play_error == OK, "Could not capture the portrait phone play screen")
 	_expect(not main.era_label.text.contains("/"), "Phone campaign chrome should show only the current level")
 	_expect(main.achievement_toast_description != null, "Phone achievement toasts should include the completed condition")
 	_expect(main.achievement_toast_description.get_theme_font_size("font_size") < main.achievement_toast_name.get_theme_font_size("font_size"), "Phone achievement conditions should remain visually subordinate to their names")
@@ -91,10 +99,10 @@ func _run() -> void:
 		"The phone pitcher must appear below the batter"
 	)
 	_expect(main.outcomes_grid.columns == 4, "Phone outcomes should wrap into a readable 4-by-2 grid")
-	_expect(main.frustration_status.get_parent() == main.outcome_footer, "The phone frustration meter should occupy the strip directly beneath the outcome cards")
-	_expect(main.outcome_footer.get_index() == main.outcomes_grid.get_index() + 1, "The frustration strip should immediately follow the outcome grid")
-	_expect(main.frustration_bar.get_combined_minimum_size().x >= 55.0, "The phone frustration meter should remain legible")
-	_expect(main.frustration_label.tooltip_text.contains("no cap") and main.frustration_label.tooltip_text.contains("Grand Slam +12,000"), "Phone inspection should explain the uncapped whole-number Frustration bonus")
+	_expect(main.frustration_status.get_parent() == main.outcome_footer, "The phone Determination meter should occupy the strip directly beneath the outcome cards")
+	_expect(main.outcome_footer.get_index() == main.outcomes_grid.get_index() + 1, "The Determination strip should immediately follow the outcome grid")
+	_expect(main.frustration_bar.get_combined_minimum_size().x >= 55.0, "The phone Determination meter should remain legible")
+	_expect(main.frustration_label.tooltip_text.contains("no cap") and main.frustration_label.tooltip_text.contains("Grand Slam +12,000"), "Phone inspection should explain the uncapped whole-number Determination bonus")
 	_expect(main.previous_button.text.is_empty() and main.next_button.text.is_empty(), "Phone opponent controls should not depend on font arrow glyphs")
 	_expect(main.previous_button.icon != null and main.next_button.icon != null, "Phone opponent controls should provide rasterized back/forward icons")
 	_expect(main.previous_button.get_combined_minimum_size().y >= 44.0 and main.next_button.get_combined_minimum_size().y >= 44.0, "Phone opponent controls should remain touch-sized")
@@ -116,6 +124,36 @@ func _run() -> void:
 	_expect(main._format_browser_save_slot(0, {}).contains("SLOT 1\nEMPTY"), "An unused phone save slot should identify itself as empty")
 	var slot_summary: String = main._format_browser_save_slot(1, {"current_opponent": 4, "xp": 123.0, "saved_at": 1_700_000_000})
 	_expect(slot_summary.contains("SLOT 2") and slot_summary.contains("LEVEL 5") and slot_summary.contains("123 XP"), "Occupied phone save slots should show level and XP at a glance")
+	_expect(not slot_summary.contains("DNA") and not slot_summary.contains("ARCANA") and not slot_summary.contains("HALOS"), "Pre-prestige save rows must remain spoiler-free")
+	var genetic_slot: String = main._format_browser_save_slot(0, {
+		"current_opponent": 0,
+		"xp": 8.0,
+		"saved_at": 1_700_000_000,
+		"genetic_offer_unlocked": true,
+		"dna": 12,
+		"lifetime_dna_earned": 26,
+	})
+	_expect(genetic_slot.contains("DNA 12 (26 earned)") and not genetic_slot.contains("ARCANA"), "A genetic save row should show current and lifetime DNA without revealing later layers")
+	var eldritch_slot: String = main._format_browser_save_slot(0, {
+		"current_opponent": 2,
+		"xp": 9.0,
+		"saved_at": 1_700_000_000,
+		"eldritch_offer_unlocked": true,
+		"dna": 0,
+		"lifetime_dna_earned": 41000000,
+		"arcana": 3,
+		"lifetime_arcana_earned": 63,
+	})
+	_expect(eldritch_slot.contains("DNA 0 (41M earned)") and eldritch_slot.contains("ARCANA 3 (63 earned)"), "An eldritch save row should retain genetic history and show both prestige currencies")
+	var divine_slot: String = main._format_browser_save_slot(0, {
+		"current_opponent": 1,
+		"xp": 10.0,
+		"saved_at": 1_700_000_000,
+		"divine_ascensions": 2,
+		"divine_blessings": ["one", "two"],
+		"divine_halos": 1,
+	})
+	_expect(divine_slot.contains("DNA 0 (0 earned)") and divine_slot.contains("ARCANA 0 (0 earned)") and divine_slot.contains("BLESSINGS 2/%d • HALOS 1" % Content.DIVINE_BLESSINGS.size()), "A divine save row should show all revealed prestige layers even immediately after a full reset")
 	main._show_mobile_overlay(main.save_stack, "SAVES & TRANSFER")
 	await process_frame
 	_expect(main.return_to_title_button.text == "RETURN TO TITLE" and main.return_to_title_button.get_combined_minimum_size().y >= 44.0, "The phone Saves menu should provide a touch-sized return to title action")
@@ -220,10 +258,10 @@ func _run() -> void:
 	_expect(Vector2(portrait_entrance.offset).x > 0.0 and Vector2(portrait_entrance.offset).y > 0.0, "A portrait replacement should enter from the opposite lower-right side")
 	main.pitch_field.batter_phase = "active"
 	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
-	_expect(main.catalog_hide_purchased_toggles.size() == 4, "Phone upgrade catalogs should retain every per-tab Hide Purchased control")
+	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Phone upgrade catalogs should retain the run-scoped Hide Purchased controls")
 	for catalog_toggle in main.catalog_hide_purchased_toggles.values():
 		_expect((catalog_toggle as CheckButton).get_combined_minimum_size().y >= 44.0, "Phone Hide Purchased controls should remain touch-sized")
-	_expect(main.body_section_buttons.growth.visible and main.body_section_buttons.build.visible, "Phone BODY should expose separate Grow and Build subtabs")
+	_expect(main.body_section_buttons.run.visible, "Phone BODY should expose its drafted RUN subtab")
 	for body_section_button_value in main.body_section_buttons.values():
 		var body_section_button := body_section_button_value as Button
 		_expect(body_section_button.get_combined_minimum_size().y >= 44.0, "Every BODY subtab should provide a 44-pixel touch target")
@@ -380,6 +418,10 @@ func _run() -> void:
 	_expect(main.outcomes_grid.columns == 8, "Compact landscape outcomes should stay on one short row")
 	_expect(main.mobile_nav.custom_minimum_size.y <= 34.0, "Compact landscape navigation should not waste vertical space")
 	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "A 1179×720 compact browser should keep the complete play view in-frame")
+	if "--capture-ui" in OS.get_cmdline_user_args():
+		var compact_play_image := root.get_texture().get_image()
+		var compact_play_error := compact_play_image.save_png("/private/tmp/no-hitter-play-compact.png")
+		_expect(compact_play_error == OK, "Could not capture the compact play screen")
 	root.size = Vector2i(1256, 696)
 	main._set_mobile_layout(false, false, true)
 	await process_frame
@@ -390,10 +432,14 @@ func _run() -> void:
 	_expect(main.outcomes_grid.columns == 8, "Desktop outcome row should return to one line")
 	_expect(main.page_container.get_combined_minimum_size().y <= main.page_scroll.size.y + 1.0, "The narrowest hysteresis-allowed wide view should fit without page scrolling")
 	_expect(main.body_container.get_combined_minimum_size().x <= main.page_scroll.size.x + 1.0, "The narrowest hysteresis-allowed wide view should not clip its right panel")
+	if "--capture-ui" in OS.get_cmdline_user_args():
+		var desktop_edge_image := root.get_texture().get_image()
+		var desktop_edge_error := desktop_edge_image.save_png("/private/tmp/no-hitter-play-desktop-edge.png")
+		_expect(desktop_edge_error == OK, "Could not capture the desktop edge play screen")
 	main.game.genetic_offer_unlocked = true
 	main.game.eldritch_offer_unlocked = true
-	main.game.highest_unlocked = 44
-	main.game.current_opponent = 44
+	main.game.highest_unlocked = Content.FINAL_BOSS_INDEX
+	main.game.current_opponent = Content.FINAL_BOSS_INDEX
 	main.game._reset_batter_identity()
 	main._refresh_interface()
 	await process_frame

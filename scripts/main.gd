@@ -5,6 +5,7 @@ const GameStateScript = preload("res://scripts/game_state.gd")
 const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 const TitleArtScript = preload("res://scripts/title_art.gd")
 const PowerMatchupGaugeScript = preload("res://scripts/power_matchup_gauge.gd")
+const LappedProgressBarScript = preload("res://scripts/lapped_progress_bar.gd")
 
 const COLOR_BG := Color("050810")
 const COLOR_PANEL := Color("101827")
@@ -56,7 +57,7 @@ var era_label: Label
 var opponent_label: Label
 var quirk_label: Label
 var mastery_label: Label
-var mastery_bar: ProgressBar
+var mastery_bar: Control
 var previous_button: Button
 var next_button: Button
 var previous_navigation_icon: ImageTexture
@@ -82,6 +83,8 @@ var frustration_status: HBoxContainer
 var frustration_label: Label
 var frustration_bar: ProgressBar
 var training_buttons := {}
+var training_batch_buttons := {}
+var training_batch_quantity := 1
 var pitch_buttons := {}
 var ball_upgrade_buttons := {}
 var milestone_buttons := {}
@@ -101,6 +104,10 @@ var upgrade_tabs: TabContainer
 var pitch_tab: Control
 var rebirth_tab: Control
 var achievement_tab: Control
+var story_tab: Control
+var story_reverse_toggle: CheckButton
+var story_entries_stack: VBoxContainer
+var story_last_signature := ""
 var achievement_count_label: Label
 var achievement_bonus_label: Label
 var achievement_hide_achieved_toggle: CheckButton
@@ -118,13 +125,14 @@ var achievement_toast_tween: Tween
 var automation_section: VBoxContainer
 var human_growth_section: VBoxContainer
 var human_modifier_section: VBoxContainer
+var run_perk_list: VBoxContainer
 var genetic_section: VBoxContainer
 var eldritch_section: VBoxContainer
 var divine_section: VBoxContainer
 var body_section_navigation: HBoxContainer
 var body_section_buttons := {}
 var body_section_containers := {}
-var selected_body_section := "growth"
+var selected_body_section := "run"
 var guide_label: Label
 var rebirth_story_label: Label
 var ascension_currency_label: Label
@@ -184,6 +192,12 @@ var import_save_confirmation: ConfirmationDialog
 var save_transfer_message_dialog: AcceptDialog
 var mobile_install_dialog: AcceptDialog
 var mobile_inspection_dialog: AcceptDialog
+var story_dialog: AcceptDialog
+var run_choice_dialog: Window
+var run_choice_title: Label
+var run_choice_subtitle: Label
+var run_choice_options: VBoxContainer
+var active_run_choice_id := ""
 var offline_progress_dialog: AcceptDialog
 var browser_update_confirmation: ConfirmationDialog
 var browser_update_export_button: Button
@@ -199,6 +213,7 @@ var alien_help_progress_panel: PanelContainer
 var alien_help_progress_bar: ProgressBar
 var alien_help_progress_label: Label
 var alien_arrival_dialog: AcceptDialog
+var eldritch_arrival_dialog: AcceptDialog
 var genetic_rebirth_explanation_dialog: AcceptDialog
 var alien_story_popup_pending := false
 var first_genetic_offer_prompted_this_session := false
@@ -379,6 +394,8 @@ func _process(delta: float) -> void:
 		pitch_field == null or pitch_field.is_simulation_clock_available()
 	)
 	game.advance(simulation_delta)
+	if pitch_field != null:
+		pitch_field.sync_active_volley_clocks(game.active_volleys)
 	ui_elapsed += delta
 	expensive_ui_elapsed += delta
 	autosave_elapsed += delta
@@ -1278,8 +1295,16 @@ func _apply_development_arguments() -> void:
 	development_session = true
 	game.reset_fresh()
 	_clear_achievement_toasts()
-	game.highest_unlocked = 34 if preview == "alien" else (43 if preview == "eldritch" else 44)
-	game.current_opponent = 33 if preview == "alien" else game.highest_unlocked
+	game.highest_unlocked = (
+		Content.ALIEN_EXHIBITION_INDEX + 1
+		if preview == "alien"
+		else (
+			Content.ELDRITCH_EXHIBITION_INDEX + 1
+			if preview == "eldritch"
+			else Content.FINAL_BOSS_INDEX
+		)
+	)
+	game.current_opponent = Content.ALIEN_EXHIBITION_INDEX if preview == "alien" else game.highest_unlocked
 	game._sync_distance_to_current_opponent()
 	game._reset_batter_identity()
 	game.genetic_offer_unlocked = true
@@ -1301,7 +1326,7 @@ func _apply_development_arguments() -> void:
 		"drag_training": 16,
 		"xp_training": 16,
 		"loot_training": 16,
-		"frustration_training": 16,
+		"determination_training": 16,
 	}
 	for definition in Content.GENETIC_UPGRADES:
 		var preview_max := int(definition.get("max_level", 6))
@@ -1811,7 +1836,7 @@ func _leave_title_screen(show_pending_offline := true) -> void:
 		pending_title_offline_summary.clear()
 		_show_offline_progress(summary, prefix)
 	_refresh_interface()
-	call_deferred("_maybe_show_alien_story")
+	call_deferred("_maybe_show_pending_overlay")
 
 func _refresh_title_screen() -> void:
 	if title_screen == null or game == null:
@@ -1820,10 +1845,10 @@ func _refresh_title_screen() -> void:
 	var highest := game.get_historical_highest_opponent()
 	var has_progress := _browser_save_has_progress(game.to_save_data())
 	if has_progress:
-		var era_index := clampi(int(highest / 5), 0, Content.ERA_NAMES.size() - 1)
+		var authored := Content.campaign_level(highest)
 		title_progress_label.text = "FARTHEST REACHED • LEVEL %02d • %s" % [
 			highest + 1,
-			str(Content.ERA_NAMES[era_index]),
+			str(authored.get("subera", authored.get("era", "BACKYARD"))),
 		]
 	else:
 		title_progress_label.text = "THE BACKYARD IS WAITING"
@@ -1925,15 +1950,96 @@ func _format_named_save(name: String, data: Dictionary) -> String:
 	if data.is_empty():
 		return "%s\nEMPTY" % name
 	var timestamp := Time.get_datetime_dict_from_unix_time(int(data.get("saved_at", 0)))
-	return "%s\nLEVEL %d • %s XP • %02d/%02d %02d:%02d" % [
+	var summary := "%s\nLEVEL %d • %s XP • %02d/%02d %02d:%02d" % [
 		name,
-		clampi(int(data.get("current_opponent", 0)) + 1, 1, Content.OPPONENT_NAMES.size()),
+		clampi(int(data.get("current_opponent", 0)) + 1, 1, Content.CAMPAIGN_LEVEL_COUNT),
 		BaseballGameState.format_xp_total(maxf(float(data.get("xp", 0.0)), 0.0)),
 		int(timestamp.get("month", 0)),
 		int(timestamp.get("day", 0)),
 		int(timestamp.get("hour", 0)),
 		int(timestamp.get("minute", 0)),
 	]
+	var prestige_summary := _format_save_prestige(data)
+	if not prestige_summary.is_empty():
+		summary += "\n" + prestige_summary
+	return summary
+
+func _save_data_has_genetic_reveal(data: Dictionary) -> bool:
+	var highest := int(data.get("highest_unlocked", 0))
+	var current_dna := float(data.get("dna", data.get("rings", 0.0)))
+	var lifetime_dna := float(data.get("lifetime_dna_earned", current_dna))
+	var genetic_rebirths := int(data.get(
+		"lifetime_genetic_rebirths",
+		data.get("genetic_rebirths", data.get("seasons_completed", 0))
+	))
+	return (
+		bool(data.get("genetic_offer_unlocked", highest >= Content.ALIEN_EXHIBITION_INDEX))
+		or genetic_rebirths > 0
+		or lifetime_dna > 0.0
+		or _save_data_has_eldritch_reveal(data)
+	)
+
+func _save_data_has_eldritch_reveal(data: Dictionary) -> bool:
+	var highest := int(data.get("highest_unlocked", 0))
+	var current_arcana := float(data.get("arcana", 0.0))
+	var lifetime_arcana := float(data.get("lifetime_arcana_earned", current_arcana))
+	var eldritch_ascensions := int(data.get(
+		"lifetime_eldritch_ascensions",
+		data.get("eldritch_ascensions", 0)
+	))
+	return (
+		bool(data.get("eldritch_offer_unlocked", highest >= Content.ELDRITCH_EXHIBITION_INDEX))
+		or eldritch_ascensions > 0
+		or lifetime_arcana > 0.0
+		or _save_data_has_divine_reveal(data)
+	)
+
+func _save_data_has_divine_reveal(data: Dictionary) -> bool:
+	var blessings_value: Variant = data.get("divine_blessings", [])
+	var blessing_count: int = blessings_value.size() if blessings_value is Array else 0
+	return (
+		bool(data.get("cosmos_conquered", false))
+		or int(data.get("divine_ascensions", 0)) > 0
+		or blessing_count > 0
+		or int(data.get("divine_halos", 0)) > 0
+	)
+
+func _format_save_prestige(data: Dictionary) -> String:
+	var parts: Array[String] = []
+	if _save_data_has_genetic_reveal(data):
+		var current_dna := maxf(float(data.get("dna", data.get("rings", 0.0))), 0.0)
+		var lifetime_dna := maxf(
+			float(data.get("lifetime_dna_earned", current_dna)),
+			current_dna
+		)
+		parts.append("DNA %s (%s earned)" % [
+			_format_save_prestige_points(current_dna),
+			_format_save_prestige_points(lifetime_dna),
+		])
+	if _save_data_has_eldritch_reveal(data):
+		var current_arcana := maxf(float(data.get("arcana", 0.0)), 0.0)
+		var lifetime_arcana := maxf(
+			float(data.get("lifetime_arcana_earned", current_arcana)),
+			current_arcana
+		)
+		parts.append("ARCANA %s (%s earned)" % [
+			_format_save_prestige_points(current_arcana),
+			_format_save_prestige_points(lifetime_arcana),
+		])
+	if _save_data_has_divine_reveal(data):
+		var blessings_value: Variant = data.get("divine_blessings", [])
+		var blessing_count: int = blessings_value.size() if blessings_value is Array else 0
+		parts.append("BLESSINGS %d/%d • HALOS %d" % [
+			blessing_count,
+			Content.DIVINE_BLESSINGS.size(),
+			maxi(int(data.get("divine_halos", 0)), 0),
+		])
+	return " • ".join(parts)
+
+func _format_save_prestige_points(value: float) -> String:
+	# Prestige awards are whole points. Keep an empty post-reset balance as a
+	# clean zero while retaining the granular large-number formatting used by XP.
+	return "0" if value < 1.0 else BaseballGameState.format_xp_total(value)
 
 func _resume_loaded_autosave() -> void:
 	_leave_title_screen()
@@ -2363,6 +2469,13 @@ func _on_root_resized() -> void:
 	if is_web_build:
 		_sync_browser_content_scale()
 	call_deferred("_apply_responsive_layout")
+	call_deferred("_recenter_visible_dialogs")
+
+func _recenter_visible_dialogs() -> void:
+	if run_choice_dialog != null and run_choice_dialog.visible:
+		run_choice_dialog.popup_centered_clamped(_run_choice_popup_size(), 0.96)
+	if locker_dialog != null and locker_dialog.visible:
+		_position_locker_dialog()
 
 func _sync_browser_content_scale(reported_scale := -1.0) -> void:
 	if not is_web_build:
@@ -2709,10 +2822,7 @@ func _build_play_area(parent: Control) -> void:
 	mastery_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_enable_mobile_inspection(mastery_label, "Opponent mastery")
 	field_stack.add_child(mastery_label)
-	mastery_bar = ProgressBar.new()
-	mastery_bar.min_value = 0.0
-	mastery_bar.max_value = 100.0
-	mastery_bar.show_percentage = false
+	mastery_bar = LappedProgressBarScript.new()
 	mastery_bar.custom_minimum_size.y = 10.0
 	field_stack.add_child(mastery_bar)
 
@@ -2766,7 +2876,7 @@ func _build_play_area(parent: Control) -> void:
 	frustration_label.add_theme_font_size_override("font_size", 10)
 	frustration_label.add_theme_color_override("font_color", COLOR_GOLD)
 	frustration_label.mouse_default_cursor_shape = Control.CURSOR_HELP
-	_enable_mobile_inspection(frustration_label, "Frustration")
+	_enable_mobile_inspection(frustration_label, "Determination")
 	frustration_status.add_child(frustration_label)
 	frustration_bar = ProgressBar.new()
 	frustration_bar.min_value = 0.0
@@ -2857,7 +2967,7 @@ func _build_status_stat_list(parent: Control) -> void:
 		["drag", "DRAG"],
 		["xp", "XP"],
 		["loot", "LOOT"],
-		["frustration", "FRUST."],
+		["determination", "DETER."],
 	]
 	for row_definition in rows:
 		var stat_id := str(row_definition[0])
@@ -3278,9 +3388,12 @@ func _open_locker(slot: String) -> void:
 		return
 	selected_loot_slot = slot
 	_rebuild_locker_dialog()
-	locker_dialog_close_button.visible = mobile_layout
+	_position_locker_dialog()
+
+func _position_locker_dialog() -> void:
+	locker_dialog_close_button.visible = true
+	var viewport_size := _get_responsive_viewport_size()
 	if mobile_layout:
-		var viewport_size := _get_responsive_viewport_size()
 		var popup_size := Vector2i(
 			clampi(int(viewport_size.x) - 16, 300, 620),
 			clampi(int(viewport_size.y) - 24, 420, 760)
@@ -3293,9 +3406,15 @@ func _open_locker(slot: String) -> void:
 			maxi((int(viewport_size.y) - popup_size.y) / 2, 0)
 		)
 	else:
-		locker_dialog.borderless = false
+		# Web child-window title bars can sit outside a short canvas. The custom
+		# heading remains reachable and supplies the same explicit close action.
+		locker_dialog.borderless = is_web_build
+		var popup_size := Vector2i(
+			clampi(int(viewport_size.x) - 32, 800, 940),
+			clampi(int(viewport_size.y) - 32, 560, 700)
+		)
 		locker_dialog.min_size = Vector2i(800, 560)
-		locker_dialog.popup_centered(Vector2i(940, 700))
+		locker_dialog.popup_centered_clamped(popup_size, 0.96)
 
 func _select_locker_slot(slot: String) -> void:
 	if not game.is_loot_slot_unlocked(slot):
@@ -3327,6 +3446,15 @@ func _rebuild_locker_dialog() -> void:
 	var items := game.get_loot_items_for_slot(selected_loot_slot)
 	var equipped_item := game.get_equipped_loot_item(selected_loot_slot)
 	var equipped_name := "EMPTY" if equipped_item.is_empty() else str(equipped_item.name)
+	if selected_loot_slot == "relic":
+		var relic_names: Array[String] = []
+		for relic_index in game.get_relic_slot_count():
+			var relic_item := game.get_loot_item(str(game.equipped_relics[relic_index]))
+			relic_names.append("R%d %s" % [
+				relic_index + 1,
+				"EMPTY" if relic_item.is_empty() else str(relic_item.name),
+			])
+		equipped_name = "  •  ".join(relic_names)
 	var clone_note := "100% applied"
 	if game.get_equipment_inheritance_factor() < 0.999:
 		clone_note = "×%.3f after clone inheritance" % game.get_equipment_inheritance_factor()
@@ -3361,7 +3489,7 @@ func _rebuild_locker_dialog() -> void:
 		return
 	for item in items:
 		var rarity := Content.loot_rarity(int(item.rarity))
-		var is_equipped := str(game.equipped_loot.get(selected_loot_slot, "")) == str(item.id)
+		var is_equipped := game.is_loot_item_equipped(str(item.id))
 		var row_panel := PanelContainer.new()
 		row_panel.custom_minimum_size.y = 142.0 if mobile_layout else 132.0
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3708,7 +3836,7 @@ func _trash_selected_loot_item() -> void:
 		loot_item_status_label.text = "This permanently destroys %s for %s Scrap%s. Press CONFIRM TRASH to continue." % [
 			str(item.name),
 			BaseballGameState.format_number(game.get_loot_scrap_value(item), 0),
-			"; it is currently equipped" if str(game.equipped_loot.get(str(item.slot), "")) == selected_loot_item_id else ("; it is star-protected" if bool(item.get("favorite", false)) else ""),
+			"; it is currently equipped" if game.is_loot_item_equipped(selected_loot_item_id) else ("; it is star-protected" if bool(item.get("favorite", false)) else ""),
 		]
 		loot_item_status_label.add_theme_color_override("font_color", COLOR_BAD)
 		return
@@ -3850,6 +3978,7 @@ func _build_upgrade_area(parent: Control) -> void:
 	_build_scale_tab(upgrade_tabs)
 	_build_rebirth_tab(upgrade_tabs)
 	_build_achievement_tab(upgrade_tabs)
+	_build_story_tab(upgrade_tabs)
 	_build_stats_tab(upgrade_tabs)
 	_build_guide_tab(upgrade_tabs)
 	_configure_tab_overflow_controls(false)
@@ -3890,7 +4019,7 @@ func _build_mobile_upgrade_stats(parent: Control) -> void:
 		["drag", "DRAG"],
 		["xp", "XP"],
 		["loot", "LOOT"],
-		["frustration", "FRUST."],
+		["determination", "DETER."],
 	]
 	for row_definition in rows:
 		var stat_id := str(row_definition[0])
@@ -3951,6 +4080,30 @@ func _build_catalog_hide_toggle(parent: Control, catalog_id: String) -> void:
 func _build_training_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "TRAIN")
 	_section_label(content, "REPEATABLE FUNDAMENTALS")
+	var batch_row := HBoxContainer.new()
+	batch_row.name = "TrainingBatch"
+	batch_row.add_theme_constant_override("separation", 5)
+	content.add_child(batch_row)
+	var batch_label := Label.new()
+	batch_label.text = "BUY RANKS"
+	batch_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	batch_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	batch_label.add_theme_font_size_override("font_size", 12)
+	batch_label.add_theme_color_override("font_color", COLOR_MUTED)
+	batch_row.add_child(batch_label)
+	var batch_group := ButtonGroup.new()
+	for quantity in [1, 10, 100]:
+		var button := Button.new()
+		button.text = "×%d" % quantity
+		button.toggle_mode = true
+		button.button_group = batch_group
+		button.custom_minimum_size = Vector2(58.0, 40.0)
+		button.focus_mode = Control.FOCUS_NONE
+		button.tooltip_text = "Buy exactly %d ranks. No partial purchase is made." % quantity
+		button.pressed.connect(_select_training_batch.bind(quantity))
+		button.set_pressed_no_signal(quantity == training_batch_quantity)
+		batch_row.add_child(button)
+		training_batch_buttons[quantity] = button
 	for definition in _definitions_by_unlock(Content.TRAINING):
 		var entry := _upgrade_row(_definition_tooltip(definition))
 		(entry.button as Button).pressed.connect(_buy_training.bind(str(definition.id)))
@@ -3962,17 +4115,25 @@ func _build_pitch_tab(tabs: TabContainer) -> void:
 	pitch_tab = content.get_parent().get_parent() as Control
 	_section_label(content, "AUTOMATIC ARSENAL")
 	var explainer := Label.new()
-	explainer.text = "Every learned pitch enters the automatic mix. Pitch Calling increasingly favors the better ones."
+	explainer.text = "Pitches are learned or improved through level drafts. Every learned pitch enters the automatic mix; Pitch Calling favors the better ones."
 	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	explainer.add_theme_font_size_override("font_size", 13)
 	explainer.add_theme_color_override("font_color", COLOR_MUTED)
 	content.add_child(explainer)
-	_build_catalog_hide_toggle(content, "pitch")
 	for definition in _definitions_by_unlock(Content.PITCHES):
 		var entry := _upgrade_row(_definition_tooltip(definition, ["quality", "speed"]))
-		(entry.button as Button).pressed.connect(_buy_pitch.bind(str(definition.id)))
 		content.add_child(entry.container)
 		pitch_buttons[definition.id] = entry
+
+func _select_training_batch(quantity: int) -> void:
+	if quantity not in [1, 10, 100]:
+		return
+	training_batch_quantity = quantity
+	for quantity_value in training_batch_buttons:
+		(training_batch_buttons[quantity_value] as Button).set_pressed_no_signal(
+			int(quantity_value) == training_batch_quantity
+		)
+	_refresh_purchase_buttons()
 
 func _build_ball_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "BALL")
@@ -4058,10 +4219,8 @@ func _build_scale_tab(tabs: TabContainer) -> void:
 	automation_catalog_heading.add_theme_color_override("font_color", COLOR_GOLD)
 	automation_section.add_child(automation_catalog_heading)
 	var catalog_automation_definitions := [
-		{"id": "catalog_pitch", "catalog_id": "pitch", "name": "Auto-learn Pitches"},
 		{"id": "catalog_ball", "catalog_id": "ball", "name": "Auto-install Balls"},
 		{"id": "catalog_facility", "catalog_id": "facility", "name": "Auto-buy Facilities"},
-		{"id": "catalog_growth", "catalog_id": "growth", "name": "Auto-buy Body"},
 	]
 	for catalog_value in catalog_automation_definitions:
 		var catalog: Dictionary = catalog_value
@@ -4101,40 +4260,32 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	body_section_navigation.add_theme_constant_override("separation", 4)
 	content.add_child(body_section_navigation)
 	var body_tab_group := ButtonGroup.new()
-	_build_body_section_tab(body_tab_group, "growth", "GROW", "Ordinary biological development")
-	_build_body_section_tab(body_tab_group, "build", "BUILD", "Physical development and questionable chemistry")
+	_build_body_section_tab(body_tab_group, "run", "RUN", "This body's drafted age, build, and perks")
 	_build_body_section_tab(body_tab_group, "genetic", "DNA", "Genetic rebirth and permanent mutations")
 	_build_body_section_tab(body_tab_group, "eldritch", "ARCANA", "Eldritch ascension and permanent magic")
 	_build_body_section_tab(body_tab_group, "divine", "DIVINE", "God Prestige and permanent blessings")
 
 	human_growth_section = VBoxContainer.new()
-	human_growth_section.name = "GrowthSection"
+	human_growth_section.name = "RunSection"
 	human_growth_section.add_theme_constant_override("separation", 7)
 	content.add_child(human_growth_section)
-	_section_label(human_growth_section, "ORDINARY BIOLOGICAL DEVELOPMENT")
+	_section_label(human_growth_section, "THIS BODY'S RUN BUILD")
 	body_growth_status_label = Label.new()
 	body_growth_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_growth_status_label.add_theme_font_size_override("font_size", 12)
 	body_growth_status_label.add_theme_color_override("font_color", COLOR_MUTED)
 	human_growth_section.add_child(body_growth_status_label)
-	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
-		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
-		var entry := _upgrade_row(_definition_tooltip(definition, ["speed", "quality", "recovery"]))
-		(entry.button as Button).pressed.connect(_buy_body_growth.bind(str(definition.id)))
-		human_growth_section.add_child(entry.container)
-		body_growth_buttons[definition.id] = entry
-
-	human_modifier_section = VBoxContainer.new()
-	human_modifier_section.name = "BuildSection"
-	human_modifier_section.add_theme_constant_override("separation", 7)
-	content.add_child(human_modifier_section)
-	_section_label(human_modifier_section, "PHYSICAL DEVELOPMENT & QUESTIONABLE CHEMISTRY")
-	for definition_value in Content.BODY_MODIFIERS:
-		var definition: Dictionary = definition_value
-		var entry := _upgrade_row(_definition_tooltip(definition))
-		(entry.button as Button).pressed.connect(_buy_body_modifier.bind(str(definition.id)))
-		human_modifier_section.add_child(entry.container)
-		body_modifier_buttons[definition.id] = entry
+	var draft_note := Label.new()
+	draft_note.text = "Age, physique, and run perks are chosen from saved reward drafts after level clears. They reset with this body; Training, Balls, and Facilities remain separate run purchases."
+	draft_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	draft_note.add_theme_font_size_override("font_size", 12)
+	draft_note.add_theme_color_override("font_color", COLOR_GOLD)
+	draft_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	human_growth_section.add_child(draft_note)
+	run_perk_list = VBoxContainer.new()
+	run_perk_list.name = "SelectedRunPerks"
+	run_perk_list.add_theme_constant_override("separation", 6)
+	human_growth_section.add_child(run_perk_list)
 
 	genetic_section = VBoxContainer.new()
 	genetic_section.name = "GeneticSection"
@@ -4178,8 +4329,7 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	divine_halo_button.pressed.connect(_request_divine_ascension.bind("halo"))
 	divine_section.add_child(divine_halo_button)
 	body_section_containers = {
-		"growth": human_growth_section,
-		"build": human_modifier_section,
+		"run": human_growth_section,
 		"genetic": genetic_section,
 		"eldritch": eldritch_section,
 		"divine": divine_section,
@@ -4204,7 +4354,7 @@ func _build_body_section_tab(group: ButtonGroup, id: String, text: String, toolt
 
 func _body_section_is_revealed(id: String) -> bool:
 	match id:
-		"growth", "build":
+		"run":
 			return true
 		"genetic":
 			return _has_genetic_reveal()
@@ -4227,7 +4377,7 @@ func _refresh_body_section_visibility() -> void:
 	if body_section_buttons.is_empty() or body_section_containers.is_empty():
 		return
 	if not _body_section_is_revealed(selected_body_section):
-		selected_body_section = "growth"
+		selected_body_section = "run"
 	for id_value in body_section_buttons:
 		var id := str(id_value)
 		var button: Button = body_section_buttons[id]
@@ -4370,6 +4520,90 @@ func _achievement_card_style(state: String) -> StyleBoxFlat:
 			style.bg_color = Color("090e17")
 			style.border_color = Color("1b2737")
 	return style
+
+func _build_story_tab(tabs: TabContainer) -> void:
+	var content := _create_scroll_tab(tabs, "STORY")
+	story_tab = content.get_parent().get_parent() as Control
+	_section_label(content, "THE SCOREBOOK")
+	var explainer := Label.new()
+	explainer.text = "Major events from this save are recorded here. Newest entries appear first."
+	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	explainer.add_theme_font_size_override("font_size", 12)
+	explainer.add_theme_color_override("font_color", COLOR_MUTED)
+	explainer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(explainer)
+	story_reverse_toggle = CheckButton.new()
+	story_reverse_toggle.name = "ReverseStoryOrder"
+	story_reverse_toggle.text = "REVERSE ORDER"
+	story_reverse_toggle.tooltip_text = "Show the oldest recorded story first."
+	story_reverse_toggle.add_theme_font_size_override("font_size", 12)
+	story_reverse_toggle.toggled.connect(_toggle_story_order)
+	content.add_child(story_reverse_toggle)
+	story_entries_stack = VBoxContainer.new()
+	story_entries_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	story_entries_stack.add_theme_constant_override("separation", 7)
+	content.add_child(story_entries_stack)
+
+func _toggle_story_order(enabled: bool) -> void:
+	game.story_reverse_order = enabled
+	story_last_signature = ""
+	_refresh_story_tab()
+
+func _refresh_story_tab() -> void:
+	if story_entries_stack == null:
+		return
+	story_reverse_toggle.set_pressed_no_signal(game.story_reverse_order)
+	var entries := game.get_story_entries()
+	var signature_parts: Array[String] = [str(game.story_reverse_order)]
+	for entry in entries:
+		signature_parts.append("%s:%d" % [str(entry.get("id", "")), int(entry.get("order", 0))])
+	var signature := "|".join(signature_parts)
+	if signature == story_last_signature:
+		return
+	story_last_signature = signature
+	for child in story_entries_stack.get_children():
+		story_entries_stack.remove_child(child)
+		child.queue_free()
+	if entries.is_empty():
+		var empty := Label.new()
+		empty.text = "The scorebook is blank. This should not remain true for long."
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.add_theme_color_override("font_color", COLOR_MUTED)
+		story_entries_stack.add_child(empty)
+		return
+	for entry_value in entries:
+		var entry: Dictionary = entry_value
+		var panel := PanelContainer.new()
+		panel.mouse_filter = Control.MOUSE_FILTER_PASS
+		var style := _compact_panel_style(10.0, 7.0, 7)
+		style.bg_color = Color("101b2c")
+		style.border_color = Color("2e4968")
+		panel.add_theme_stylebox_override("panel", style)
+		story_entries_stack.add_child(panel)
+		var stack := VBoxContainer.new()
+		stack.add_theme_constant_override("separation", 3)
+		stack.mouse_filter = Control.MOUSE_FILTER_PASS
+		panel.add_child(stack)
+		var title := Label.new()
+		title.text = str(entry.get("title", "STORY"))
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		title.add_theme_font_size_override("font_size", 15)
+		title.add_theme_color_override("font_color", COLOR_ACCENT)
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stack.add_child(title)
+		var meta := Label.new()
+		meta.text = "ENTRY %d  •  %s" % [int(entry.get("order", 0)), str(entry.get("tier", "human")).to_upper()]
+		meta.add_theme_font_size_override("font_size", 10)
+		meta.add_theme_color_override("font_color", COLOR_GOLD)
+		meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stack.add_child(meta)
+		var body := Label.new()
+		body.text = str(entry.get("body", ""))
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_theme_font_size_override("font_size", 12)
+		body.add_theme_color_override("font_color", COLOR_TEXT)
+		body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stack.add_child(body)
 
 func _build_stats_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "STATS")
@@ -4601,6 +4835,8 @@ func _build_confirmation_dialog() -> void:
 	_build_browser_update_confirmation()
 	_build_native_update_confirmation()
 	_build_alien_help_dialog()
+	_build_story_dialog()
+	_build_run_choice_dialog()
 	body_limit_dialog = AcceptDialog.new()
 	body_limit_dialog.title = "The body refuses"
 	add_child(body_limit_dialog)
@@ -4628,6 +4864,195 @@ func _build_confirmation_dialog() -> void:
 	divine_confirmation.get_cancel_button().custom_minimum_size.y = 44.0
 	divine_confirmation.confirmed.connect(_confirm_divine_ascension)
 	add_child(divine_confirmation)
+
+func _build_story_dialog() -> void:
+	story_dialog = AcceptDialog.new()
+	story_dialog.name = "StoryDialog"
+	story_dialog.title = "THE SCOREBOOK"
+	story_dialog.dialog_autowrap = true
+	story_dialog.min_size = Vector2i(320, 250)
+	story_dialog.get_ok_button().text = "CONTINUE"
+	story_dialog.get_ok_button().custom_minimum_size.y = 46.0
+	story_dialog.confirmed.connect(_accept_story_dialog)
+	add_child(story_dialog)
+
+func _build_run_choice_dialog() -> void:
+	run_choice_dialog = Window.new()
+	run_choice_dialog.name = "RunChoiceDialog"
+	run_choice_dialog.title = "CHOOSE YOUR FOCUS"
+	run_choice_dialog.min_size = Vector2i(330, 430)
+	run_choice_dialog.transient = true
+	run_choice_dialog.exclusive = true
+	run_choice_dialog.unresizable = false
+	run_choice_dialog.close_requested.connect(_keep_run_choice_open)
+	add_child(run_choice_dialog)
+	run_choice_dialog.hide()
+
+	var surface := PanelContainer.new()
+	surface.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var surface_style := _compact_panel_style(18.0, 14.0, 12)
+	surface_style.bg_color = Color("0b1422")
+	surface_style.border_color = Color("3a5c7e")
+	surface_style.set_border_width_all(2)
+	surface.add_theme_stylebox_override("panel", surface_style)
+	run_choice_dialog.add_child(surface)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	surface.add_child(stack)
+	run_choice_title = Label.new()
+	run_choice_title.text = "CHOOSE YOUR FOCUS"
+	run_choice_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	run_choice_title.add_theme_font_size_override("font_size", 22)
+	run_choice_title.add_theme_color_override("font_color", COLOR_ACCENT)
+	stack.add_child(run_choice_title)
+	run_choice_subtitle = Label.new()
+	run_choice_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	run_choice_subtitle.add_theme_font_size_override("font_size", 12)
+	run_choice_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
+	stack.add_child(run_choice_subtitle)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "RunChoiceScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(scroll)
+	var gutter := _scroll_content_gutter(scroll, 12)
+	run_choice_options = VBoxContainer.new()
+	run_choice_options.name = "RunChoiceOptions"
+	run_choice_options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	run_choice_options.add_theme_constant_override("separation", 8)
+	gutter.add_child(run_choice_options)
+
+	var footer := Label.new()
+	footer.text = "The offer is already saved. Reloading cannot reroll it."
+	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	footer.add_theme_font_size_override("font_size", 10)
+	footer.add_theme_color_override("font_color", COLOR_GOLD)
+	stack.add_child(footer)
+
+func _keep_run_choice_open() -> void:
+	# Mandatory level rewards cannot be dismissed into an ambiguous blocked state.
+	# Auto-advance may queue several; they are presented one at a time here.
+	if run_choice_dialog != null and not active_run_choice_id.is_empty():
+		run_choice_dialog.grab_focus()
+
+func _run_effect_text(effect: Dictionary) -> String:
+	if effect.is_empty():
+		return ""
+	var stat := str(effect.get("stat", "effect")).replace("_", " ").capitalize()
+	var operation := str(effect.get("operation", "add"))
+	if operation == "body":
+		if str(effect.get("stat", "")) == "body_age":
+			return "Body age advances"
+		return "+%s body adjective" % str(effect.get("adjective", "changed")).capitalize()
+	var value := float(effect.get("value", effect.get("magnitude", 0.0)))
+	match operation:
+		"multiplier":
+			return "%s ×%s" % [stat, BaseballGameState.format_number(value, 3)]
+		"reduction":
+			return "%s ×%s" % [stat, BaseballGameState.format_number(value, 3)]
+		_:
+			var suffix := "%" if str(effect.get("stat", "")) in ["loot", "offline"] else ""
+			var display_value := value * 100.0 if not suffix.is_empty() else value
+			return "%s %s%s" % [
+				stat,
+				BaseballGameState.format_rating(display_value, true),
+				suffix,
+			]
+
+func _run_choice_option_text(choice: Dictionary, option: Dictionary) -> String:
+	var choice_type := str(choice.get("type", "perk"))
+	if choice_type in ["pitch", "boss_pitch"]:
+		return "%s  •  %s  •  LEVEL %d\n%s Quality\n%s" % [
+			str(option.get("name", "Unknown Pitch")),
+			str(option.get("rarity_name", "COMMON")),
+			int(option.get("next_level", 1)),
+			BaseballGameState.format_rating(float(option.get("quality_gain", 0.0)), true),
+			str(option.get("description", "")),
+		]
+	var lines: Array[String] = [
+		"%s  •  %s  •  LEVEL %d" % [
+			str(option.get("name", "Unknown Focus")),
+			str(option.get("rarity_name", "COMMON")),
+			int(option.get("level", int(choice.get("source_level_number", 1)))),
+		],
+	]
+	var effect_text := _run_effect_text(option.get("effect", {}))
+	if not effect_text.is_empty():
+		lines.append(effect_text)
+	var penalty_text := _run_effect_text(option.get("penalty", {}))
+	if not penalty_text.is_empty():
+		lines.append("TRADEOFF • %s" % penalty_text)
+	var description := str(option.get("description", ""))
+	if not description.is_empty():
+		lines.append(description)
+	return "\n".join(lines)
+
+func _show_run_choice(choice: Dictionary) -> void:
+	if run_choice_dialog == null or choice.is_empty():
+		return
+	active_run_choice_id = str(choice.get("id", ""))
+	var choice_type := str(choice.get("type", "perk"))
+	var source_level := int(choice.get("source_level_number", 1))
+	run_choice_title.text = (
+		"CHOOSE A PITCH" if choice_type in ["pitch", "boss_pitch"]
+		else "CHOOSE YOUR FOCUS"
+	)
+	run_choice_subtitle.text = (
+		"Level %d reward • %d queued choice%s remain. Choose one; the others disappear." % [
+			source_level,
+			game.get_pending_run_choice_count(),
+			"" if game.get_pending_run_choice_count() == 1 else "s",
+		]
+	)
+	for child in run_choice_options.get_children():
+		run_choice_options.remove_child(child)
+		child.queue_free()
+	var options: Array = choice.get("options", [])
+	for option_index in options.size():
+		var option: Dictionary = options[option_index]
+		var button := Button.new()
+		button.name = "RunChoiceOption%d" % option_index
+		button.text = _run_choice_option_text(choice, option)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		button.custom_minimum_size.y = 112.0
+		button.add_theme_font_size_override("font_size", 14)
+		var rarity_color := Color(str(option.get("color", "a9b6c5")))
+		button.add_theme_color_override("font_color", rarity_color)
+		button.tooltip_text = button.text
+		button.pressed.connect(_select_run_choice_option.bind(active_run_choice_id, option_index))
+		run_choice_options.add_child(button)
+	run_choice_dialog.popup_centered_clamped(_run_choice_popup_size(), 0.96)
+
+func _run_choice_popup_size() -> Vector2i:
+	var viewport_size := _get_responsive_viewport_size()
+	return Vector2i(
+		mini(720, maxi(340, int(viewport_size.x * (0.94 if mobile_layout else 0.60)))),
+		mini(650, maxi(450, int(viewport_size.y * 0.88)))
+	)
+
+func _select_run_choice_option(choice_id: String, option_index: int) -> void:
+	var selected := game.resolve_run_choice(choice_id, option_index)
+	if selected.is_empty():
+		return
+	active_run_choice_id = ""
+	run_choice_dialog.hide()
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+	_refresh_interface()
+	call_deferred("_maybe_show_pending_overlay")
+
+func _accept_story_dialog() -> void:
+	if game == null:
+		return
+	game.consume_next_story_dialog()
+	story_last_signature = ""
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+	_refresh_story_tab()
+	call_deferred("_maybe_show_pending_overlay")
 
 func _build_browser_update_confirmation() -> void:
 	browser_update_confirmation = ConfirmationDialog.new()
@@ -4679,7 +5104,23 @@ func _build_alien_help_dialog() -> void:
 	)
 	alien_arrival_dialog.get_ok_button().text = "PITCH ANYWAY"
 	alien_arrival_dialog.get_ok_button().custom_minimum_size.y = 44.0
+	alien_arrival_dialog.confirmed.connect(_begin_alien_contact)
 	add_child(alien_arrival_dialog)
+
+	eldritch_arrival_dialog = AcceptDialog.new()
+	eldritch_arrival_dialog.name = "EldritchArrivalDialog"
+	eldritch_arrival_dialog.title = "SOMETHING WANTS TO PLAY"
+	eldritch_arrival_dialog.dialog_autowrap = true
+	eldritch_arrival_dialog.min_size = Vector2i(320, 285)
+	eldritch_arrival_dialog.dialog_text = (
+		"The alien crowd stops making noise. Eight bats unfold beyond the scoreboard, "
+		+ "each held by something too large for the current reality.\n\n"
+		+ "Octathulhu has mistaken the universe for a baseball. It would like to bat."
+	)
+	eldritch_arrival_dialog.get_ok_button().text = "PITCH ANYWAY"
+	eldritch_arrival_dialog.get_ok_button().custom_minimum_size.y = 44.0
+	eldritch_arrival_dialog.confirmed.connect(_begin_eldritch_contact)
+	add_child(eldritch_arrival_dialog)
 
 	alien_help_dialog = AcceptDialog.new()
 	alien_help_dialog.name = "AlienHelpDialog"
@@ -4872,7 +5313,7 @@ func _visible_catalog_tier() -> int:
 	return 0
 
 func _catalog_entry_is_visible(definition: Dictionary, owned: bool) -> bool:
-	return owned or _catalog_tier_for_level(int(definition.required_level)) <= _visible_catalog_tier()
+	return owned or _catalog_tier_for_level(Content.catalog_required_level(definition)) <= _visible_catalog_tier()
 
 func _definitions_by_unlock(source: Array) -> Array:
 	var result := source.duplicate()
@@ -4901,7 +5342,7 @@ func _definition_tooltip(definition: Dictionary, fallback_stats: Array = []) -> 
 	return "\n\n".join(lines)
 
 func _set_catalog_lock(entry: Dictionary, definition: Dictionary) -> void:
-	var unlock_text := "REACH LEVEL %d" % (int(definition.required_level) + 1)
+	var unlock_text := "REACH LEVEL %d" % (Content.catalog_required_level(definition) + 1)
 	_set_catalog_lock_text(entry, definition, [unlock_text])
 
 func _set_catalog_lock_text(entry: Dictionary, definition: Dictionary, requirements: Array[String]) -> void:
@@ -4972,26 +5413,33 @@ func _refresh_reveal_visibility() -> void:
 func _get_game_subtitle() -> String:
 	# Each line describes only a milestone the player has already discovered.
 	# Keeping this separate from reveal headings avoids advertising future layers.
+	var plural_body := game.get_clone_count() > 1.0
+	var body_noun := game.get_body_growth_noun(plural_body)
+	var body_subject := body_noun if plural_body else "a %s" % body_noun
 	if game.cosmos_conquered or game.divine_ascensions > 0:
 		return "A baseball game about saving the universe, somehow"
 	if game.eldritch_ascensions > 0 or game.lifetime_eldritch_ascensions > 0:
-		return "A baseball game about several versions of one guy"
+		return "A baseball game about %s defending reality" % body_subject
 	if game.eldritch_offer_unlocked or game.highest_unlocked >= Content.ELDRITCH_EXHIBITION_INDEX:
-		return "A baseball game about one guy versus the void"
+		return "A baseball game about %s versus the void" % body_subject
 	if game.genetic_rebirths > 0 or game.lifetime_genetic_rebirths > 0:
-		return "A baseball game about a genetically modified %s" % game.get_body_growth_noun()
+		return "A baseball game about %s" % (
+			"genetically modified %s" % body_noun
+			if plural_body
+			else "a genetically modified %s" % body_noun
+		)
 	if game.genetic_offer_unlocked or game.highest_unlocked >= Content.ALIEN_EXHIBITION_INDEX:
-		return "A baseball game about a %s who found aliens" % game.get_body_growth_noun()
+		return "A baseball game about %s who found aliens" % body_subject
 	if game.has_body_modifier("steroids"):
 		return "A baseball game about a big boi"
-	return "A baseball game about a regular ol’ %s" % game.get_body_growth_noun()
+	return "A baseball game about a regular ol’ %s" % body_noun
 
 func _refresh_guide_text(
 	genetic_revealed: bool,
 	eldritch_revealed: bool,
 	divine_revealed: bool
 ) -> void:
-	var rarity_help := "Human gear: Common → Magic → Rare → Legendary → Unique."
+	var rarity_help := "Human gear: Common to Magic to Rare to Legendary to Unique."
 	if genetic_revealed:
 		rarity_help += " Alien baseball adds five Alien tiers; old tiers remain possible."
 	if eldritch_revealed:
@@ -4999,39 +5447,47 @@ func _refresh_guide_text(
 	var sections: Array[String] = [
 		(
 			"SCORING\n"
-			+ "• Only a completed strikeout awards XP. Every Strike also adds a little mastery against that opponent.\n"
-			+ "• Hits award nothing, clear the count, and replace the batter. Bigger hits mean a longer wait. A Grand Slam cannot be saved.\n"
+			+ "• Only a completed strikeout awards XP. Strikes add the most Mastery; lesser contact adds a little, while Home Runs and Grand Slams teach nothing.\n"
+			+ "• Unsaved hits award no XP, clear the count, and replace the batter. Bigger hits mean a longer wait. A Grand Slam can never be saved.\n"
 			+ "• Human baseball uses three Strikes for an out and four Balls for a walk; a walk behaves like a Single."
 		),
 		(
 			"PROGRESSION\n"
-			+ "• Mastery unlocks the next level and permanently improves your odds against that opponent. Extra mastery adds small logarithmic XP and loot bonuses.\n"
+			+ "• Mastery immediately improves your odds against that opponent. Fill its bar, then complete a strikeout to clear the level. Extra Mastery adds small logarithmic XP and loot bonuses.\n"
 			+ "• Each level sets its own opponent, range, threat, and strikeout bounty. Range affects flight and difficulty, never XP. PREVIOUS and NEXT choose the level; range follows automatically."
+		),
+		(
+			"RUN CHOICES\n"
+			+ "• Every cleared level queues a run perk. Sub-era finales also queue a Pitch draft; boss rewards are stranger and stronger. Unchosen rewards wait safely in order.\n"
+			+ "• Perk level matches the cleared level, rarity changes its strength, and the same perk cannot be drafted twice in one run. Aging and body builds are optional perks, so a determined toddler can remain a toddler.\n"
+			+ "• Learned Pitches are called automatically. PITCH is your read-only arsenal; Pitch Calling increasingly favors its stronger options."
 		),
 		(
 			"PITCH FLOW\n"
 			+ "• During human play, one pitch must resolve before recovery begins. The pitcher dial shows recovery; the plate dial shows the next batter.\n"
-			+ "• Tap open field to advance recovery, flight, or lineup. Long waits gain more time per tap. Ordinary tapping stays fresh; ultra-fast bursts and repeated taps on one timer smoothly lose efficiency.\n"
-			+ "• Bad outcomes add Frustration: Grand Slams add most; Balls and Fouls barely add any. Its uncapped logarithmic quality bonus resets on a strikeout."
+			+ "• Tap open field to raise a short rolling Tap Rate. It smoothly accelerates recovery, flight, or lineup; long waits get more help. Ultra-fast bursts lose efficiency.\n"
+			+ "• Bad outcomes add Determination: Grand Slams add most; Balls and Fouls barely add any. Every doubling adds Quality; a strikeout resets it."
 		),
 		(
 			"GETTING STRONGER\n"
-			+ "• TRAIN is an uncapped incremental XP sink. PITCH, BALL, FACILITY, and BODY contain the larger one-time power jumps. Locked cards reveal only their requirement.\n"
+			+ "• TRAIN is the uncapped incremental XP sink; x1, x10, and x100 buy exact full batches. BALL and FACILITY contain expensive one-time power jumps. BODY holds run perks and any revealed prestige layers.\n"
 			+ "• Upgrade cards stay short: hover on desktop or hold the passive card text on phone for the exact formula. Swipe normally to scroll.\n"
-			+ "• The field shows actual throw telemetry, including release speed, drag, plate speed, and travel time. General stats live in LOADOUT; tap those rows on phone for definitions."
+			+ "• The field shows the last real throw: type, release speed, drag, plate speed, travel time, Quality, and range. General stats live in LOADOUT; tap those rows on phone for definitions."
 		),
 		(
 			"GEAR & ACHIEVEMENTS\n"
 			+ "• Strikeouts sometimes copy one player-wearable item from the batter's visible loadout: same slot, same rarity. Inspect enemy gear to see what can drop. Extra mastery gently favors the better worn pieces.\n"
 			+ "• %s\n" % rarity_help
-			+ "• Power is a vertical matchup gauge: YOU is the called-Strike chance and THEM is batter resistance. Hover or tap for full odds. Stars protect items; each slot keeps 10.\n"
+			+ "• Ordinary gear rolls one to three build stats; rarity changes their size. Relics roll one enormous stat. Items never auto-equip unless a revealed prestige upgrade says so. Stars protect items; each slot keeps 10.\n"
+			+ "• Power is a compact vertical matchup gauge beside enemy gear. Hover or tap for full odds.\n"
 			+ "• All %d achievement slots are visible. Each completed achievement permanently adds 0.5%% XP; unrevealed secret entries stay anonymous."
 			% Content.ACHIEVEMENTS.size()
 		),
 		(
 			"AWAY PLAY & SAVES\n"
 			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. It scales both XP and called-Strike mastery; your return popup shows the exact deposit.\n"
-			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Browser installs preserve verified save generations while updating on their Web channel; native builds check every five minutes and offer the matching official package. EXPORT is an optional portable fallback."
+			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Save rows show every revealed prestige balance plus lifetime-earned points, so a fresh rebirth is easy to identify.\n"
+			+ "• Browser installs preserve verified save generations while updating on their Web channel; native builds check every five minutes and offer the matching official package. EXPORT is an optional portable fallback."
 		),
 		(
 			"VISUALS\n"
@@ -5056,7 +5512,8 @@ func _refresh_guide_text(
 	if divine_revealed:
 		sections.append(
 			"THE END, AGAIN\n"
-			+ "• After the final victory, choose one permanent divine blessing and restore the universe. Later wins can earn every blessing, then Halos."
+			+ "• After the final victory, choose one permanent divine blessing and restore the universe. Later wins can earn every blessing, then Halos.\n"
+			+ "• Return to the final boss after a God reset to unlock procedural Extra Innings. They scale forever, keep awarding run choices, and never prevent another God reset."
 		)
 	guide_label.text = "\n\n".join(sections)
 
@@ -5184,10 +5641,11 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		export_save_button.disabled = false
 		load_save_button.disabled = false
 		hard_reset_button.disabled = false
-	era_label.text = "LEVEL %02d  •  %s" % [
-		game.current_opponent + 1,
-		opponent.era,
-	]
+	era_label.text = (
+		"UNNUMBERED EXHIBITION  •  %s" % str(opponent.era)
+		if game.is_story_exhibition_blocked()
+		else "LEVEL %02d  •  %s" % [game.current_opponent + 1, opponent.era]
+	)
 	var alien_humiliation_active := (
 		game.is_alien_exhibition_blocked()
 		and not game.genetic_offer_unlocked
@@ -5204,17 +5662,27 @@ func _refresh_interface(refresh_expensive := true) -> void:
 	alien_help_button.visible = game.is_alien_help_available()
 	if alien_help_button.visible:
 		alien_help_button.move_to_front()
-	previous_button.disabled = game.current_opponent <= 0
-	next_button.disabled = game.current_opponent >= game.highest_unlocked
-	previous_button.tooltip_text = "Select the previous unlocked level. A released pitch keeps flying and will resolve against that level's batter."
-	next_button.tooltip_text = "Select the next unlocked level. A released pitch keeps flying and will resolve against that level's batter."
+	previous_button.disabled = game.current_opponent <= 0 or game.is_story_exhibition_blocked()
+	next_button.disabled = (
+		(game.current_opponent >= game.highest_unlocked and not game.can_begin_endless_mode())
+		or game.is_story_exhibition_blocked()
+		or game.is_story_transition_pending()
+	)
+	previous_button.tooltip_text = "Select the previous unlocked level. Any released volley loses its target and fades away."
+	next_button.tooltip_text = "Select the next unlocked level. Any released volley loses its target and fades away."
 	if mobile_layout:
 		previous_button.text = ""
 		next_button.text = ""
 	else:
 		previous_button.text = "< PREVIOUS LEVEL"
-		if game.cosmos_conquered:
+		if game.can_begin_endless_mode():
+			next_button.text = "ENTER EXTRA INNINGS >"
+		elif game.is_endless_active():
+			next_button.text = "EXTRA INNING %d ACTIVE" % game.endless_level
+		elif game.cosmos_conquered:
 			next_button.text = "DIVINE OFFER READY"
+		elif game.is_story_transition_pending():
+			next_button.text = "STORY ENCOUNTER READY"
 		elif game.is_story_exhibition_blocked():
 			next_button.text = "REBIRTH REQUIRED" if game.is_story_offer_ready() else "EXHIBITION ACTIVE"
 		elif game.current_opponent < game.highest_unlocked:
@@ -5249,10 +5717,17 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		mastery_bar.value = game.get_alien_exhibition_progress_ratio() * 100.0
 	elif game.is_eldritch_exhibition_blocked():
 		mastery_label.text = game.get_story_status_text()
-		mastery_bar.value = game.eldritch_exhibition_seconds / BaseballGameState.EXHIBITION_SECONDS * 100.0
+		mastery_bar.value = game.get_eldritch_exhibition_progress_ratio() * 100.0
 	elif game.is_speed_gate_blocked():
 		mastery_label.text = game.get_speed_gate_status_text()
 		mastery_bar.value = 0.0
+	elif game.is_endless_active():
+		mastery_label.text = "EXTRA INNING %d MASTERY  %s / %s  •  ODDS %s" % [
+			game.endless_level,
+			BaseballGameState.format_number(mastery_value),
+			BaseballGameState.format_number(mastery_required),
+			BaseballGameState.format_rating(mastery_quality_bonus, true),
+		]
 	elif game.current_opponent == game.opponents.size() - 1:
 		mastery_label.text = (
 			"COSMIC DOMINION COMPLETE  •  OCTATHULHU DEFEATED%s" % (
@@ -5295,7 +5770,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 			"Every called Strike builds mastery and immediately improves the called-Strike rate against this batter. Reach 100% to unlock the next batter; every point beyond it still helps logarithmically."
 		)
 	if not game.is_story_exhibition_blocked() and not game.is_speed_gate_blocked():
-		mastery_bar.value = game.get_mastery_ratio() * 100.0
+		mastery_bar.value = game.get_mastery_ratio_unclamped() * 100.0
 	for index in probabilities.size():
 		outcome_probability_labels[index].text = "%.2f%%" % (probabilities[index] * 100.0)
 		var bonus_seconds := game.get_outcome_turnover_bonus(index)
@@ -5311,32 +5786,32 @@ func _refresh_interface(refresh_expensive := true) -> void:
 			detail = "Adds one Ball. %d Balls produce a walk, treated like a Single and adding %s." % [game.get_balls_required(), _format_compact_seconds(bonus_seconds)]
 		else:
 			detail = "Adds one strike. Strike %d completes the only XP-paying outcome." % game.get_strikes_required()
-		var frustration_cost := game.get_outcome_frustration_points(index)
-		var frustration_note := (
-			"Frustration %s per resolved ball." % BaseballGameState.format_rating(frustration_cost, true)
-			if frustration_cost > 0.0
-			else "Frustration +0; a completed strikeout resets the entire score."
+		var determination_gain := game.get_outcome_determination_points(index)
+		var determination_note := (
+			"Determination %s per resolved ball." % BaseballGameState.format_rating(determination_gain, true)
+			if determination_gain > 0.0
+			else "Determination +0; a completed strikeout resets the entire score."
 		)
 		outcome_panels[index].tooltip_text = "%s • %.2f%%\n%s\n%s\nEvery completed plate appearance includes a %s base lineup change." % [
 			str(Content.OUTCOME_NAMES[index]),
 			float(probabilities[index]) * 100.0,
 			detail,
-			frustration_note,
+			determination_note,
 			_format_compact_seconds(game.get_base_batter_turnover_seconds()),
 		]
 	strikeout_payout_label.text = "COMPLETED STRIKEOUT: %s XP" % BaseballGameState.format_number(
 		game.get_strikeout_base_points() * game.get_xp_multiplier()
 	)
-	var frustration_bonus := game.get_frustration_quality_bonus()
-	frustration_label.text = "FRUSTRATION %s" % BaseballGameState.format_rating(frustration_bonus, true)
-	frustration_bar.value = game.get_frustration_meter_ratio() * 100.0
+	var determination_bonus := game.get_determination_quality_bonus()
+	frustration_label.text = "DETERMINATION %s" % BaseballGameState.format_rating(determination_bonus, true)
+	frustration_bar.value = game.get_determination_meter_ratio() * 100.0
 	frustration_label.tooltip_text = (
-		"%s Frustration • %s Quality against the active batter. "
+		"%s Determination • %s Quality against the active batter. "
 		+ "Grand Slam +12,000; Home Run +8,000; Triple +5,000; Double +3,000; Single +1,000; Ball +200; Foul +100; Strike +0. "
 		+ "The bonus has no cap but grows logarithmically, and a completed strikeout resets it."
 	) % [
-		BaseballGameState.format_rating(game.frustration_points),
-		BaseballGameState.format_rating(frustration_bonus, true),
+		BaseballGameState.format_rating(game.determination_points),
+		BaseballGameState.format_rating(determination_bonus, true),
 	]
 
 	pitch_field.configure_from_game(game, at_bat_metrics)
@@ -5369,11 +5844,12 @@ func _refresh_interface(refresh_expensive := true) -> void:
 		_refresh_purchase_buttons()
 		_refresh_rebirth_buttons()
 		_refresh_achievement_tab()
+		_refresh_story_tab()
 		_refresh_stats(at_bat_metrics, estimated_xp_per_second)
 		if title_screen_active:
 			_refresh_title_screen()
 	if not title_screen_active:
-		call_deferred("_maybe_show_alien_story")
+		call_deferred("_maybe_show_pending_overlay")
 
 func _refresh_field_stats() -> void:
 	if not field_stat_labels.is_empty():
@@ -5475,8 +5951,8 @@ func _refresh_effective_stat_labels(labels: Dictionary, speed_fps: float) -> voi
 			2
 		)
 		labels.loot.text = "%.1f%%" % (game.get_loot_drop_chance() * 100.0)
-		labels.frustration.text = BaseballGameState.format_rating(
-			game.get_frustration_quality_bonus(),
+		labels.determination.text = BaseballGameState.format_rating(
+			game.get_determination_quality_bonus(),
 			true
 		)
 
@@ -5824,11 +6300,11 @@ func _format_training_effect_delta(effect: Dictionary, scale: float = 1.0) -> St
 		return "+%s" % BaseballGameState.format_scientific_from_log10(scaled_log10, 3)
 	return "0"
 
-func _training_next_rank_summary(id: String) -> String:
-	var effect := game.get_training_next_rank_effect(id)
+func _training_batch_summary(id: String, quantity: int) -> String:
+	var effect := game.get_training_batch_effect(id, quantity)
 	if effect.is_empty():
 		return "No change"
-	var delta := float(effect.delta)
+	var delta := float(effect.get("delta", 0.0))
 	match id:
 		"velocity":
 			return "%s ft/s Speed" % _format_training_effect_delta(effect)
@@ -5860,8 +6336,8 @@ func _training_next_rank_summary(id: String) -> String:
 			return "%s× Strikeout XP" % _format_signed_training_delta(delta)
 		"loot_training":
 			return "%s%% Loot Chance" % _format_signed_training_delta(delta, 100.0)
-		"frustration_training":
-			return "%s Frustration Quality" % BaseballGameState.format_rating(delta, true)
+		"determination_training":
+			return "%s Determination Quality" % BaseballGameState.format_rating(delta, true)
 	return "%s" % _format_signed_training_delta(delta)
 
 func _refresh_purchase_buttons() -> void:
@@ -5883,17 +6359,31 @@ func _refresh_purchase_buttons() -> void:
 				"MAXED"
 			)
 		else:
-			var cost := game.get_training_cost(id)
-			var next_rank_summary := _training_next_rank_summary(id)
+			var cost := game.get_training_batch_cost(id, training_batch_quantity)
+			var batch_summary := _training_batch_summary(id, training_batch_quantity)
 			var marginal_efficiency := game.get_training_marginal_efficiency(id)
 			var diminishing_warning := marginal_efficiency <= 0.10 + 0.000001
 			_set_upgrade_row(
 				entry,
-				"%s  •  RANK %d\n%s" % [definition.name, rank, next_rank_summary],
-				game.xp < cost,
+				"%s  •  RANK %d TO %d\n%s" % [
+					definition.name,
+					rank,
+					rank + training_batch_quantity,
+					batch_summary,
+				],
+				not game.can_buy_training_batch(id, training_batch_quantity),
 				(
-					"Next rank: %s.\nCurrent marginal efficacy: %.2f%% of a fresh rank.\n\n%s"
-					% [next_rank_summary, marginal_efficiency * 100.0, _definition_tooltip(definition)]
+					"%s: %s.\nCurrent marginal efficacy: %.2f%% of a fresh rank.\n\n%s"
+					% [
+						(
+							"Next rank"
+							if training_batch_quantity == 1
+							else "Next %d ranks" % training_batch_quantity
+						),
+						batch_summary,
+						marginal_efficiency * 100.0,
+						_definition_tooltip(definition),
+					]
 				),
 				"%s XP" % BaseballGameState.format_cost(cost),
 				diminishing_warning
@@ -5906,31 +6396,30 @@ func _refresh_purchase_buttons() -> void:
 		var id := str(definition.id)
 		var entry: Dictionary = pitch_buttons[id]
 		var pitch_owned := id in game.unlocked_pitches
-		_set_upgrade_row_visible(entry, (
-			_catalog_entry_is_visible(definition, pitch_owned)
-			and not (pitch_owned and bool(game.catalog_hide_purchased.pitch))
-		))
+		# Unseen pitches are draft spoilers. The Arsenal is a read-only description
+		# of this run's learned mix; new pitches only appear after choosing them.
+		_set_upgrade_row_visible(entry, pitch_owned)
 		if not _upgrade_row_is_visible(entry):
 			continue
-		if id in game.unlocked_pitches:
-			var use_chance := float(pitch_selection_probabilities.get(id, 0.0)) * 100.0
-			_set_upgrade_row(
-				entry,
-				"%s  •  %.1f%% USE\n%s" % [definition.name, use_chance, definition.description],
-				true,
-				_definition_tooltip(definition, ["quality", "speed"]) + "\n\nAutomatic use chance: %.2f%%." % use_chance,
-				"LEARNED"
-			)
-		elif game.highest_unlocked < int(definition.required_level):
-			_set_catalog_lock(entry, definition)
-		else:
-			_set_upgrade_row(
-				entry,
-				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_pitch_cost(id)), definition.description],
-				not game.can_buy_pitch(id),
-				_definition_tooltip(definition, ["quality", "speed"]),
-				"%s XP" % BaseballGameState.format_cost(game.get_pitch_cost(id))
-			)
+		var use_chance := float(pitch_selection_probabilities.get(id, 0.0)) * 100.0
+		var pitch_level := maxi(int(game.pitch_levels.get(id, 1)), 1)
+		var draft_quality := maxf(float(game.pitch_draft_power.get(id, 0.0)), 0.0)
+		_set_upgrade_row(
+			entry,
+			"%s  •  LEVEL %d  •  %.1f%% USE\nDraft Quality %s  •  %s" % [
+				definition.name,
+				pitch_level,
+				use_chance,
+				BaseballGameState.format_rating(draft_quality, true),
+				definition.description,
+			],
+			true,
+			_definition_tooltip(definition, ["quality", "speed"]) + "\n\nAutomatic use chance: %.2f%%. Draft Quality: %s." % [
+				use_chance,
+				BaseballGameState.format_rating(draft_quality, true),
+			],
+			"LEVEL %d" % pitch_level
+		)
 
 	for definition in Content.BALL_UPGRADES:
 		var id := str(definition.id)
@@ -5944,7 +6433,7 @@ func _refresh_purchase_buttons() -> void:
 			continue
 		if game.has_ball_upgrade(id):
 			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, _definition_tooltip(definition, ["payload"]), "INSTALLED")
-		elif game.highest_unlocked < int(definition.required_level):
+		elif game.highest_unlocked < Content.catalog_required_level(definition):
 			_set_catalog_lock(entry, definition)
 		else:
 			_set_upgrade_row(
@@ -6093,7 +6582,7 @@ func _prestige_upgrade_description(id: String, eldritch := false) -> String:
 				next_rate,
 				next_tolerance,
 			]
-		return "%d clicker%s • %.2f/s each • next %.2f/s • tolerance %.1f→%.1f/s." % [
+		return "%d clicker%s • %.2f/s each • next %.2f/s • tolerance %.1f to %.1f/s." % [
 			clickers,
 			"" if clickers == 1 else "s",
 			current_rate,
@@ -6139,73 +6628,43 @@ func _refresh_rebirth_buttons() -> void:
 		BaseballGameState.format_rating(game.get_body_growth_quality_bonus(), true),
 		cumulative_recovery,
 	]
-	if game.body_growth_level == 0:
-		body_growth_status_label.text += "\n%s" % str(game.get_body_growth_stage().description)
-	for stage_index in range(1, Content.BODY_GROWTH_STAGES.size()):
-		var definition: Dictionary = Content.BODY_GROWTH_STAGES[stage_index]
-		var id := str(definition.id)
-		var entry: Dictionary = body_growth_buttons[id]
-		var growth_owned := stage_index <= game.body_growth_level
-		_set_upgrade_row_visible(entry, not (
-			growth_owned and bool(game.catalog_hide_purchased.body)
-		))
-		if not _upgrade_row_is_visible(entry):
-			continue
-		var tooltip := _definition_tooltip(definition, ["speed", "quality", "recovery"])
-		if growth_owned:
-			_set_upgrade_row(
-				entry,
-				"%s\n%s" % [definition.name, definition.description],
-				true,
-				tooltip,
-				"GROWN"
-			)
-		elif stage_index > game.body_growth_level + 1:
-			var previous_stage: Dictionary = Content.BODY_GROWTH_STAGES[stage_index - 1]
-			_set_catalog_lock_text(entry, definition, ["GROW THROUGH %s" % str(previous_stage.get("body_name", previous_stage.name)).to_upper()])
-		elif game.highest_unlocked < int(definition.required_level):
-			_set_catalog_lock(entry, definition)
-		else:
-			var growth_cost := game.get_body_growth_cost(id)
-			_set_upgrade_row(
-				entry,
-				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(growth_cost), definition.description],
-				not game.can_buy_body_growth(id),
-				tooltip,
-				"%s XP" % BaseballGameState.format_cost(growth_cost)
-			)
-	for definition_value in Content.BODY_MODIFIERS:
-		var definition: Dictionary = definition_value
-		var id := str(definition.id)
-		var entry: Dictionary = body_modifier_buttons[id]
-		var modifier_owned := game.has_body_modifier(id)
-		_set_upgrade_row_visible(entry, not (
-			modifier_owned and bool(game.catalog_hide_purchased.body)
-		))
-		if not _upgrade_row_is_visible(entry):
-			continue
-		var tooltip := _definition_tooltip(definition)
-		if modifier_owned:
-			_set_upgrade_row(
-				entry,
-				"%s\n%s" % [definition.name, definition.description],
-				true,
-				tooltip,
-				"APPLIED"
-			)
-		else:
-			var requirements := game.get_body_modifier_unmet_requirements(definition)
-			if not requirements.is_empty():
-				_set_catalog_lock_text(entry, definition, requirements)
-			else:
-				var modifier_cost := game.get_body_modifier_cost(id)
-				_set_upgrade_row(
-					entry,
-					"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(modifier_cost), definition.description],
-					not game.can_buy_body_modifier(id),
-					tooltip,
-					"%s XP" % BaseballGameState.format_cost(modifier_cost)
-				)
+	body_growth_status_label.text += "\n%d selected perk%s  •  %d queued choice%s" % [
+		game.selected_run_perks.size(),
+		"" if game.selected_run_perks.size() == 1 else "s",
+		game.get_pending_run_choice_count(),
+		"" if game.get_pending_run_choice_count() == 1 else "s",
+	]
+	for child in run_perk_list.get_children():
+		run_perk_list.remove_child(child)
+		child.queue_free()
+	if game.selected_run_perks.is_empty():
+		var empty := Label.new()
+		empty.text = "No drafted perks yet. You are operating on toddler fundamentals."
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.add_theme_color_override("font_color", COLOR_MUTED)
+		empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		run_perk_list.add_child(empty)
+	elif not bool(game.catalog_hide_purchased.body):
+		var displayed_perks: Array = game.selected_run_perks.duplicate(true)
+		displayed_perks.reverse()
+		for perk_value in displayed_perks:
+			var perk: Dictionary = perk_value
+			var panel := PanelContainer.new()
+			panel.mouse_filter = Control.MOUSE_FILTER_PASS
+			var style := _compact_panel_style(9.0, 6.0, 6)
+			style.bg_color = Color("101b2c")
+			style.border_color = Color(str(perk.get("color", "2e4968")))
+			panel.add_theme_stylebox_override("panel", style)
+			run_perk_list.add_child(panel)
+			var label := Label.new()
+			label.text = _run_choice_option_text({
+				"type": "perk",
+				"source_level_number": int(perk.get("level", 1)),
+			}, perk)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			label.add_theme_font_size_override("font_size", 12)
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			panel.add_child(label)
 	if _has_divine_reveal():
 		ascension_currency_label.text = (
 			"DNA %s  •  Arcana %s  •  Body XP %s  •  Reality DNA %s  •  Universes saved %d"
@@ -6542,7 +7001,10 @@ func _previous_opponent() -> void:
 	game.set_current_opponent(game.current_opponent - 1)
 
 func _next_opponent() -> void:
-	game.set_current_opponent(game.current_opponent + 1)
+	if game.can_begin_endless_mode():
+		game.begin_endless_mode()
+	else:
+		game.set_current_opponent(game.current_opponent + 1)
 
 func _accept_alien_help() -> void:
 	if not game.accept_alien_help():
@@ -6556,7 +7018,10 @@ func _accept_alien_help() -> void:
 
 func _alien_story_dialog_is_visible() -> bool:
 	return (
-		(alien_arrival_dialog != null and alien_arrival_dialog.visible)
+		(story_dialog != null and story_dialog.visible)
+		or (run_choice_dialog != null and run_choice_dialog.visible)
+		or (alien_arrival_dialog != null and alien_arrival_dialog.visible)
+		or (eldritch_arrival_dialog != null and eldritch_arrival_dialog.visible)
 		or (alien_help_dialog != null and alien_help_dialog.visible)
 		or (
 			genetic_rebirth_explanation_dialog != null
@@ -6567,6 +7032,21 @@ func _alien_story_dialog_is_visible() -> bool:
 		or (native_update_confirmation != null and native_update_confirmation.visible)
 	)
 
+func _maybe_show_pending_overlay() -> void:
+	if game == null or title_screen_active or _alien_story_dialog_is_visible():
+		return
+	var story_entry := game.get_next_story_dialog()
+	if not story_entry.is_empty():
+		story_dialog.title = str(story_entry.get("title", "THE SCOREBOOK"))
+		story_dialog.dialog_text = str(story_entry.get("body", ""))
+		var story_size := Vector2i(350, 330) if mobile_layout else Vector2i(620, 330)
+		story_dialog.popup_centered_clamped(story_size, 0.92)
+		return
+	if game.has_pending_run_choices():
+		_show_run_choice(game.get_next_pending_run_choice())
+		return
+	_maybe_show_alien_story()
+
 func _maybe_show_alien_story() -> void:
 	if (
 		game == null
@@ -6575,11 +7055,12 @@ func _maybe_show_alien_story() -> void:
 	):
 		return
 	if game.should_show_alien_arrival():
-		game.mark_alien_arrival_seen()
-		if not development_session and not game.save_writes_locked:
-			game.save_game()
 		var arrival_size := Vector2i(350, 340) if mobile_layout else Vector2i(570, 300)
 		alien_arrival_dialog.popup_centered_clamped(arrival_size, 0.92)
+		return
+	if game.should_show_eldritch_arrival():
+		var arrival_size := Vector2i(350, 350) if mobile_layout else Vector2i(590, 310)
+		eldritch_arrival_dialog.popup_centered_clamped(arrival_size, 0.92)
 		return
 	# Save v23 could already have the offer unlocked without ever seeing the new
 	# automatic first-rebirth scene. Give those runs the same portal handoff once.
@@ -6592,6 +7073,23 @@ func _maybe_show_alien_story() -> void:
 		first_genetic_offer_prompted_this_session = true
 		var portal_size := Vector2i(350, 350) if mobile_layout else Vector2i(560, 300)
 		alien_help_dialog.popup_centered_clamped(portal_size, 0.92)
+
+func _begin_alien_contact() -> void:
+	if not game.begin_special_encounter("alien_contact"):
+		return
+	game.mark_alien_arrival_seen()
+	pitch_field.reset_visual_state()
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+	_refresh_interface()
+
+func _begin_eldritch_contact() -> void:
+	if not game.begin_special_encounter("eldritch_contact"):
+		return
+	pitch_field.reset_visual_state()
+	if not development_session and not game.save_writes_locked:
+		game.save_game()
+	_refresh_interface()
 
 func _complete_first_genetic_rebirth() -> void:
 	if game.lifetime_genetic_rebirths > 0:
@@ -6636,7 +7134,7 @@ func _move_farther() -> void:
 	_refresh_interface()
 
 func _buy_training(id: String) -> void:
-	game.buy_training(id)
+	game.buy_training_batch(id, training_batch_quantity)
 	_refresh_interface()
 
 func _buy_body_growth(id: String) -> void:

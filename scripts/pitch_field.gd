@@ -10,7 +10,7 @@ const Content = preload("res://scripts/content.gd")
 const MAX_VISUAL_BALLS := 4000
 const WEB_MAX_VISUAL_BALLS := 512
 const STREAM_WRAP_SECONDS := 3600.0
-const MAX_VISUAL_TRAVEL_SECONDS := 5.0
+const MAX_VISUAL_TRAVEL_SECONDS := 120.0
 const MAX_DETAILED_RESULTS_PER_SECOND := 30.0
 const MAX_RETURN_BALLS := 512
 const WEB_MAX_RETURN_BALLS := 96
@@ -103,6 +103,11 @@ var snapshot := {
 		"can_move_farther": false,
 		"representative_pitch_speed": 1.0,
 		"drag_per_foot": 0.0,
+		"tap_rate": 0.0,
+		"tap_laps": 0.0,
+		"tap_signal": 0.0,
+		"automatic_clickers": 0,
+		"automatic_rate_each": 0.0,
 	}
 
 var impact_color := Color.TRANSPARENT
@@ -129,6 +134,7 @@ var batter_exit_outcome := Content.STRIKE_INDEX
 var batter_lifecycle_total_override := -1.0
 var batter_terminal_in_flight := false
 var volley_in_flight := false
+var active_visual_volleys := {}
 var volley_release_time := 0.0
 var volley_flight_duration := 0.0
 var volley_plate_position := Vector2.ZERO
@@ -206,6 +212,7 @@ func reset_visual_state() -> void:
 	batter_exit_outcome = Content.STRIKE_INDEX
 	batter_lifecycle_total_override = -1.0
 	batter_terminal_in_flight = false
+	active_visual_volleys.clear()
 	volley_in_flight = false
 	volley_release_time = 0.0
 	volley_flight_duration = 0.0
@@ -279,7 +286,7 @@ uniform float flight_drag_exponent = 0.0;
 varying float pitch_active;
 
 void vertex() {
-	float stored_duration = INSTANCE_CUSTOM.y * 5.0;
+	float stored_duration = INSTANCE_CUSTOM.y * 120.0;
 	float spawn_time = INSTANCE_CUSTOM.x * 3600.0;
 	float age = stream_time - spawn_time;
 	if (age < 0.0) {
@@ -401,6 +408,10 @@ func apply_field_timer_advance(phase: String, seconds: float) -> void:
 		"flight":
 			stream_time = fmod(stream_time + advance, STREAM_WRAP_SECONDS)
 			volley_release_time -= advance
+			for id_value in active_visual_volleys.keys():
+				var entry: Dictionary = active_visual_volleys[id_value]
+				entry.released_at = float(entry.get("released_at", total_time)) - advance
+				active_visual_volleys[id_value] = entry
 			for slot_value in active_pitch_slots.keys():
 				var slot := int(slot_value)
 				slot_expiry_times[slot] = maxf(slot_expiry_times[slot] - advance, total_time)
@@ -521,6 +532,7 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 		"opponent_body_color": opponent_body_color,
 		"opponent_bat_color": opponent_bat_color,
 		"pitch_in_flight": game.is_pitch_in_flight(),
+		"overlap_flights": game.can_overlap_pitch_flights(),
 		"flight_remaining": game.pitch_flight_remaining,
 		"pending_volley_size": game.pending_volley_size,
 		"xp_multiplier": game.get_xp_multiplier(),
@@ -535,6 +547,14 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 			game.pending_volley_drag_per_foot
 			if game.is_pitch_in_flight()
 			else game.get_ball_drag_per_foot()
+		),
+		"tap_rate": game.get_live_tap_rate(),
+		"tap_laps": game.get_live_tap_rate() / maxf(game.get_field_tap_fatigue_tolerance(), 0.001),
+		"tap_signal": game.get_tap_signal_ratio(),
+		"automatic_clickers": game.get_automatic_clicker_count(),
+		"automatic_rate_each": (
+			game.get_effective_automatic_field_tap_rate()
+			/ float(maxi(game.get_automatic_clicker_count(), 1))
 		),
 	}
 	if game.is_pitch_in_flight():
@@ -560,7 +580,7 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 		last_pitch_drag_loss_fraction = game.get_pitch_drag_loss_fraction()
 	pitch_cycle_sample_time = total_time
 	if configured_opponent_index != incoming_opponent_index:
-		var preserve_released_ball := game.is_pitch_in_flight() and volley_in_flight
+		var preserve_released_ball := volley_in_flight
 		_reset_batter_for_opponent(incoming_opponent_index, preserve_released_ball)
 		visual_strike_count = clampi(game.plate_strikes, 0, maxi(get_strike_limit() - 1, 0))
 		visual_ball_count = clampi(game.plate_balls, 0, maxi(get_ball_limit() - 1, 0))
@@ -589,31 +609,92 @@ func configure_from_game(game: BaseballGameState, at_bat_metrics: Dictionary = {
 	travel_time = game.get_resolved_flight_seconds()
 	visual_spawn_rate = minf(logical_pitch_rate, float(visual_ball_capacity) / maxf(travel_time, 0.001))
 	visual_weight = maxf(float(game.get_volley_size()) / float(visual_ball_capacity), 1.0)
-	# A v0.6 save can resume halfway through an unresolved immutable volley.
-	if game.is_pitch_in_flight() and not volley_in_flight and _is_batter_visually_present():
-		var saved_duration := maxf(game.pending_volley_flight_duration, game.pitch_flight_remaining)
-		var backdate := maxf(saved_duration - game.pitch_flight_remaining, 0.0)
-		var future_travel_time := travel_time
-		travel_time = saved_duration
-		_spawn_visual_volley(
-			game.pending_volley_size,
-			backdate,
-			game.pending_volley_pitch_id,
-			saved_duration
-		)
-		travel_time = future_travel_time
-		volley_in_flight = true
-		volley_plate_position = _get_plate_position_unlocked()
-		volley_release_time = total_time - backdate
-		volley_flight_duration = saved_duration
+	# Rehydrate every immutable volley after loading, rotating, or reopening the
+	# browser. Release events normally populate this map first; the id check makes
+	# this fallback safe to run on every UI refresh without duplicating balls.
+	if game.is_pitch_in_flight() and _is_batter_visually_present():
+		for volley_value in game.active_volleys:
+			var saved_volley: Dictionary = volley_value
+			var saved_id := int(saved_volley.get("id", 0))
+			if active_visual_volleys.has(saved_id):
+				_sync_visual_volley_clock(
+					saved_id,
+					float(saved_volley.get("remaining", 0.0)),
+					float(saved_volley.get("duration", 0.001))
+				)
+				continue
+			var saved_duration := maxf(float(saved_volley.get("duration", 0.16)), 0.001)
+			var saved_remaining := clampf(
+				float(saved_volley.get("remaining", saved_duration)),
+				0.0,
+				saved_duration
+			)
+			var backdate := maxf(saved_duration - saved_remaining, 0.0)
+			_spawn_visual_volley(
+				maxi(int(saved_volley.get("ball_count", 1)), 1),
+				backdate,
+				str(saved_volley.get("pitch_id", "dead_fish")),
+				saved_duration,
+				saved_id
+			)
+			_register_visual_volley(saved_id, backdate, saved_duration)
 	_update_shader_parameters()
 	_update_range_arrows()
 	queue_redraw()
 
+func sync_active_volley_clocks(authoritative_volleys: Array) -> void:
+	# GameState owns flight time. The field shader used to keep advancing from
+	# wall-clock release time, which meant active tapping could resolve a pitch
+	# before its dot reached the plate. Rebase every rendered instance to the
+	# immutable volley's authoritative remaining time after each simulation frame.
+	# This changes only its progress clock; source, target, pitch, curve, color,
+	# duration, and sampled outcome remain the released snapshot.
+	for volley_value in authoritative_volleys:
+		var volley: Dictionary = volley_value
+		var volley_id := int(volley.get("id", 0))
+		if not active_visual_volleys.has(volley_id):
+			continue
+		_sync_visual_volley_clock(
+			volley_id,
+			float(volley.get("remaining", 0.0)),
+			float(volley.get("duration", 0.001))
+		)
+	_refresh_visual_volley_compatibility()
+
+func _sync_visual_volley_clock(volley_id: int, remaining_seconds: float, duration_seconds: float) -> void:
+	var duration := maxf(duration_seconds, 0.001)
+	var remaining := clampf(remaining_seconds, 0.0, duration)
+	var elapsed := duration - remaining
+	var released_at := total_time - elapsed
+	var spawn_at := fmod(stream_time - elapsed + STREAM_WRAP_SECONDS, STREAM_WRAP_SECONDS)
+	var entry: Dictionary = active_visual_volleys.get(volley_id, {})
+	if entry.is_empty():
+		return
+	entry.released_at = released_at
+	entry.duration = duration
+	active_visual_volleys[volley_id] = entry
+	for slot_value in active_pitch_slots.keys():
+		var slot := int(slot_value)
+		var launch: Dictionary = slot_launch_data[slot]
+		if int(launch.get("volley_id", -1)) != volley_id:
+			continue
+		launch.released_at = released_at
+		launch.spawn_time = spawn_at
+		launch.duration = duration
+		launch.authoritative_progress = elapsed / duration
+		var custom_data := Color(launch.get("custom_data", Color(0.0, 0.0, 0.5, 0.0)))
+		custom_data.r = spawn_at / STREAM_WRAP_SECONDS
+		custom_data.g = duration / MAX_VISUAL_TRAVEL_SECONDS
+		launch.custom_data = custom_data
+		slot_launch_data[slot] = launch
+		slot_expiry_times[slot] = total_time + remaining
+		if ball_multimesh != null:
+			ball_multimesh.set_instance_custom_data(slot, custom_data)
+
 func _compress_travel_time(physical_seconds: float) -> float:
-	if physical_seconds <= 3.0:
-		return clampf(physical_seconds, 0.16, 3.0)
-	return minf(3.0 + log(physical_seconds / 3.0) * 0.35, MAX_VISUAL_TRAVEL_SECONDS)
+	# Compatibility helper retained for renderer tests. Authoritative and visual
+	# timing now share the same physical duration.
+	return maxf(physical_seconds, 0.000001)
 
 func _spawn_pitch(
 	backdate: float,
@@ -621,7 +702,8 @@ func _spawn_pitch(
 	color_override: Variant = null,
 	volley_index := -1,
 	volley_count := 1,
-	pitch_id_override := ""
+	pitch_id_override := "",
+	volley_id := 0
 ) -> void:
 	var slot := next_ball_slot
 	next_ball_slot = (next_ball_slot + 1) % visual_ball_capacity
@@ -674,6 +756,8 @@ func _spawn_pitch(
 	ball_multimesh.set_instance_color(slot, color)
 	ball_multimesh.set_instance_custom_data(slot, custom_data)
 	slot_launch_data[slot] = {
+		"volley_id": volley_id,
+		"released_at": total_time - backdate,
 		"spawn_time": spawn_at,
 		"duration": launch_duration,
 		"signed_curve": signed_curve,
@@ -802,13 +886,7 @@ func _retire_expired_pitch_slots() -> void:
 		var expiry := slot_expiry_times[slot]
 		if expiry <= 0.0 or expiry > total_time:
 			continue
-		slot_expiry_times[slot] = 0.0
-		active_pitch_slots.erase(slot)
-		ball_multimesh.set_instance_custom_data(slot, Color(0.0, 0.0, 0.5, 0.0))
-		ball_multimesh.set_instance_transform_2d(
-			slot,
-			Transform2D(0.0, Vector2.ONE, 0.0, Vector2(-1000.0, -1000.0))
-		)
+		_retire_pitch_slot(slot)
 
 func _update_shader_parameters() -> void:
 	if ball_material == null:
@@ -938,29 +1016,32 @@ func _notify_phase_events(pitch_events: Array, elapsed_seconds: float) -> int:
 				)
 				last_pitch_distance_index = int(event.get("distance_index", snapshot.get("distance_index", 0)))
 				pitch_call_age = 0.0
-				volley_plate_position = _get_plate_position_unlocked()
-				volley_in_flight = true
+				var volley_id := int(event.get("volley_id", 0))
 				launched += _spawn_visual_volley(
 					maxi(int(event.get("ball_count", 1)), 1),
 					backdate,
 					pitch_id,
-					exact_travel
+					exact_travel,
+					volley_id
 				)
-				volley_release_time = total_time - backdate
-				volley_flight_duration = exact_travel
+				_register_visual_volley(volley_id, backdate, exact_travel)
 				last_pitch_visual_travel_time = exact_travel
 			"impact":
 				_trigger_result_visual(event)
-				volley_in_flight = false
-				volley_flight_duration = 0.0
-				volley_plate_position = Vector2.ZERO
+				_remove_visual_volley(int(event.get("volley_id", 0)))
+			"target_lost":
+				_veer_visual_volley(
+					int(event.get("volley_id", 0)),
+					int(event.get("veer_seed", 0))
+				)
 	return launched
 
 func _spawn_visual_volley(
 	ball_count: int,
 	backdate: float,
 	pitch_id := "",
-	flight_seconds := -1.0
+	flight_seconds := -1.0,
+	volley_id := 0
 ) -> int:
 	var physical_count := maxi(ball_count, 0)
 	if physical_count <= 0:
@@ -978,9 +1059,142 @@ func _spawn_visual_volley(
 			color_override,
 			ball_index,
 			render_count,
-			pitch_id
+			pitch_id,
+			volley_id
 		)
 	return render_count
+
+func _register_visual_volley(volley_id: int, backdate: float, duration: float) -> void:
+	active_visual_volleys[volley_id] = {
+		"released_at": total_time - maxf(backdate, 0.0),
+		"duration": maxf(duration, 0.001),
+		"plate": _get_plate_position_unlocked(),
+	}
+	_refresh_visual_volley_compatibility()
+
+func _remove_visual_volley(volley_id: int) -> void:
+	if active_visual_volleys.has(volley_id):
+		active_visual_volleys.erase(volley_id)
+	elif volley_id == 0 and not active_visual_volleys.is_empty():
+		# Old exact events had no volley id. Remove only the soonest visual flight,
+		# never the entire queue.
+		var soonest_id := int(active_visual_volleys.keys()[0])
+		var soonest_remaining := 1.0e300
+		for id_value in active_visual_volleys.keys():
+			var entry: Dictionary = active_visual_volleys[id_value]
+			var remaining := (
+				float(entry.get("released_at", total_time))
+				+ float(entry.get("duration", 0.001))
+				- total_time
+			)
+			if remaining < soonest_remaining:
+				soonest_remaining = remaining
+				soonest_id = int(id_value)
+		active_visual_volleys.erase(soonest_id)
+	_refresh_visual_volley_compatibility()
+
+func _refresh_visual_volley_compatibility() -> void:
+	volley_in_flight = not active_visual_volleys.is_empty()
+	if not volley_in_flight:
+		volley_release_time = 0.0
+		volley_flight_duration = 0.0
+		volley_plate_position = Vector2.ZERO
+		return
+	var display_entry: Dictionary = active_visual_volleys.values()[0]
+	var shortest_remaining := 1.0e300
+	for entry_value in active_visual_volleys.values():
+		var entry: Dictionary = entry_value
+		var remaining := (
+			float(entry.get("released_at", total_time))
+			+ float(entry.get("duration", 0.001))
+			- total_time
+		)
+		if remaining < shortest_remaining:
+			shortest_remaining = remaining
+			display_entry = entry
+	volley_release_time = float(display_entry.get("released_at", total_time))
+	volley_flight_duration = maxf(float(display_entry.get("duration", 0.001)), 0.001)
+	volley_plate_position = Vector2(display_entry.get("plate", _get_plate_position_unlocked()))
+
+func _get_visual_pitch_position(launch: Dictionary) -> Vector2:
+	var duration := maxf(float(launch.get("duration", 0.001)), 0.001)
+	var raw_progress := (
+		clampf(float(launch.authoritative_progress), 0.0, 1.0)
+		if launch.has("authoritative_progress")
+		else clampf(
+			(total_time - float(launch.get("released_at", total_time))) / duration,
+			0.0,
+			1.0
+		)
+	)
+	var drag_exponent := (
+		maxf(float(launch.get("drag_per_foot", 0.0)), 0.0)
+		* maxf(float(launch.get("distance_feet", 0.0)), 0.0)
+	)
+	var progress := raw_progress
+	if drag_exponent > 0.00001:
+		progress = log(1.0 + raw_progress * (exp(drag_exponent) - 1.0)) / drag_exponent
+	var source := Vector2(launch.get("source", Vector2.ZERO))
+	var target := Vector2(launch.get("target", source))
+	var direction := (target - source).normalized()
+	var normal := Vector2(-direction.y, direction.x)
+	var arc_height := (
+		float(launch.get("signed_curve", 0.0))
+		* maxf(_get_field_lateral_length() * 0.34, 20.0)
+	)
+	var arc := (sin(progress * PI) + sin(progress * TAU) * 0.16) * arc_height
+	return source.lerp(target, progress) + normal * arc
+
+func _retire_pitch_slot(slot: int) -> void:
+	if slot < 0 or slot >= slot_launch_data.size():
+		return
+	slot_expiry_times[slot] = 0.0
+	slot_launch_data[slot] = {}
+	active_pitch_slots.erase(slot)
+	if ball_multimesh != null:
+		ball_multimesh.set_instance_custom_data(slot, Color(0.0, 0.0, 0.5, 0.0))
+		ball_multimesh.set_instance_transform_2d(
+			slot,
+			Transform2D(0.0, Vector2.ONE, 0.0, Vector2(-1000.0, -1000.0))
+		)
+
+func _veer_visual_volley(volley_id: int, veer_seed: int) -> void:
+	var matching_slots: Array[int] = []
+	for slot_value in active_pitch_slots.keys():
+		var slot := int(slot_value)
+		if int(slot_launch_data[slot].get("volley_id", 0)) == volley_id:
+			matching_slots.append(slot)
+	var random := RandomNumberGenerator.new()
+	random.seed = veer_seed
+	for slot in matching_slots:
+		var launch := slot_launch_data[slot].duplicate(true)
+		var start := _get_visual_pitch_position(launch)
+		var direction := Vector2.RIGHT.rotated(random.randf_range(-PI, PI))
+		var distance := random.randf_range(70.0, 145.0) * clampf(_get_camera_scale(), 0.75, 1.35)
+		var finish := start + direction * distance
+		var normal := Vector2(-direction.y, direction.x)
+		var control := start.lerp(finish, 0.42) + normal * random.randf_range(-28.0, 28.0)
+		var color := Color(launch.get("color", Color.WHITE))
+		color.a = 1.0
+		return_balls.append({
+			"outcome": Content.STRIKE_INDEX,
+			"color": color,
+			"start": start,
+			"control": control,
+			"finish": finish,
+			"age": 0.0,
+			"duration": random.randf_range(0.28, 0.46),
+			"saved": false,
+			"relay": false,
+			"relayed": false,
+			"missed_strike": false,
+			"fade_start": 0.0,
+			"lost_target": true,
+		})
+		_retire_pitch_slot(slot)
+	while return_balls.size() > return_ball_capacity:
+		return_balls.pop_front()
+	_remove_visual_volley(volley_id)
 
 static func format_pitch_call(pitch_name: String, ball_count: int) -> String:
 	var base_name := pitch_name.strip_edges().to_upper()
@@ -1143,7 +1357,7 @@ func _is_batter_available_for_pitch() -> bool:
 		batter_phase == "active"
 		and not batter_end_pending
 		and not batter_terminal_in_flight
-		and not volley_in_flight
+		and (not volley_in_flight or bool(snapshot.get("overlap_flights", false)))
 	)
 
 func _is_batter_visually_present() -> bool:
@@ -1374,6 +1588,7 @@ func _reset_batter_for_opponent(opponent_index: int, preserve_released_ball := f
 	batter_lifecycle_total_override = -1.0
 	batter_terminal_in_flight = false
 	if not preserve_released_ball:
+		active_visual_volleys.clear()
 		volley_in_flight = false
 		volley_flight_duration = 0.0
 		volley_plate_position = Vector2.ZERO
@@ -1811,7 +2026,76 @@ func _draw() -> void:
 		draw_arc(plate, radius, 0.0, TAU, 48, Color(impact_color, impact_strength * 0.75), 3.0)
 	_draw_result_popups()
 	_draw_loot_popups()
+	_draw_tap_meter_and_clickers()
 	_draw_field_tap_effects()
+
+func _draw_tap_meter_and_clickers() -> void:
+	var tap_laps := maxf(float(snapshot.get("tap_laps", 0.0)), 0.0)
+	var tap_signal := clampf(float(snapshot.get("tap_signal", 0.0)), 0.0, 1.0)
+	var clickers := maxi(int(snapshot.get("automatic_clickers", 0)), 0)
+	if tap_laps <= 0.001 and clickers <= 0:
+		return
+	var center := Vector2(28.0, size.y - 31.0)
+	var completed := int(floor(tap_laps))
+	var fraction := fmod(tap_laps, 1.0)
+	var color_mix := 1.0 - exp(-float(completed) / 3.0)
+	var meter_color := PITCHER_COLOR.lerp(Color("78ff84"), color_mix)
+	draw_circle(center, 16.0, Color("07101b"))
+	draw_arc(center, 16.0, 0.0, TAU, 36, Color("36506a"), 2.0)
+	if completed > 0:
+		draw_arc(center, 13.0, -PI * 0.5, TAU - PI * 0.5, 36, Color(meter_color, 0.45 + tap_signal * 0.45), 4.0)
+	if completed == 0 or fraction > 0.0001:
+		var visible_fraction := clampf(tap_laps if completed == 0 else fraction, 0.0, 1.0)
+		draw_arc(
+			center,
+			13.0,
+			-PI * 0.5,
+			-PI * 0.5 + TAU * visible_fraction,
+			36,
+			meter_color,
+			4.0
+		)
+	if completed > 0:
+		draw_string(
+			ThemeDB.fallback_font,
+			center + Vector2(-10.0, 4.0),
+			"×%d" % (completed + 1),
+			HORIZONTAL_ALIGNMENT_CENTER,
+			20.0,
+			9,
+			Color(meter_color, 0.90)
+		)
+	if clickers <= 0:
+		return
+	var label_position := Vector2(50.0, size.y - 43.0)
+	draw_string(
+		ThemeDB.fallback_font,
+		label_position,
+		"AUTO-TAPPER",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		110.0,
+		9,
+		Color(0.62, 0.74, 0.86, 0.70)
+	)
+	var shown := mini(clickers, 16)
+	var rate_each := maxf(float(snapshot.get("automatic_rate_each", 0.0)), 0.0)
+	var pulse_phase := fmod(total_time * rate_each, 1.0) if rate_each > 0.0 else 1.0
+	var pulse := exp(-pulse_phase * 8.0) if rate_each > 0.0 else 0.0
+	for index in shown:
+		var column := index % 8
+		var row := index / 8
+		var dot := Vector2(55.0 + column * 11.0, size.y - 25.0 + row * 10.0)
+		draw_circle(dot, 2.3 + pulse * 1.8, Color(PITCHER_COLOR, 0.42 + pulse * 0.50))
+	if clickers > shown:
+		draw_string(
+			ThemeDB.fallback_font,
+			Vector2(146.0, size.y - 20.0),
+			"+%d" % (clickers - shown),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			34.0,
+			9,
+			Color(PITCHER_COLOR, 0.75)
+		)
 
 func _draw_field_tap_effects() -> void:
 	for effect in field_tap_effects:
@@ -1979,9 +2263,9 @@ func _draw_strike_icons(origin: Vector2) -> void:
 	var total_width := float(display_slots - 1) * spacing
 	var intrinsic_scale := _get_batter_intrinsic_size() * _get_character_camera_scale()
 	var visual_radius := 10.0 * intrinsic_scale
-	if int(snapshot.opponent_index) == 44:
+	if int(snapshot.opponent_index) == Content.FINAL_BOSS_INDEX:
 		visual_radius = 29.0 * maxf(intrinsic_scale * 0.72, 1.0)
-	elif int(snapshot.opponent_index) == 43:
+	elif int(snapshot.opponent_index) == Content.ELDRITCH_FINAL_INDEX:
 		visual_radius = 34.0 * maxf(intrinsic_scale * 0.72, 1.0)
 	var start := origin + Vector2(-total_width * 0.5, -visual_radius - 11.0 * readable_scale)
 	for icon_index in display_slots:
@@ -2019,9 +2303,9 @@ func _draw_ball_icons(origin: Vector2) -> void:
 	var total_width := float(display_slots - 1) * spacing
 	var intrinsic_scale := _get_batter_intrinsic_size() * _get_character_camera_scale()
 	var visual_radius := 10.0 * intrinsic_scale
-	if int(snapshot.opponent_index) == 44:
+	if int(snapshot.opponent_index) == Content.FINAL_BOSS_INDEX:
 		visual_radius = 29.0 * maxf(intrinsic_scale * 0.72, 1.0)
-	elif int(snapshot.opponent_index) == 43:
+	elif int(snapshot.opponent_index) == Content.ELDRITCH_FINAL_INDEX:
 		visual_radius = 34.0 * maxf(intrinsic_scale * 0.72, 1.0)
 	var start := origin + Vector2(-total_width * 0.5, visual_radius + 12.0 * readable_scale)
 	for icon_index in display_slots:
@@ -2083,21 +2367,24 @@ func _draw_pitch_call(mound: Vector2) -> void:
 
 func _get_environment_stage() -> int:
 	var opponent_index := int(snapshot.opponent_index)
-	var distance_index := int(snapshot.distance_index)
 	var league_stage := 0
-	if opponent_index >= 40:
+	if opponent_index >= Content.ELDRITCH_EXHIBITION_INDEX:
 		league_stage = 3
-	elif opponent_index >= 35:
-		league_stage = 2
-	elif opponent_index >= 30:
+	elif opponent_index >= Content.ALIEN_EXHIBITION_INDEX:
 		league_stage = 1
 	var distance_stage := 0
-	if distance_index >= 11:
-		distance_stage = 3
-	elif distance_index >= 10:
-		distance_stage = 2
-	elif distance_index >= 9:
-		distance_stage = 1
+	var distance_index := clampi(
+		int(snapshot.distance_index),
+		0,
+		Content.DISTANCE_TIERS.size() - 1
+	)
+	match str(Content.DISTANCE_TIERS[distance_index].get("environment", "grass")):
+		"alien_grass", "mars":
+			distance_stage = 1
+		"moon", "space":
+			distance_stage = 2
+		"deep_space", "outer_dark":
+			distance_stage = 3
 	return maxi(league_stage, distance_stage)
 
 func _draw_environment(stage: int) -> void:
@@ -2169,7 +2456,7 @@ func _draw_return_balls() -> void:
 		var position := _quadratic_bezier(ball.start, ball.control, ball.finish, progress)
 		var previous_position := _quadratic_bezier(ball.start, ball.control, ball.finish, previous_progress)
 		var outcome := int(ball.outcome)
-		var color: Color = Content.OUTCOME_COLORS[outcome]
+		var color: Color = Color(ball.get("color", Content.OUTCOME_COLORS[outcome]))
 		var fade := 1.0 - smoothstep(float(ball.get("fade_start", 0.82)), 1.0, progress)
 		draw_line(previous_position, position, Color(color, fade * 0.70), (4.0 if outcome < 2 else 2.5) * projectile_scale)
 		draw_circle(position, (5.0 if outcome == 0 else 3.8) * projectile_scale, Color(color, fade))
@@ -2391,7 +2678,7 @@ func _draw_home_plate(origin: Vector2) -> void:
 
 func _draw_batter(origin: Vector2) -> void:
 	var opponent_index := int(snapshot.opponent_index)
-	var within_era := opponent_index % 5
+	var within_era := opponent_index % 3
 	var intrinsic_size := _get_batter_intrinsic_size()
 	var variant_seed := maxi(batter_generation, 0) * 7 + opponent_index * 11
 	var scale_factor := intrinsic_size * _get_character_camera_scale()
@@ -2403,7 +2690,7 @@ func _draw_batter(origin: Vector2) -> void:
 		else 0.20
 	)
 	var swing_rotation := swing_phase * 0.95
-	if opponent_index == 44:
+	if opponent_index == Content.FINAL_BOSS_INDEX:
 		var boss_scale := maxf(scale_factor * 0.72, 1.0)
 		draw_circle(origin, 24.0 * boss_scale, Color("7d3bc4"))
 		draw_arc(origin, 29.0 * boss_scale, 0.0, TAU, 48, Color("d9a6ff"), 3.0 * boss_scale)
@@ -2418,7 +2705,7 @@ func _draw_batter(origin: Vector2) -> void:
 			draw_line(hand, bat_end, bat_color, 5.0 * boss_scale)
 			draw_arc(origin, 51.0 * boss_scale, angle + 0.22, angle + 0.76, 10, Color(bat_color, 0.25), 2.0 * boss_scale)
 		return
-	if opponent_index == 43:
+	if opponent_index == Content.ELDRITCH_FINAL_INDEX:
 		var boss_scale := maxf(scale_factor * 0.72, 1.0)
 		draw_circle(origin, 18.0 * boss_scale, Color("020307"))
 		draw_arc(origin, 25.0 * boss_scale, 0.0, TAU, 48, Color("ffcf66"), 3.0 * boss_scale)
@@ -2442,23 +2729,7 @@ func _draw_batter(origin: Vector2) -> void:
 		draw_arc(origin, 31.0 * scale_factor, angle - 0.42, angle, 12, Color(bat_color, 0.25), maxf(1.5, 2.0 * minf(scale_factor, 1.8)))
 
 func _get_batter_intrinsic_size() -> float:
-	var opponent_index := int(snapshot.opponent_index)
-	var human_sizes := [
-		0.72, 0.75, 0.78, 0.82, 0.86,
-		0.90, 0.92, 0.94, 0.96, 0.98,
-		1.00, 1.03, 1.06, 1.09, 1.12,
-		1.14, 1.17, 1.20, 1.22, 1.24,
-		1.26, 1.28, 1.30, 1.32, 1.34,
-		1.35, 1.37, 1.39, 1.42, 1.45,
-	]
-	var posthuman_sizes := [
-		1.62, 1.70, 1.82, 1.94, 2.08,
-		2.25, 2.45, 2.72, 3.10, 3.55,
-		3.85, 4.20, 4.65, 5.20, 5.80,
-	]
-	var intrinsic_size := (
-		float(human_sizes[clampi(opponent_index, 0, human_sizes.size() - 1)])
-		if opponent_index <= Content.HUMAN_FINAL_INDEX
-		else float(posthuman_sizes[clampi(opponent_index - Content.ALIEN_EXHIBITION_INDEX, 0, posthuman_sizes.size() - 1)])
-	)
-	return intrinsic_size * float(snapshot.get("batter_body_scale", 1.0))
+	# Campaign body scale is already the opponent's complete authored intrinsic
+	# footprint. Multiplying it by the retired 45-opponent lookup made later bodies
+	# several times too large after the campaign expanded to 100 levels.
+	return clampf(float(snapshot.get("batter_body_scale", 1.0)), 0.45, 8.0)

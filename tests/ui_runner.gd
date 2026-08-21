@@ -20,6 +20,11 @@ func _run() -> void:
 	main.set_process(false)
 	main.pitch_field.set_process(false)
 	main.game.reset_fresh()
+	main.pitch_field.reset_visual_state()
+	# This audit inspects the persistent Story catalog separately. Clear the two
+	# opening modal presentations so they cannot mask unrelated dialog tests.
+	main.game.pending_story_dialogs.clear()
+	main.story_dialog.hide()
 	main._clear_achievement_toasts()
 	main.offline_progress_dialog.hide()
 	main._refresh_interface()
@@ -43,6 +48,15 @@ func _run() -> void:
 	main._open_title_resume_picker()
 	_expect(main.title_resume_stack.visible and not main.title_menu_stack.visible, "Resume should open the save-slot picker")
 	_expect(main.title_manual_slot_entries.size() == 3, "The title picker should expose all three manual save slots")
+	var title_prestige_summary: String = main._format_named_save("AUTOSAVE", {
+		"current_opponent": 0,
+		"xp": 4.0,
+		"saved_at": 1_700_000_000,
+		"genetic_offer_unlocked": true,
+		"dna": 7,
+		"lifetime_dna_earned": 19,
+	})
+	_expect(title_prestige_summary.contains("DNA 7 (19 earned)"), "The title-screen save picker should expose revealed prestige point history")
 	main._close_title_resume_picker()
 	main._leave_title_screen(false)
 	_expect(not main.title_screen.visible and main.return_to_title_button.text == "TITLE", "Desktop play should retain a path back to the title screen")
@@ -80,17 +94,13 @@ func _run() -> void:
 	_expect(play_panel.size.x > upgrade_panel.size.x * 2.0, "The field should receive most of the horizontal canvas")
 	_expect(main.pitch_field.process_priority < main.process_priority, "The field clock must advance before the simulation clock to prevent catch-up bursts")
 	_expect(not main.prestige_header_stack.visible, "Fresh UI reveals a prestige currency")
-	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Ordinary body growth should be visible from the first pitch")
-	_expect(main.rebirth_tab.name == "BODY" and main.human_growth_section.visible, "Ordinary growth should open in a plainly named BODY tab")
-	_expect(main.body_section_buttons.size() == 5, "BODY should provide one subtab for each progression section")
-	_expect(main.body_section_buttons.growth.visible and main.body_section_buttons.build.visible, "Fresh BODY should expose separate Grow and Build tabs")
+	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "The run-build BODY tab should be visible from the first pitch")
+	_expect(main.rebirth_tab.name == "BODY" and main.human_growth_section.visible, "The drafted run build should open in a plainly named BODY tab")
+	_expect(main.body_section_buttons.size() == 4, "BODY should provide RUN, DNA, ARCANA, and DIVINE sections")
+	_expect(main.body_section_buttons.run.visible, "Fresh BODY should expose its run-scoped draft section")
 	_expect(not main.body_section_buttons.genetic.visible and not main.body_section_buttons.eldritch.visible and not main.body_section_buttons.divine.visible, "Fresh BODY tabs must not reveal future prestige layers")
-	main._select_body_section("build")
-	_expect(main.human_modifier_section.visible and not main.human_growth_section.visible, "BUILD should be a distinct BODY subtab instead of another long section")
-	main._select_body_section("growth")
 	_expect(not main.genetic_section.visible, "Fresh BODY content must not reveal genetic enhancements")
-	_expect(main.body_growth_buttons.size() == Content.BODY_GROWTH_STAGES.size() - 1, "Every later human body stage should have one ordered growth row")
-	_expect(main.body_modifier_buttons.size() == Content.BODY_MODIFIERS.size(), "Every authored physical-development option should have a BODY row")
+	_expect(main.body_growth_buttons.is_empty() and main.body_modifier_buttons.is_empty(), "Retired XP Grow/Build rows must not compete with run drafts")
 	_expect(not main.automation_section.visible, "Fresh UI reveals future automation")
 	_expect(not main.stat_rows.arms.visible, "Fresh Stats reveal extra arms")
 	_expect(not main.stat_rows.clones.visible, "Fresh Stats reveal clone bodies")
@@ -132,23 +142,21 @@ func _run() -> void:
 	main.game.unlocked_achievements.erase("first_pitch")
 	main.game.achievement_revision += 1
 	main._refresh_achievement_tab(true)
-	_expect(main.catalog_hide_purchased_toggles.size() == 4, "Every one-time purchase catalog should have its own Hide Purchased toggle")
-	main._toggle_catalog_hide_purchased(true, "pitch")
-	_expect(not (main.pitch_buttons.dead_fish.container as Control).visible, "Hide Purchased should remove learned pitches from only their catalog")
-	_expect((main.pitch_buttons.knuckleball.container as Control).visible, "Hide Purchased should retain locked and available pitch entries")
-	main._toggle_catalog_hide_purchased(false, "pitch")
-	main.game.body_growth_level = 1
-	main.game.purchased_body_modifiers.append("playground_conditioning")
+	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Ball, Facility, and BODY run catalogs should each have Hide Purchased")
+	_expect((main.pitch_buttons.dead_fish.container as Control).visible, "The read-only Arsenal should show its learned opening pitch")
+	_expect(not (main.pitch_buttons.knuckleball.container as Control).visible, "The Arsenal must hide unseen draft pitches instead of leaking them as locks")
+	main.game.selected_run_perks.append({
+		"definition_id": "age_little_kid", "name": "Become a Little Kid", "level": 1,
+		"rarity_name": "COMMON", "color": "a9b6c5",
+		"effect": {"stat": "body_age", "operation": "body", "age_order": 1},
+	})
 	main._refresh_interface()
+	_expect(main.run_perk_list.get_child_count() == 1, "Selected run perks should be inspectable in BODY")
 	main._toggle_catalog_hide_purchased(true, "body")
-	_expect(not (main.body_growth_buttons.preschooler.container as Control).visible, "BODY Hide Purchased should remove completed growth stages")
-	_expect((main.body_growth_buttons.grade_schooler.container as Control).visible, "BODY Hide Purchased should retain unfinished growth stages")
-	_expect(not (main.body_modifier_buttons.playground_conditioning.container as Control).visible, "BODY Hide Purchased should remove applied physical modifiers")
-	_expect((main.body_modifier_buttons.cardio_basics.container as Control).visible, "BODY Hide Purchased should retain unpurchased physical modifiers")
+	_expect(main.run_perk_list.get_child_count() == 0, "BODY Hide Purchased should collapse selected run perks")
 	main._toggle_catalog_hide_purchased(false, "body")
-	_expect((main.body_growth_buttons.preschooler.container as Control).visible and (main.body_modifier_buttons.playground_conditioning.container as Control).visible, "Disabling BODY Hide Purchased should restore completed entries")
-	main.game.body_growth_level = 0
-	main.game.purchased_body_modifiers.erase("playground_conditioning")
+	_expect(main.run_perk_list.get_child_count() == 1, "Disabling BODY Hide Purchased should restore selected run perks")
+	main.game.selected_run_perks.clear()
 	main._refresh_interface()
 	_expect(not main.equipment_labels.has("bat"), "The batter's bat must not appear in the player's left-side loadout")
 	_expect(main.inventory_slot_buttons.size() == 7, "The field should show seven compact equipment squares")
@@ -168,7 +176,8 @@ func _run() -> void:
 	field_click.pressed = true
 	field_click.position = Vector2(310.0, 210.0)
 	main.pitch_field._on_field_gui_input(field_click)
-	_expect(is_equal_approx(main.game.pitch_credit, main.game.get_field_tap_fraction_for_duration(main.game.get_pitch_cooldown_seconds())), "Clicking unobstructed field space should use the opening timer's duration-scaled advance")
+	_expect(main.game.get_live_tap_rate() > 0.0, "Clicking unobstructed field space should feed the rolling tap-rate signal")
+	_expect(is_zero_approx(main.game.pitch_credit), "A field click should accelerate the clock smoothly instead of teleporting the pitch timer")
 	_expect(main.pitch_field.field_tap_effects.size() == 1, "A field click should create its local feedback ring")
 	_expect(main.game.has_achievement("first_field_tap"), "The first active field tap should unlock its achievement")
 	_expect(main.achievement_toast.visible and main.achievement_toast_name.text == "This Is Supposed to Be Idle", "An achievement should produce its named unlock toast (got %s)" % main.achievement_toast_name.text)
@@ -183,9 +192,9 @@ func _run() -> void:
 	main.pitch_field.batter_phase_age = 0.0
 	main.pitch_field.batter_phase_duration = 3.0
 	main.pitch_field._on_field_gui_input(field_click)
-	var expected_lineup_advance: float = 3.0 * main.game.get_field_tap_fraction_for_duration(3.0)
-	_expect(is_equal_approx(main.game.batter_cooldown_remaining, 3.0 - expected_lineup_advance), "A field click should hurry the authoritative next-batter timer")
-	_expect(is_equal_approx(main.pitch_field.batter_phase_age, expected_lineup_advance), "A field click should hurry the visible next-batter meter in lockstep")
+	_expect(is_equal_approx(main.game.batter_cooldown_remaining, 3.0), "A field click should not jump the authoritative next-batter timer")
+	_expect(is_zero_approx(main.pitch_field.batter_phase_age), "A field click should not jump the visible next-batter meter")
+	_expect(main.game.get_live_tap_timer_speed_multiplier(3.0) > 1.0, "The rolling tap signal should accelerate an active lineup clock")
 	main.game.batter_cooldown_remaining = 0.0
 	main.game.batter_replacement_pending = false
 	main.pitch_field.batter_phase = "active"
@@ -225,14 +234,14 @@ func _run() -> void:
 			_expect(str((outcome_heading.get_child(1) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus beside its name")
 			_expect(not outcome_panel.tooltip_text.is_empty(), "Detailed outcome rules should live in hover text")
 	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("cannot be saved"), "The Grand Slam tooltip should explicitly distinguish its absolute terminal rule from a Home Run")
-	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Frustration +12000"), "The Grand Slam tooltip should expose its maximum whole-number Frustration severity")
-	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Frustration +200"), "The Ball tooltip should expose its small whole-number Frustration nudge")
+	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Determination +12000"), "The Grand Slam tooltip should expose its maximum whole-number Determination severity")
+	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Determination +200"), "The Ball tooltip should expose its small whole-number Determination nudge")
 	_expect(main.outcome_panels[1].tooltip_text.contains("unless saved"), "The Home Run tooltip should retain ordinary hit-save behavior")
 	_expect(not main.strikeout_payout_label.text.begins_with("0 XP"), "The separate strikeout payout should not repeat zero-XP clutter")
 	_expect(main.strikeout_payout_label.text.begins_with("COMPLETED STRIKEOUT:"), "Strikeout XP should appear in one small separate readout")
-	_expect(main.frustration_status.get_parent() == main.outcome_footer, "Frustration and strikeout payout should share the compact outcome footer")
-	_expect(main.frustration_label.text.begins_with("FRUSTRATION ") and not "." in main.frustration_label.text, "The field should expose the current outcome-weighted bonus as a whole-number rating")
-	_expect(main.frustration_label.tooltip_text.contains("Grand Slam +12,000") and not main.frustration_label.tooltip_text.contains("since the last"), "Frustration inspection should explain whole-number severity rather than elapsed time")
+	_expect(main.frustration_status.get_parent() == main.outcome_footer, "Determination and strikeout payout should share the compact outcome footer")
+	_expect(main.frustration_label.text.begins_with("DETERMINATION ") and not "." in main.frustration_label.text, "The field should expose the current outcome-weighted bonus as a whole-number rating")
+	_expect(main.frustration_label.tooltip_text.contains("Grand Slam +12,000") and not main.frustration_label.tooltip_text.contains("since the last"), "Determination inspection should explain whole-number severity rather than elapsed time")
 	_expect(main.hard_reset_button != null and main.hard_reset_button.text == "RESET PROGRESS", "A visible progress-reset control should exist")
 	_expect(main.export_save_button != null and main.export_save_button.text == "EXPORT", "A visible portable-save export control should exist")
 	_expect(main.load_save_button != null and main.load_save_button.text == "IMPORT", "A visible portable-save import control should exist")
@@ -299,22 +308,24 @@ func _run() -> void:
 	_expect((main.equipment_progression_list.get_child(1) as Control).tooltip_text.contains("A Regulation Baseball"), "Owned Status rows should identify their upgrade")
 	main.game.purchased_milestones.erase("regulation_ball")
 	main._refresh_interface()
-	_expect((main.body_growth_buttons.preschooler.container as Control).visible, "The Regular Ol’ Preschooler option should be visible from level 1")
-	_expect((main.body_growth_buttons.preschooler.button as Button).disabled, "Growth should remain disabled until the first strikeout supplies its 3 XP cost")
-	main.game.xp = main.game.get_strikeout_base_points()
+	main.game.selected_run_perks.append({
+		"definition_id": "age_little_kid", "name": "Become a Little Kid", "level": 1,
+		"rarity_name": "COMMON", "color": "a9b6c5",
+		"effect": {"stat": "body_age", "operation": "body", "age_order": 1},
+	})
 	main._refresh_interface()
-	_expect(not (main.body_growth_buttons.preschooler.button as Button).disabled, "One opening strikeout should afford the first growth step")
-	main.game.xp = 0.0
-	main.game.body_growth_level = 1
+	_expect(main.header_subtitle.text == main._get_game_subtitle(), "A drafted age should immediately update the milestone subtitle")
+	_expect((main.equipment_labels.body.value as Label).text == main.game.get_body_growth_name(), "A drafted age should immediately update the body loadout")
+	main.game.selected_run_perks.clear()
 	main._refresh_interface()
-	_expect(main.header_subtitle.text == "A baseball game about a regular ol’ preschooler", "Growing should immediately update the milestone subtitle")
-	_expect((main.equipment_labels.body.value as Label).text == "Regular Ol’ Preschooler", "Growing should immediately update the body loadout")
-	main.game.body_growth_level = 0
-	main._refresh_interface()
-	main.game.purchased_body_modifiers.append("steroids")
+	main.game.selected_run_perks.append({
+		"definition_id": "build_roided", "name": "Extremely Obvious Steroids", "level": 28,
+		"rarity_name": "RARE", "color": "ffd45c",
+		"effect": {"stat": "body_build", "operation": "body", "adjective": "roided-out"},
+	})
 	main._refresh_interface()
 	_expect(main.header_subtitle.text == "A baseball game about a big boi", "The first steroid use should update the subtitle")
-	main.game.purchased_body_modifiers.erase("steroids")
+	main.game.selected_run_perks.clear()
 	main._refresh_interface()
 	main.development_session = false
 	main._request_hard_reset()
@@ -345,12 +356,12 @@ func _run() -> void:
 	main.game.highest_unlocked = 3
 	main.game.training_levels.recovery = 8
 	main._refresh_interface()
-	var recovery_summary: String = main._training_next_rank_summary("recovery")
+	var recovery_summary: String = main._training_batch_summary("recovery", 1)
 	_expect((main.training_buttons.recovery.label as Label).text.contains(recovery_summary), "A diminishing Training card should recalculate the exact next-rank gain")
 	_expect(not (main.training_buttons.recovery.label as Label).text.contains("approaches"), "Visible Training cards should not substitute an eventual target for the next purchase")
 	main.game.training_levels.velocity = 100000
 	main._refresh_interface()
-	var vanishing_speed_summary: String = main._training_next_rank_summary("velocity")
+	var vanishing_speed_summary: String = main._training_batch_summary("velocity", 1)
 	_expect(vanishing_speed_summary.contains("e-") and not vanishing_speed_summary.begins_with("0"), "A vanishing asymptotic Speed rank should use 1eN notation instead of saying zero")
 	_expect((main.training_buttons.velocity.button as Button).tooltip_text.contains("DIMINISHING RETURN"), "A rank below ten percent of fresh efficacy should turn its price into an explicit yellow warning")
 	main.game.highest_unlocked = 0
@@ -460,17 +471,22 @@ func _run() -> void:
 	if "--capture-ui" in OS.get_cmdline_user_args():
 		await _capture_visible_tabs(main, "fresh")
 
-	main.game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
-	main.game.current_opponent = Content.ALIEN_EXHIBITION_INDEX
+	main.game.highest_unlocked = Content.HUMAN_FINAL_INDEX
+	main.game.current_opponent = Content.HUMAN_FINAL_INDEX
+	main.game.pending_special_encounter = "alien_contact"
+	main.game.campaign_story_phase = "alien_contact_pending"
 	main.game.alien_arrival_seen = false
-	main.game.alien_exhibition_grand_slams = 5
 	main._refresh_interface()
 	await process_frame
-	_expect(main.header_subtitle.text == "A baseball game about a toddler who found aliens", "Alien contact should update the subtitle using the current body")
 	_expect(main.alien_arrival_dialog.visible and main.alien_arrival_dialog.dialog_text.contains("cheering aliens"), "First alien contact should introduce the teleport, crowd, and commissioner without blocking gameplay")
+	_expect(not main.game.alien_arrival_seen, "First contact should wait for explicit acceptance before teleporting the player")
 	main.alien_arrival_dialog.hide()
-	_expect(main.game.alien_arrival_seen, "The alien arrival scene should be consumed before it is shown")
+	main._begin_alien_contact()
+	await process_frame
+	main.game.alien_exhibition_grand_slams = 5
 	main._refresh_interface()
+	_expect(main.game.alien_arrival_seen and main.game.is_alien_exhibition_blocked(), "Accepting first contact should begin the impossible Xylophax exhibition")
+	_expect(main.header_subtitle.text == "A baseball game about a toddler who found aliens", "Alien contact should update the subtitle using the current body (got %s; encounter %s; level %d)" % [main.header_subtitle.text, main.game.special_encounter, main.game.current_opponent])
 	_expect(main.alien_help_progress_panel.visible and int(main.alien_help_progress_bar.value) == 5, "The field should show a five-of-twelve humiliation meter before HELP exists")
 	_expect(not main.alien_help_button.visible, "HELP should remain hidden while the humiliation meter is incomplete")
 	_expect(is_equal_approx(main.alien_help_progress_panel.offset_top, main.alien_help_button.offset_top), "The humiliation meter should occupy HELP's eventual field position")
@@ -482,7 +498,7 @@ func _run() -> void:
 	_expect(main.pitch_field.result_popups.size() == 2, "A scripted alien Grand Slam should display both the outcome and a separate taunt")
 	_expect(str(main.pitch_field.result_popups[1].text) == "YOU'RE PATHETIC.", "The alien's taunt should appear verbatim above the batter")
 	main._show_title_screen(false)
-	_expect(main.title_art._visible_era() == 1 and main.title_progress_label.text.contains("LEVEL 31"), "Reached alien play should update the title art without revealing later eras")
+	_expect(main.title_art._visible_era() == 1 and main.title_progress_label.text.contains("LEVEL 34"), "Reached alien play should update the title art without revealing later eras")
 	main._leave_title_screen(false)
 	main.game.alien_exhibition_grand_slams = BaseballGameState.ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED
 	main.game.alien_exhibition_seconds = BaseballGameState.EXHIBITION_SECONDS
@@ -491,18 +507,23 @@ func _run() -> void:
 	_expect(main.alien_help_button.visible and main.alien_help_button.text == "HELP", "A witnessed impossible inning should quietly reveal the red HELP action")
 	_expect(not main.alien_help_progress_panel.visible, "HELP should replace—not overlap—the completed humiliation meter")
 	_expect(not main.genetic_section.visible and not main.rebirth_story_label.text.contains("genetic"), "The impossible exhibition must not spoil its solution before HELP is clicked")
-	_expect(main.era_label.text.begins_with("LEVEL 31") and not main.era_label.text.contains("/"), "Alien contact should retain the current-level-only header")
+	_expect(main.era_label.text.begins_with("UNNUMBERED EXHIBITION") and not main.era_label.text.contains("/"), "Alien first contact should use its unnumbered exhibition header (got %s)" % main.era_label.text)
 	main._accept_alien_help()
 	await process_frame
 	_expect(main.alien_help_dialog.visible and main.alien_help_dialog.dialog_text.contains("Come with me if you want to… be really good at baseball"), "HELP should reveal the portal stranger's Time Machine scene")
 	_expect(main.game.genetic_offer_unlocked and not main.alien_help_button.visible, "Accepting portal help should persistently reveal Time Travel and dismiss HELP")
-	main.alien_help_dialog.get_ok_button().pressed.emit()
+	main.alien_help_dialog.hide()
+	main._complete_first_genetic_rebirth()
 	await process_frame
-	_expect(main.game.lifetime_genetic_rebirths == 1 and main.game.dna == 10, "Entering the first portal should immediately perform the promised genetic rebirth")
+	_expect(main.game.lifetime_genetic_rebirths == 1 and main.game.dna == 10, "Entering the first portal should immediately perform the promised genetic rebirth (rebirths %d; DNA %d; run XP %s)" % [main.game.lifetime_genetic_rebirths, main.game.dna, str(main.game.run_xp)])
 	_expect(main.game.current_opponent == 0 and main.game.body_growth_level == 0, "The first portal should visibly return the player to toddler baseball")
 	_expect(main.genetic_rebirth_explanation_dialog.visible and main.genetic_rebirth_explanation_dialog.dialog_text.contains("You gained 10 DNA"), "The automatic rebirth should explain the toddler reset and DNA award")
 	_expect(main.genetic_rebirth_explanation_dialog.dialog_text.contains("All prestige upgrades are retained"), "The first-rebirth explanation should state the general retention rule succinctly")
 	main.genetic_rebirth_explanation_dialog.hide()
+	main._open_body_after_first_rebirth()
+	await process_frame
+	main.game.pending_story_dialogs.clear()
+	main.story_dialog.hide()
 	_expect(main.prestige_header_stack.visible, "Genetic offer did not reveal DNA")
 	_expect(not main.upgrade_tabs.is_tab_hidden(main.rebirth_tab.get_index()), "Genetic offer should remain available through BODY")
 	_expect(main.genetic_section.visible, "Genetic offer did not reveal mutations")
@@ -520,11 +541,11 @@ func _run() -> void:
 	main.game.current_opponent = Content.ELDRITCH_EXHIBITION_INDEX
 	main._refresh_interface()
 	await process_frame
-	_expect(main.header_subtitle.text == "A baseball game about one guy versus the void", "The eldritch exhibition should receive its own discovered-milestone subtitle")
+	_expect(main.header_subtitle.text.contains("versus the void"), "The eldritch exhibition should receive its own discovered-milestone subtitle")
 	_expect(main.eldritch_section.visible, "Eldritch offer did not reveal magic")
 	_expect(main.body_section_buttons.eldritch.visible and main.selected_body_section == "eldritch", "The eldritch offer should reveal and open its own BODY subtab")
 	_expect(not main.divine_section.visible, "Eldritch offer prematurely reveals divine rewards")
-	_expect(main.era_label.text.begins_with("LEVEL 41") and not main.era_label.text.contains("/"), "Eldritch contact should retain the current-level-only header")
+	_expect(main.era_label.text.begins_with("LEVEL 67") and not main.era_label.text.contains("/"), "Eldritch contact should retain the current-level-only header")
 	_expect(main.guide_label.text.contains("Arcana"), "Eldritch reveal did not expand the Guide")
 	_expect(not main.guide_label.text.contains("God restore"), "Eldritch Guide prematurely reveals the divine offer")
 	main.game.genetic_levels.migratory_instinct = 2
@@ -534,9 +555,9 @@ func _run() -> void:
 	main._refresh_interface()
 	await process_frame
 	var advance_toggle: CheckButton = main.automation_toggles.advance.button
-	_expect(advance_toggle.text.contains("Human 2/29") and advance_toggle.text.contains("Alien 1/10"), "Auto-advance should expose separate per-level human and alien license capacities")
+	_expect(advance_toggle.text.contains("Human 2/32") and advance_toggle.text.contains("Alien 1/33"), "Auto-advance should expose separate per-level human and alien license capacities")
 	_expect(main.automation_training_heading.text.contains("0 / 1 SELECTED"), "A genetic coaching rank should expose exactly one selectable Training automation license")
-	var catalog_toggle: CheckButton = main.automation_toggles.catalog_pitch.button
+	var catalog_toggle: CheckButton = main.automation_toggles.catalog_ball.button
 	_expect(not catalog_toggle.disabled and catalog_toggle.text.contains("READY"), "The eldritch front office should expose independent one-time catalog automation")
 	_audit_catalog_visibility(main, 2, "eldritch")
 	await _audit_tab_geometry(main, "eldritch")
@@ -574,9 +595,9 @@ func _run() -> void:
 
 func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 	var collections := [
-		{"definitions": Content.PITCHES, "buttons": main.pitch_buttons, "owned": main.game.unlocked_pitches},
-		{"definitions": Content.BALL_UPGRADES, "buttons": main.ball_upgrade_buttons, "owned": main.game.purchased_ball_upgrades},
-		{"definitions": Content.MILESTONES, "buttons": main.milestone_buttons, "owned": main.game.purchased_milestones},
+		{"kind": "pitch", "definitions": Content.PITCHES, "buttons": main.pitch_buttons, "owned": main.game.unlocked_pitches},
+		{"kind": "catalog", "definitions": Content.BALL_UPGRADES, "buttons": main.ball_upgrade_buttons, "owned": main.game.purchased_ball_upgrades},
+		{"kind": "catalog", "definitions": Content.MILESTONES, "buttons": main.milestone_buttons, "owned": main.game.purchased_milestones},
 	]
 	for collection in collections:
 		for definition in collection.definitions:
@@ -585,15 +606,18 @@ func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 			var container := entry.container as Control
 			var button := entry.button as Button
 			var label := entry.label as Label
-			var tier := 0 if int(definition.required_level) <= Content.HUMAN_FINAL_INDEX else (1 if int(definition.required_level) <= Content.ALIEN_FINAL_INDEX else 2)
+			var required_level := Content.catalog_required_level(definition)
+			var tier := 0 if required_level <= Content.HUMAN_FINAL_INDEX else (1 if required_level <= Content.ALIEN_FINAL_INDEX else 2)
 			var owned: bool = id in collection.owned
-			var should_show: bool = owned or tier <= visible_tier
+			var should_show: bool = owned if str(collection.kind) == "pitch" else (owned or tier <= visible_tier)
 			_expect(container.visible == should_show, "%s catalog visibility is wrong for %s" % [stage, definition.name])
-			if not should_show or owned or main.game.highest_unlocked >= int(definition.required_level):
+			if str(collection.kind) == "pitch":
+				continue
+			if not should_show or owned or main.game.highest_unlocked >= required_level:
 				continue
 			_expect(button.disabled, "%s should lock %s until its level requirement" % [stage, definition.name])
 			_expect(label.text.begins_with("%s\n" % definition.name), "%s locked entry should show only its name and requirements" % stage)
-			_expect(button.tooltip_text.contains("REACH LEVEL %d" % (int(definition.required_level) + 1)), "%s locked tooltip should include its level requirement" % stage)
+			_expect(button.tooltip_text.contains("REACH LEVEL %d" % (required_level + 1)), "%s locked tooltip should include its level requirement" % stage)
 			_expect(not label.text.contains(str(definition.description)), "%s locked entry leaks its effect" % stage)
 			_expect(not button.tooltip_text.contains(str(definition.description)), "%s locked tooltip leaks its effect" % stage)
 

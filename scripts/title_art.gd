@@ -1,9 +1,10 @@
 class_name NoHitterTitleArt
 extends Control
 
-const HUMAN_FINAL_INDEX := 29
-const ALIEN_FINAL_INDEX := 39
-const FINAL_BOSS_INDEX := 44
+const Campaign = preload("res://scripts/campaign.gd")
+const HUMAN_FINAL_INDEX := Campaign.HUMAN_FINAL_INDEX
+const ALIEN_FINAL_INDEX := Campaign.ALIEN_FINAL_INDEX
+const FINAL_BOSS_INDEX := Campaign.FINAL_BOSS_INDEX
 
 var highest_opponent := 0
 var genetic_revealed := false

@@ -1,147 +1,133 @@
 # No Hitter
 
-A top-down baseball idle game about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
+A top-down baseball idle roguelike about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the playable **v0.16.5 browser-parity build** for Godot 4.7.1. Ready-to-share packages for browsers, macOS, Windows, and Linux are generated in `release/` from one shared game codebase.
+This repository contains the shared Godot 4.7.1 source and tested v0.17.0 exports for browser/PWA, macOS, Windows, Linux, GitHub Pages, and Codex Sites. Every platform uses the same campaign, simulation, save schema, and progression. Browser-only rendering limits reduce visual clutter without changing results.
 
-## Share or install on another computer
+## Play or share
 
-Upload this single file to Google Drive (or any ordinary file host):
+The live browser build is published through [GitHub Pages](https://dcr-cmyk648.github.io/One-Foot-Per-Second/). The Web build is also a Progressive Web App:
+
+- iPhone/iPad: open in Safari, use Share → Add to Home Screen.
+- Android: use Chrome’s Install action when offered, or Add to Home screen from its menu.
+- Installed Web versions stay on the automatic update channel and can keep the screen awake while visible.
+
+The complete local distribution is:
 
 ```text
-release/No Hitter v0.16.5 All Platforms.zip
+release/No Hitter v0.17.0 All Platforms.zip
 ```
 
-It contains a static browser-site ZIP, a Universal Mac DMG, separate Intel/AMD and ARM Windows ZIPs, separate Intel/AMD and ARM Linux archives, source code, instructions, a platform manifest, and SHA-256 checksums. Recipients can play from an uploaded browser build or choose the native package matching their computer. Godot is not needed to play.
+It contains the browser ZIP, a Universal macOS DMG, x86_64 and ARM64 Windows ZIPs, x86_64 and ARM64 Linux archives, source, instructions, manifests, and checksums. Godot is not required to play an export.
 
-To rebuild every package after changing the game, run this from the project folder on a Mac:
+Native packages are portable, ad-hoc/unsigned test builds rather than store submissions. They check the stable manifest at startup and every five minutes, then offer the correct replacement package. Saves live outside the application, so replacing the app or portable folder retains progress. Browser/PWA installation is the seamless in-place update path.
 
-```bash
-./scripts/package_all_platforms.sh
-```
+## Build
 
-The script runs the shared regression and progressive-interface suites; obtains the matching official Godot 4.7.1 export templates if they are absent; exports all six targets; checks the native binary architectures; smoke-tests the Mac build; verifies the browser payload and every archive; and produces the combined upload ZIP. After a successful desktop package, it deletes superseded generated release folders and archives while retaining the complete current version. Source history, saves, and the current playable build are unaffected. The first run may download about 1.2 GB of official export templates. See Godot's [command-line export documentation](https://docs.godotengine.org/en/4.7/tutorials/export/exporting_projects.html), [Web export documentation](https://docs.godotengine.org/en/4.7/tutorials/export/exporting_for_web.html), and [4.7.1 download archive](https://godotengine.org/download/archive/4.7.1-stable/).
-
-The native packages are portable builds, not store submissions. The Mac app is ad-hoc signed but not notarized, and the Windows executables are unsigned, so a recipient may need to confirm the first launch using the safe instructions included in the bundle. Warning-free public distribution would require Apple and Windows signing identities. Android, iPhone/iPad, and consoles require separate platform work and are not included.
-
-## Play in a browser
-
-`release/No Hitter v0.16.5/No Hitter v0.16.5 Browser.zip` is a static Progressive Web App with `index.html` at its root. Upload the ZIP contents unchanged to a static host such as itch.io or GitHub Pages. It uses Godot's preferred single-threaded Web export, so it needs no database or application server. On iPhone, its INSTALL menu explains Safari's Add to Home Screen flow; on Android, it opens the native install prompt when Chrome makes one available and otherwise gives the matching menu steps. Installed phone versions remain on the same five-minute Web update channel. While the game is visible, supported browsers also request a screen wake lock and reacquire it after returning to the tab. Visibility, page-hide/show, freeze, and resume events are recorded outside the frozen game loop, so returning from an iOS suspension reliably converts the wall-clock gap into offline progress even when Safari reports one giant frame. A running tab offers a reviewable update with separate Export, Later, and Update actions, writes and reads back a dedicated update checkpoint, flushes IndexedDB, and compares every verified save generation after reload. The checkpoint is retired only after a successful post-load save. The title-screen Resume picker and the in-game SAVES menu both expose an autosave plus three device-local manual slots on desktop and phone; portable Export/Import is an optional fallback and the cross-device path. On iOS, selecting an exported backup directly from the Files picker can use Google Drive when the Drive provider is enabled in Files; a Web app cannot silently browse a private Drive account without a separately configured Google OAuth application.
-
-To build only the browser package, or serve the current build locally:
-
-```bash
-./scripts/package_web.sh
-./scripts/serve_web.sh
-```
-
-Then open `http://127.0.0.1:8001/`. WebAssembly and WebGL 2 are required; current Chromium-based browsers and Firefox are the primary targets. The browser and desktop packages contain the same scenes, content, simulation, progression, and save schema. Only the visual ceilings differ: desktop keeps the 4,000-projectile pool, while the browser draws up to 512 outbound representatives, 96 returns, 96 stars, and 16 clone bodies before aggregating presentation. Gameplay math remains exact.
-
-### Publish with Codex Sites
-
-The `sites-host/` project is a deliberately thin production shell around the verified Godot export. It does not duplicate gameplay: its build first checks `web/` against the shared Godot source, copies that exact export, divides the large WebAssembly runtime into host-safe segments, and serves the reassembled runtime as one ordinary `application/wasm` response. Codex Sites can therefore publish the game directly while GitHub Pages remains an independent fallback.
-
-### Publish with GitHub Pages
-
-The repository includes a tested static site in `web/` and a Pages workflow at `.github/workflows/pages.yml`. In the GitHub repository, open **Settings → Pages**, set **Source** to **GitHub Actions**, and run **Deploy browser game to GitHub Pages** (or push to `main`). The workflow checks both the shared-source manifest and every browser artifact before it deploys, so a stale browser export cannot silently publish.
-
-`./scripts/package_web.sh` exports from the same Godot project used by the desktop packages, refreshes `web/`, and regenerates both manifests. To verify parity without rebuilding:
-
-```bash
-./scripts/verify_web_parity.sh
-```
-
-Commit the refreshed `web/` directory whenever gameplay source changes. The compiled WebAssembly file is deliberately stored in ordinary Git rather than Git LFS so GitHub Pages can deploy a self-contained site from a normal checkout.
-
-## Play on macOS
-
-1. Open `release/No Hitter v0.16.5 macOS Universal.dmg`.
-2. Drag **No Hitter.app** to Applications, or run it from the disk image.
-3. If macOS asks for confirmation, Control-click the app, choose **Open**, and confirm.
-
-The app is ad-hoc signed rather than notarized with a paid Apple certificate. It supports Apple Silicon and Intel Macs and does not require Godot.
-
-Native packages check the official stable release manifest shortly after launch and every five minutes while open. When a newer version exists, the game offers an optional **EXPORT BACKUP**, **LATER**, and a direct package download for the current OS/architecture. Saves live outside the application in the unchanged `One Foot Per Second` data directory, so replacing the app or portable folder keeps progress. Because these public packages are not commercially signed, they deliberately do not overwrite their own running executable; the installed browser/PWA version remains the fully automatic update option.
-
-## The rule that drives everything
-
-Only a completed strikeout awards XP. Every called Strike immediately banks one count-share of opponent mastery, but partial counts still award zero XP. Every hit awards neither XP nor mastery.
-
-- Human batters always require three strikes.
-- Fouls add a strike unless the batter already has two. Four Balls produce a walk, which ends the plate appearance like a Single without awarding XP.
-- An unprotected hit clears the count and sends the batter away. Singles create a short gap, Home Runs a long one, and the new Grand Slam tier creates a twelve-second humiliation.
-- Grand Slams are always terminal. No fielder, clone, portal, or divine blessing can save one.
-- Alien batters require four through nine strikes. Genetic count compression can reduce post-human requirements, never below three, while preserving the original larger payout.
-- Eldritch batters require 12, 18, 28, 42, and finally 64 strikes. Genetic fielders, mirror clones, and bullpen portals let ordinary hits preserve an unfinished count.
-
-The eight compact outcome cards show only the name, live probability, and added lineup delay for Grand Slam, Home Run, Triple, Double, Single, Foul, Ball, and Strike. A separate small line shows the XP paid by a completed strikeout. Desktop details live in tooltips; phones expose the same explanations in closable tap-inspection sheets, including opponent equipment and compact profile data. Player-loot rows remain passive so mouse wheels and touch drags scroll normally. Separate Equip and Compare controls handle changes and open the bounded full-stat comparison.
-
-## Campaign details (full spoilers)
-
-The shipped interface reveals each layer only when its story encounter is reached. Developer documentation necessarily describes the complete progression; expand this section only if that is what you want.
-
-<details>
-<summary>Reveal the complete campaign and prestige rules</summary>
-
-
-There are 45 opponent classes backed by era-specific, composable names and titles, producing thousands of readable individual batter identities.
-
-1. **Human baseball, levels 1–30:** you begin as a regular ol’ toddler and may spend XP to grow through 11 optional human stages while facing backyard toddlers, youth leagues, school ball, college, the minors, and MLB. Optional strength, cardio, nutrition, and questionable chemistry modify that age instead of replacing it. Each purchase updates the subtitle, body loadout, stats, and rendered size within a level-gated human development ceiling that reaches 115 mph at the finale. Clearing the league without ever growing earns the secret **Past Your Bedtime** achievement.
-2. **Xylophax, level 31:** an impossible exhibition of guaranteed Grand Slams. Xylophax stays at the plate and taunts the player after every hit while a twelve-segment humiliation meter fills. Offline time cannot satisfy it and no amount of mastery or Frustration creates a lottery. The completed meter becomes a small red **HELP** button; clicking it summons a portal stranger whose Time Machine immediately begins the first prenatal genetic rebirth.
-3. **Alien baseball, levels 31–40:** genetic rebirths add arms, faster biology, fielding reflexes, count compression, and automation. Pitching rises through Mach notation toward a Mach 12 body limit.
-4. **N'Kthra, level 41:** another unwinnable one-minute exhibition. Eldritch ascension destroys the current reality and moves your consciousness into another one.
-5. **Eldritch baseball, levels 41–45:** mirror-reality bullpens, time compression, portals, causal baseballs, Ball-rog the Unstrikeable, and Octathulhu, God of the Eightfold Swing. Octathulhu only accepts a pitch at exactly light speed.
-6. **God Prestige:** after Octathulhu falls, God thanks you for saving the universe, asks whether the best reward would be doing it all again, restores everything, and offers one permanent blessing. All six can be collected across later universes; additional victories award stackable Halos.
-
-Genetic rebirth awards `floor((body XP / 10B)^(1/3))` DNA before multipliers. Eldritch ascension awards `floor((DNA earned in this reality)^0.60)` Arcana before multipliers. Genetic rebirth resets the body and Locker but preserves mutations; eldritch ascension also erases DNA and genetics but preserves magic; God Prestige erases both lower layers but preserves blessings, Halos, achievements, and lifetime statistics. Inherited Scorebook Cortex reduces each opponent's mastery target to 85% per rank, while excess farming begins at that same adjusted target. Reverse Terminator Wardrobe is the equipment exception: each rank carries one randomly selected equipped item through genetic time travel.
-
-</details>
-
-## Range, facilities, loot, and tactics
-
-The campaign has 13 level-assigned distance bands, from 3 feet to 100,000 light-years. Human stages pass through 10-, 25-, 46-, 50-, 54-, and 60-foot-6-inch mounds at the corresponding age groups. Selecting an opponent automatically selects that level's thematic range, preventing "always move closer" from becoming a mandatory income ritual. Range affects physical flight and batter threat but never multiplies XP; each opponent instead has a directly calibrated strikeout bounty. The opening 1 ft/s pitch genuinely takes three seconds to cross its three-foot gap. Later distances use logarithmic camera compression while Stats continues to show the true physical flight time.
-
-Spend XP on 12 ordered ages plus 12 optional conditioning/chemistry choices in **BODY**, 15 incremental Training axes—one for every displayed base stat—31 pitch types, 26 evolving ball shells, and 84 one-time facilities or increasingly indefensible interventions. BODY separates ordinary Grow and Build catalogs from spoiler-gated DNA, Arcana, and Divine subtabs. Repeatable Speed adds a raw `0.75 ft/s` while comfortably below the body's current limit, then smoothly approaches that limit without a hard final rank; repeatable Command adds only 18 displayed Quality, while actual velocity also improves Quality. Quality, Threat, Frustration, and related matchup ratings use a presentation scale of 1,000: the unchanged internal `0.039` displays as `39`, internal `6` displays as `6000`, and truly unwieldy values use `1eN`. Every Training card calculates the effective change from its next rank against the current build, with the complete formula available on hover or a stationary phone hold. Training is an uncapped diminishing or exponentially priced sink; facilities, body work, pitches, balls, and long-term projects supply the larger multiplicative gains and savings goals. Effective Facility prices are four times their authored baseline, with premium human projects at eight times baseline, preserving their impact as real savings targets. Pitch, Ball, Facility, and BODY each have an independent saved Hide Purchased filter. Every tab is ordered by unlock level, then cost, and locked entries reveal only their requirement. Unlocked cards remain fully readable while unaffordable, with only the XP-price button dimmed. Every learned pitch enters the automatic arsenal, with Pitch Calling increasingly favoring stronger options; clicking the Pitch Arsenal card opens the complete learned-pitch view. The Live Throw Profile retains the last immutable throw—pitch name, release speed, plate speed, air drag, travel time, Quality, and range—even after impact, while all 15 trained stats remain in Status and the mobile Upgrades header. A narrow vertical Power gauge sits beside the batter's equipment: YOU is the current called-Strike probability, THEM is the remaining resistance, and red/yellow/green communicate bad/even/good matchups. Future reset systems do not exist in visible UI copy until their story encounters have been completed.
-
-The live XP balance keeps two decimal places only while it is below one point and uses whole XP below 1,000. Once suffixes begin, it keeps roughly three useful digits (`1.23K`, `1.6M`) so spending within the same million remains visible.
-
-The Achievements tab contains 130 milestones spread across human, genetic, alien, eldritch, and divine play. Every completion permanently adds half a percentage point to XP income, stacking additively and surviving every prestige reset; the complete catalog reaches `×1.65`. Achievement copy is a passive mouse-wheel/touch-drag surface; a bounded Details button opens inspection, and a saved Hide Achieved filter removes completed cards only. The tab always reports the complete 130-slot count, but an entry whose subject has not been encountered is shown only as `HIDDEN ACHIEVEMENT`: its name, condition, progress, description, and future-layer heading are withheld. Post-rebirth achievements cover multiple arms bullying toddlers, double and thousand-Strike volleys, hits and Strikes in the same pitch, impossible base arithmetic, bat overload, and other newly legal crimes. The post-human arsenal includes `Wait… That’s Illegal`; the fully secret No Hitter challenge remains the final catalog entry. Unlocks produce a queued in-game toast with the completed condition and remain visible in Status and portable saves.
-
-Click or tap unobstructed field space to hurry whichever foreground timer is active: wind-up, ball flight, or the complete next-batter handoff. A one-second phase begins at 1.7%; a fresh ten-second wait advances by exactly 0.5 seconds. The duration bonus approaches four additional percentage points instead of growing forever, while Field Hustle independently raises the short-timer base toward 4%. A normal rhythm of roughly four taps per second or less stays fresh. Faster bursts build a quarter-second moving tap rate and smoothly lose efficiency, so macros and huge auto-clicker walls gain diminishing rather than linear throughput. Repeated input on one timer also advances a shrinking share of what remains instead of meeting an arbitrary hard floor. Autonomic Clicking Finger ranks raise both click speed and fatigue tolerance logarithmically.
-
-Completed strikeouts also have a 12% chance to drop a wearable item; hits never do. A successful parcel copies one player-wearable item from the current batter's visible loadout, preserving its slot and rarity, so a Legendary enemy hat advertises a real Legendary-hat opportunity. Excess mastery gently favors the better worn pieces but cannot invent a tier the batter does not have. The human champion wears Human Unique gear in every visible equipment slot. Alien baseball adds Alien Common through Alien Unique, and eldritch baseball later adds Eldritch Common through Eldritch Unique; every older family remains possible after a new family appears. The first career strikeout guarantees Little Timmy's visibly worn Common cap, and a pity roll guarantees a parcel by the tenth eligible dry roll. Drops call out over the enemy and never equip themselves. Six human slots—Hat, Jersey, Jock Strap, Glove, Pants, and Cleats—appear as rarity-colored letter squares; a seventh anonymous slot becomes a Relic after human baseball. Clicking a square opens the slot-by-slot Locker. Browser mouseover and phone hold expose full stats and signed comparison. Every item has integer Power derived from its real affixes; each slot keeps 10, overflow removes the lowest-Power eligible item, and equipped/starred items are protected. Cleared gear becomes saved Scrap. Automatic best-item equipment is a later prestige upgrade.
-
-Mastery continues beyond an opponent's unlock target. Each doubling of excess mastery adds a small logarithmic strikeout-XP multiplier, slightly favors the best rarity that opponent is visibly wearing, and improves affix rolls. The item level remains capped to the opponent being farmed, so an overmastered toddler can produce a stronger roll on its Common level-one cap but never late-game gear.
-
-Gear is a capped sidegrade: a complete loadout can add at most 15% speed, 18% recovery, 500 displayed Quality, 25% strikeout XP, 20% mastery, and 15% range-threat reduction. Training and prestige can clear the complete campaign with loot disabled. Gear speed is applied after the body's era cap, so a good outfit can exceed 115 mph, Mach 12, or 1c without being required to reach any gate. Post-human Symbiotic Wardrobe Dermis multiplies item effects by 1.20 per rank before those aggregate caps. Mirror clones dilute aggregate equipment bonuses until One-Size-Fits-All-Realities Uniform teaches every clone how clothing works.
-
-Moving backward to farm an easier opponent is always allowed and also restores that opponent's authored range. Advancing is tactical: a high-reward alien with a long count can be worse XP per second than a reliable earlier strikeout. Genetic **Migratory Baseball Instinct** purchases one human auto-advance destination per rank; eldritch **Interstellar Road-Trip Itinerary** purchases one alien destination per rank. **Autonomic Coaching Lobe** licenses independently selected Training auto-buy stats, one per rank. Repeatable **Autonomic Clicking Finger** creates one clicker and improves its rate logarithmically; eldritch **Hands From Beyond the Mouse** adds repeatable clickers that inherit that speed. **Front Office Outside Time** later unlocks independent Pitch, Ball, Facility, and Body auto-buy switches. Auto-scouting remains a separate choice.
-
-## Visual scalability contract
-
-The simulation is the only source of outbound pitches. Human play follows one strict cycle: wind-up, choose a learned pitch, sample its exact speed, release one immutable ball, let it complete its whole flight, resolve it at the batter, and only then begin the next cooldown. The chosen pitch briefly appears over the pitcher and its speed remains in the field's upper-left. A release event contains no public outcome, so stopping the pitcher cannot telegraph a hit. The pitcher dial is cyan during wind-up and gold during flight; the separate home-plate dial fills while the next batter approaches. Missed strikes and Balls preserve their incoming screen speed and line beyond the batter, then fade gradually. No frame time, upgrade click, empty plate, or resumed animation can manufacture a ball or a catch-up burst.
-
-After human baseball, every purchased arm automatically raises the balls-per-throw cap, while clones and time layers provide more potential throwing sources. Non-Euclidean Bullpen Geometry later expands usable capacity toward a designed 2,048-ball volley. The desktop GPU-instanced stream reserves 4,000 outbound projectiles, so it renders every designed outbound ball one-for-one. The browser profile reserves 512 and labels weighted representatives beyond that point; only drawing is reduced, never simulation, XP, mastery, or loot. Dense starfields and return volleys are batched, and only unreadable clone-limb detail is reduced when formations overlap. A ten-second native endgame stress profile measured 44–60 FPS across launch, impact, and return phases on the development Mac's Radeon Pro 560X, with most samples at 58–60; a fresh field remains locked at 60 FPS. A separate **20,000 balls/second** safety ceiling keeps all economy math finite.
-
-Every released projectile snapshots its pitch type, source, exact randomized release speed, release range, air drag, plate speed, duration, curve, trail, and color. Human fields model air resistance; alien and eldritch vacuum fields do not. Upgrades affect future throws only. Choosing another unlocked batter immediately sets that level's range for future pitches and retargets the unresolved interaction, but the ball already in flight keeps its original distance, drag, path, and timing. The opening throw is one large, nearly straight ball with no fake trail. Extra arms release simultaneous volleys from separate hands; every ball in one volley shares the sampled pitch, but its outcome and defenses are rolled independently. Balls beyond the batter's simultaneous bat count compound a severe contact penalty. Matching calls become Double Strike, Triple Single, and so on; mixed calls appear together, hit bases and lineup delays add, and either Strike or walk completion may end the count. The first pair uses opposite mirrored arcs, while larger clone/time salvos alternate into distinct anime-missile lanes. Fair hits and Fouls send their own visible balls back into the field, while saved hits return toward the bullpen and preserve the count.
-
-The camera begins at an extra-close three-foot view. Character rings have a separate close-range ceiling so neither player covers home plate; the ball and environment retain the stronger zoom. Pitcher and batter share the same point-and-ring graphic language, and the fresh toddler pitcher remains about 50% larger than the opposing toddler for readability. Purchased age and physical BODY modifiers—not ordinary stat pumping—control mortal marker size; post-human bodies, arms, clones, and time layers can later expand the formation toward the intended absurd ceiling. Batter size remains class- and era-specific, from small children through huge aliens and gods, and both sides share the same distance perspective. The pitching arm is a short bat-like rectangle that drives forward, and the ball leaves from its exact tip. Level progression moves the mound and zooms out automatically so later formations and contextually huge opponents remain legible. Departed batters clear toward the upper-right and replacements enter from the lower-left. Human leagues use muted grass; later environments change only when their campaign layers are revealed. The title screen turns the app-icon matchup into a large animated hero with dedicated portrait and landscape framing; its opponent, projectile count, and environment still change only with the farthest discovered era and never preview aliens, the void, or divine baseball early.
-
-The 1600×1000 installed interface opens maximized with a 1280×800 desktop minimum. On a portrait browser viewport, the field turns vertically so the pitcher is below the batter; desktop sidebars become touch-sized Upgrades, Status, Log, and Saves overlays, and outcome cards wrap into two rows. Upgrade overlays retain the live XP balance and use explicit 44-pixel controls around a large current-section card. Repeatable cards keep a short effect line and a separate price action; desktop hover or a stationary phone hold reveals the exact formula, while a swipe cancels inspection and scrolls normally. Mound movement becomes a stacked up/down control to the pitcher's right, and the equipment browser uses an in-content Close action that stays clear of iOS window chrome. Update warnings use phone-bounded copy and actions. This responsive layer changes presentation only. Future campaign currencies, statistics, upgrade lists, and Guide text remain hidden until their corresponding story reveal.
-
-## Run from source
-
-Install Godot 4.7.1 and open `project.godot`, or run:
+Install Godot 4.7.1, then run the project directly:
 
 ```bash
 godot --path .
 ```
 
-Development-only profiles disable saving:
+Build only the verified browser package:
 
 ```bash
-godot --path . -- --fresh
-godot --path . -- --stress-render
+./scripts/package_web.sh
+```
+
+Build and verify every supported package on macOS:
+
+```bash
+./scripts/package_all_platforms.sh
+```
+
+The complete packager runs shared gameplay, desktop UI, and 390×844 portrait suites; installs official export templates when missing; exports six targets; verifies binary architectures, archives, and the Mac smoke launch; creates checksums; and prunes generated packages from older releases. The first template install is large. Generated packages and build folders are reproducible and are not source.
+
+## Core rules
+
+Only a completed strikeout awards XP.
+
+- Called Strikes award the largest ordinary Mastery share; lesser contact awards a little; Home Runs and Grand Slams award none.
+- Mastery immediately improves the exact matchup. Filling the bar makes the opponent ready, but the next level opens only on a strikeout.
+- Human baseball always uses three Strikes and four Balls. Fouls stop adding Strikes at two; a walk behaves like a Single.
+- Unsaved hits clear the count and replace the batter. Larger hits add longer waits. Grand Slams can never be saved.
+- Every level sets its own physical range, threat, bounty, body scale, and opponent equipment. Range affects flight and difficulty, never XP.
+- Overmastery adds small logarithmic matchup, XP, and loot benefits while loot level remains capped to that opponent.
+- Bad outcomes and active tapping add Determination. Its bonus is uncapped but logarithmic and resets on a strikeout.
+
+The opening pitch is physically literal: one foot per second across three feet for three seconds. Human speed ends near 115 mph. Later story layers anchor their finales near Mach 5,000 and 5,000c.
+
+## The run-build layer
+
+Every numbered clear queues a saved perk draft. The defeated level sets perk level; rarity sets its strength. Three-level sub-era finales guarantee Rare-or-better choices and separately queue a Pitch draft that learns a pitch or improves one already known. Boss drafts contain the strangest options. Prestige can add offer choices, improve rarity, unlock boss perks, and eventually corrupt a card into a 2–3× positive effect with a random penalty.
+
+Offers are generated once from the saved run seed and serial. Reloading cannot reroll them. Auto-advance may queue many rewards, but all remain selectable in order.
+
+This replaces purchased ages, builds, and pitches. Skipping age perks keeps the player a toddler; chosen adjectives still compose in the subtitle. PITCH is a read-only Arsenal. BODY contains the current run and only the persistent sections the story has revealed.
+
+XP spending is intentionally split:
+
+- TRAIN: small uncapped repeatable improvements, with exact x1/x10/x100 batches.
+- BALL: replacement shells and payload identity.
+- FACILITY: expensive one-time multiplicative savings targets.
+- Equipment: optional randomized build sidegrades rather than required progression.
+
+## Campaign details (full spoilers)
+
+<details>
+<summary>Reveal all campaign and prestige layers</summary>
+
+The finite campaign has exactly 100 numbered levels:
+
+1. **Human baseball, levels 1–33:** eleven sub-eras from backyard toddlers through professional baseball. Bambino Rex becomes the sticky final batter once the next strikeout could complete the league. Aggressive no-loot audit policies reach first contact in roughly 9–11 hours at the 115 mph human ceiling.
+2. **First-contact Xylophax:** an unnumbered, unwinnable exhibition. Pitching waits for the arrival dialog. Xylophax remains at the plate, hits guaranteed Grand Slams, taunts the player, and fills a witnessed humiliation meter. Offline play cannot fill it. HELP summons a portal stranger and performs the first prenatal genetic rebirth.
+3. **Alien baseball, levels 34–66:** several genetic lives add arms, stronger biology, count compression, draft control, automation, and probabilistic clone fielding. The final planetary league plays from Olympus Mound. Xylophax carries four bats and requires a body approaching Mach 5,000.
+4. **First-contact Octathulhu:** another unnumbered, witnessed Grand-Slam exhibition. When its doom meter fills, Octathulhu eats the universe and reveals eldritch ascension.
+5. **Eldritch baseball, levels 67–99:** a rebuilt reality returns to Earth, establishes an orbital pitching platform, and defends the solar system from approaching gods. Clone, portal, corrupted-perk, overlapping-volley, Relic, and causality upgrades become available.
+6. **Octathulhu, level 100:** the eight-bat final boss at Earth-to-Pluto range, with the pitching body approaching 5,000 times light speed.
+7. **God Prestige:** God thanks the player for saving the universe and suggests doing it all again. Permanent blessings and Halos persist. Returning to Octathulhu after a God reset unlocks procedural Extra Innings, and another God reset remains available at any time.
+
+Genetic rebirth resets the run and equipment for DNA based on run XP. Eldritch ascension also resets DNA/genetics for Arcana based on DNA earned in the reality. God Prestige resets both lower layers while preserving divine rewards, achievements, story knowledge, and lifetime history.
+
+</details>
+
+## Multi-ball combat and visuals
+
+Human play permits one unresolved pitch. Post-human arms and clones create real simultaneous balls; later eldritch geometry permits new windups while earlier volleys are still in flight.
+
+Every ball in a volley shares the sampled pitch but resolves independently. Balls beyond the opponent’s simultaneous bat count compound a large contact penalty; surplus bats apply the reciprocal advantage. Matching outcomes become Double Strike, Triple Single, and similar calls. Mixed outcomes appear together and stack bases, lineup delays, Strikes, and Balls.
+
+A released projectile owns immutable pitch, speed, drag, plate speed, duration, path, color, source, and target generation. New purchases affect only later throws. Missed balls pass through the plate and fade; only contact creates a return trajectory. If an old overlapping volley loses its batter, it loses targeting, veers away, and quickly fades without resolving against the replacement.
+
+Native rendering reserves the complete designed 2,048-ball finite volley. The browser renders up to 512 weighted outbound representatives once exact drawing would become unreadable. Simulation, rewards, Mastery, loot, and saves remain exact.
+
+## Gear, story, and achievements
+
+Strikeout drops copy one visible player-wearable slot and rarity from the defeated batter. Items never auto-equip by default. Ordinary gear has one to three affixes; rarity increases magnitude, every run stat is eligible, and real positive/negative tradeoffs support builds. Each slot stores ten items; equipped/starred items are protected and overflow becomes Scrap. Relics grant one enormous stat and gain more slots through eldritch progression.
+
+The spoiler-gated Story tab keeps every revealed popup, newest first, with a saved Reverse Order switch. Names use era-specific composable grammar; authored bosses reserve their signatures.
+
+The game contains 130 permanent achievements at +0.5% XP each. Unknown secret entries occupy anonymous slots without leaking their names, conditions, progress, or future systems. The extreme secret No Hitter requires a complete post-victory campaign without a single fair hit.
+
+## Browser, phone, and responsive behavior
+
+Wide desktop uses a three-column layout. Short or narrow windows collapse sidebars before clipping. Portrait Web rotates the field so the pitcher is below the batter and presents Upgrades, Status, Log, and Saves as bounded overlays. Passive text remains scrollable; only explicit buttons buy, equip, compare, or open details. Desktop hover and stationary mobile hold expose the same details, and dragging cancels hold inspection.
+
+The title art, Help, tabs, save summaries, achievements, environments, and currencies disclose only systems the current save has encountered.
+
+## Saves and updates
+
+The game autosaves every ten seconds and on clean exit/backgrounding, with up to seven days of offline catch-up. Offline efficiency scales both XP and Mastery, and the return popup reports the deposit. SAVES exposes the autosave plus three manual device-local slots. EXPORT/IMPORT is the optional portable and cross-device backup path.
+
+Writes use validated pending, primary, and backup generations. Browser builds add rotating persistent mirrors and a dedicated pre-update checkpoint, flush storage before activation, and select the most advanced valid generation after reload. An older cached build refuses to overwrite a newer schema.
+
+Save schema 28 migrates all public saves. Former 30/10/5 campaign positions map by authored place inside their league; old age/build/pitch ownership becomes equivalent deterministic legacy run state. Prestige balances, upgrades, gear, achievements, story, pending drafts, active volleys, lifetime counters, and update checkpoints are preserved. The renamed game deliberately retains its original application-data folder:
+
+```text
+macOS:  ~/Library/Application Support/Godot/app_userdata/One Foot Per Second/
+Windows: %APPDATA%\Godot\app_userdata\One Foot Per Second\
+Linux:  ~/.local/share/godot/app_userdata/One Foot Per Second/
 ```
 
 ## Verification
@@ -155,18 +141,12 @@ godot --headless --path . --script res://tests/ui_runner.gd -- --fresh
 godot --headless --path . --script res://tests/mobile_ui_runner.gd -- --fresh
 ```
 
-The regression suite covers all eight outcomes, strikeout-only XP, live and offline per-Strike mastery, matchup adaptation, outcome-weighted logarithmic Frustration, granular body aging and modifiers, the toddler-only league clear, Foul and Ball counts, both witnessed HELP transitions, the 31-pitch automatic arsenal, immutable release/plate-speed/drag snapshots, the release/flight/impact state machine, one-live-ball human rules, independently resolved post-human 2,048-ball volleys, bat-overload penalties, stacked bases/delays/counts, level-assigned regulation ranges without range income, constant-speed misses, empty-plate suppression, duration-scaled taps, burst fatigue, automatic-clicker mitigation, deterministic high-variety naming, visible enemy loadouts, all 15 rarity tiers, exact slot/rarity drop provenance in foreground and bulk play, Power sorting, no-auto-equip drops, equipment caps, starred 10-item pruning, Scrap, post-cap mastery farming, all 130 achievement IDs, prestige automation, native release selection, God Prestige, secret No Hitter validation, scroll-safe controls, save-schema migration and rollback/update-checkpoint recovery, cross-platform manual slots, spoiler-gated title art, iOS suspension recovery, cosmic completion, and seven-day aggregate simulation. Desktop and portrait interface audits also exercise every reveal layer, Help disclosure, hover/hold comparison, touch targets, catalog filtering, update bounds, save slots, and lossless responsive-layout transitions.
+The suites cover campaign topology, deterministic drafts, old-save migration, strikeout-only income, exact count-state math, mastery gating, sticky witnessed bosses, physical speed/range anchors, tap-rate behavior, immutable multi-volley state, reciprocal bats, clone fielding, equipment/Relics, prestige, endless play, spoiler disclosure, save/update recovery, and desktop/phone layout bounds. The no-loot runners prove that randomized gear and perfect draft rolls are not progression requirements.
 
-The deterministic aggressive auto-buyer benchmarks explicitly disable loot, proving that perfect gear—or any gear—is not a progression requirement. The first human lifetime remains anchored near 12 hours because auto-clicking is unavailable before genetic rebirth; the complete multi-reset audit includes all later automation. Current measured timings are documented in [docs/BALANCE.md](docs/BALANCE.md) and [docs/DESIGN.md](docs/DESIGN.md).
+See [docs/DESIGN.md](docs/DESIGN.md), [docs/BALANCE.md](docs/BALANCE.md), and [CHANGELOG.md](CHANGELOG.md) for the complete rules, measured pacing, and release history.
 
-## Save data
+## Hosting
 
-The game autosaves every ten seconds, saves and mirrors on exit or browser backgrounding, and simulates up to seven days of offline progress. The Web bridge records page visibility outside Godot so iOS page-hide/show, freeze/resume, and giant resumed-frame deltas all recover the same wall-clock gap exactly once. Offline strikeout XP and called-Strike mastery both start at 1% of their normal open-game awards; Scorebook Study asymptotically approaches 75% with diminishing returns. Returning with either reward opens a summary showing time away, XP, mastery, and the shared efficiency used. **EXPORT** writes a portable, readable JSON backup; **LOAD** validates a selected backup and shows its version, level, and XP before asking permission to replace the current run.
+`web/` is the checked-in Pages/PWA artifact. `./scripts/package_web.sh` refreshes it and `./scripts/verify_web_parity.sh` checks source hashes, artifact hashes, and update metadata.
 
-Each automatic write is validated before replacing the primary file and retains the previous valid generation. Unreadable data is preserved rather than overwritten, an older cached build refuses to replace a newer save schema, and autosaving locks if no valid generation can be recovered. Browser builds add rotating primary/rollback localStorage mirrors to IndexedDB and recover the best verified generation by monotonic lifetime progress and timestamp. Installed phone Web apps additionally expose three manual local slots with their level, spendable XP, and timestamp; Export remains the optional cross-device backup. Before activating a cached browser update, the game writes and reads back a distinct checkpoint, requests persistent storage and an IndexedDB flush, then reloads. Startup compares the checkpoint, primary mirror, rollback, and filesystem save; the checkpoint survives until a later save proves the loaded state is at least as advanced. The UI also warns if the browser reports non-persistent storage. On macOS the ordinary local save is normally at:
-
-```text
-~/Library/Application Support/Godot/app_userdata/One Foot Per Second/one_foot_per_second_save.json
-```
-
-Save version 25 preserves the 12-stage body, physical modifiers, all 15 Training ranks, every independent pending-ball outcome and save flag, exact in-flight and last-pitch telemetry, enemy identity/loadout, the toddler-clear proof, witnessed alien-humiliation progress, duration-aware tap accounting, unbounded clicker ranks, multi-volley achievement event history, automation settings, and licensed human/alien auto-advance capacity. Versions 18–24 map their broader age stages, former facility-based chemistry, shared-volley outcomes, and earlier exhibition state into the current model without deleting progress. Earlier saves retain every resource, achievement, clean No Hitter eligibility, peak record, catalog filter, protected primary/rollback generation, and prior migration. The renamed game intentionally continues using the original `One Foot Per Second` application-data directory and filename, so existing installed saves need no manual move.
+`sites-host/` is a thin Codex Sites adapter around that exact verified export. Its build re-checks parity, copies the game, and packages the WebAssembly runtime for Sites. It never forks gameplay.

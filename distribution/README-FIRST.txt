@@ -1,4 +1,4 @@
-NO HITTER v0.16.5
+NO HITTER v0.17.0
 ALL-PLATFORMS RELEASE
 
 Choose the browser package or the native package matching the computer that
@@ -7,14 +7,14 @@ and the game does not install services or modify the registry.
 
 BROWSER
 
-"No Hitter v0.16.5 Browser.zip" is a static website. Upload its
+"No Hitter v0.17.0 Browser.zip" is a static website. Upload its
 contents unchanged to a static host with index.html at the web root, then share
 that URL. See WEB-README.txt in the browser package for local testing and save
 details. It cannot be run reliably by double-clicking index.html.
 
 MACOS — INTEL OR APPLE SILICON
 
-1. Open "No Hitter v0.16.5 macOS Universal.dmg".
+1. Open "No Hitter v0.17.0 macOS Universal.dmg".
 2. Drag No Hitter into Applications, or run it from the disk image.
 3. The build is ad-hoc signed but not Apple-notarized. On first launch,
    Control-click the app and choose Open. If macOS still blocks it, open
@@ -57,13 +57,14 @@ Linux:
   ~/.local/share/godot/app_userdata/One Foot Per Second/
 
 The renamed game deliberately keeps this original data directory. The save is
-named one_foot_per_second_save.json. The in-game EXPORT and LOAD
-buttons are the preferred way to move or back up progress on every platform.
+named one_foot_per_second_save.json. Normal updates retain that data automatically;
+the in-game EXPORT and IMPORT buttons are the optional portable backup and
+cross-device transfer path.
 Automatic writes validate a pending generation and retain the previous valid
 save as one_foot_per_second_save.backup.json. An unreadable or newer-schema save
 is protected from automatic overwrite until LOAD or an explicit typed RESET.
-Browser autosaves are local to that browser and site; use EXPORT before clearing
-site data, changing browsers, or changing devices.
+Browser autosaves are local to that browser and site; EXPORT is recommended
+before deliberately clearing site data, changing browsers, or changing devices.
 
 UPDATES
 
@@ -78,9 +79,9 @@ commercial platform signing. Install the downloaded replacement over the old
 copy (or replace the portable folder); progress remains outside the app. For the
 most seamless app-like update experience, install the browser PWA instead.
 
-Offline catch-up simulates up to seven days. Strikeout XP begins at 1% of the
-open-game award and asymptotically approaches 75% with Scorebook Study. A return popup
-shows the exact XP deposited and the multiplier that was used.
+Offline catch-up simulates up to seven days. Strikeout XP and Mastery begin at 1%
+of their open-game awards and asymptotically approach 75% with Scorebook Study.
+A return popup shows the exact deposit and multiplier that were used.
 
 CONTENTS
 

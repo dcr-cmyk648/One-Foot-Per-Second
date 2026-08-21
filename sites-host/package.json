@@ -1,6 +1,6 @@
 {
   "name": "no-hitter-site",
-  "version": "0.16.5",
+  "version": "0.17.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

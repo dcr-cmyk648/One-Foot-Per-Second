@@ -1,179 +1,166 @@
-# No Hitter — v0.16.5 Balance Audit
+# No Hitter — v0.17.0 Balance Audit
 
-## Outcome
+## Acceptance policy
 
-The complete campaign is long but finite, every prestige layer changes the strategy, and no tested stage requires loot or mathematically perfect gear. The deterministic no-loot runners currently reach:
+The release is balanced against deterministic, frequent-decision, no-loot runners. They choose the strongest saved draft offer for the current frontier, prefer impactful one-time purchases, spend a limited share on Training, farm backward when that produces more XP per second, and prestige when a physical or probability wall is more rational than another asymptotic rank.
 
-| Milestone | Approximate active-production time |
+This is an aggressive reference player, not a promised completion clock. Random equipment is disabled, active tapping is not required, no unbounded auto-clicker rank is used as hidden power, and no story encounter is skipped. A real player who checks in less often, explores builds, farms favorites, or attempts challenge achievements will take longer.
+
+Current measured landmarks:
+
+| Milestone | Deterministic no-loot time | Physical state |
+|---|---:|---|
+| Human league complete / first Xylophax contact | about 8 h 45 m–10 h 45 m | 115 mph |
+| First playable alien championship complete / Octathulhu contact | about 2 d 17 h | about Mach 5,000 |
+| First eldritch ascension | about 2 d 18 h | universe consumed |
+| Final Octathulhu reached | about 69 d 15 h with coarse late-game decisions | 5,000c |
+| Cosmic resolution | positive finite final-K odds plus focused final-boss contract | 5,000c |
+
+The complete runner has a generous 120-day guardrail so tuning changes fail loudly rather than hanging forever. Exact prestige timing is intentionally seed- and choice-sensitive; the important invariants are meaningful frontier shocks, viable backward farming, multiple resets before each new league clear, and finite physical-license savings.
+
+## Opening state
+
+The fresh player has:
+
+- 1.00 ft/s release speed;
+- 3 ft range and a literal 3.00-second flight;
+- 0.25 recoveries/s, so a four-second windup begins only after the prior pitch resolves;
+- 0.45 internal Quality;
+- approximately 51.37% called-Strike probability against the first toddler;
+- approximately 21.51% completed-strikeout probability per plate appearance.
+
+That is deliberately bad, but it is not the former `0.25³` dead zone. A strikeout pays 5 base XP rather than the old 15 XP windfall, and every called Strike banks visible matchup Mastery even when the plate appearance later fails.
+
+Human baseball enforces one unresolved ball and a 0.72/s effective Recovery ceiling before equipment. Speed, flight time, batter handoff, and outcome odds therefore all matter; Recovery alone cannot turn youth baseball into an invisible projectile hose.
+
+## Count-state math
+
+The live and aggregate solvers use the same absorbing `(Strikes, Balls)` state machine:
+
+- Strike advances the count and may complete the strikeout;
+- Foul advances unless one Strike remains to completion;
+- Ball advances and a completed walk terminates like a Single;
+- saved contact and two-strike Fouls consume time without erasing the count;
+- unsaved fair contact ends the batter;
+- only strikeout is an XP-paying terminal state;
+- simultaneous post-human balls may advance several counters at one impact.
+
+Alien opponents progress from three toward eight required Strikes and up to four bats. Eldritch opponents reach 64 Strikes and eight bats. Genetic count compression applies only post-human and never reduces the requirement below three. The original larger count continues to determine payout.
+
+## Mastery and Determination
+
+Mastery weights per independently resolved ball are:
+
+| Outcome | Relative ordinary Mastery |
 |---|---:|
-| Human baseball cleared | 12 h 05 m |
-| Portal HELP becomes available | about 12 h 05 m |
-| Complete human development | 115 mph; 0.72 recoveries/s |
-| First cosmic victory | 12 d 06 h |
+| Grand Slam | 0 |
+| Home Run | 0 |
+| Triple | 0.08 |
+| Double | 0.12 |
+| Single | 0.18 |
+| Foul | 0.05 |
+| Ball | 0.025 |
+| Strike | 1.00 |
 
-These are deterministic open-game baselines with frequent optimal purchasing, every affordable body development, and strategically timed resets. A player who explores, attempts the toddler-only human clear, farms a favorite batter, or checks in less often will take longer. Automation reduces management after the first rebirth; offline progress simulates up to seven days but never makes an irreversible prestige choice or advances Xylophax's witnessed humiliation meter. Offline strikeout XP and called-Strike mastery both begin at 1% of their open-game awards, and Scorebook Study approaches 75% with diminishing returns.
+A strikeout also adds half a completed count’s base mastery as a completion bonus. Filling the requirement cannot unlock the next level without a strikeout. Excess mastery adds `0.12 internal Quality × log₂(1 + mastery / requirement)` and, after the requirement, small logarithmic XP and loot bonuses.
 
-Automation is purchased as bounded capacity rather than an all-or-nothing skip. Each genetic Migratory Baseball Instinct rank licenses one of the 29 human destinations; each eldritch Interstellar Road-Trip Itinerary rank licenses one of the 10 alien destinations. Autonomic Coaching buys one independently chosen repeatable-stat license per rank, while the later Front Office purchases whole one-time catalogs only when their individual switches are enabled. No automation performs a prestige reset or bypasses an unwitnessed story gate.
+Determination severity is Grand Slam `+12`, Home Run `+8`, Triple `+5`, Double `+3`, Single `+1`, Ball `+0.20`, Foul `+0.10`, and Strike `+0`. Every resolved ball contributes independently. Four points grant the first `+0.08` internal Quality step; each later equal step needs twice the accumulated score. A strikeout resets the score.
 
-The runner obeys the same human cadence as the field: one wind-up, one unresolved ball, full flight, impact, lineup change if needed, then the next wind-up. That is intentionally slower than a generic pitches-per-second spreadsheet and prevents hidden pitches from occurring while the visible ball or batter is unresolved.
+Quality, Threat, and Determination are displayed as whole-number game ratings at ×1,000 presentation scale. Simulation remains in compact internal units; values too large or small for a useful fixed display use scientific notation.
 
-## Why strikeout-only income works
+## Difficulty shape
 
-The fresh Dead-Fish Lob has a **39.75%** Strike probability. Fouls can add strike one or two, Balls can produce a walk, and fair hits end the plate appearance. Solving the complete `(Strikes, Balls)` state machine gives an **11.841%** fresh strikeout probability per plate appearance. That is bad enough to sell the joke without making three Strikes feel like three independent one-in-four miracles.
+Every league has eleven three-level sub-eras. Within a sub-era, progress is visible but not a total reset. The next sub-era applies a larger threat/range/count/bat shock and creates a high-value draft decision. The no-loot runner regularly falls from comfortable odds into low-single-digit completed-strikeout odds, then recovers through a mixture of backward farming, choices, projects, and permanent upgrades.
 
-The idle solver uses the same exact absorbing model at every level:
+The human called-Strike floor is 2.5%. It prevents a mathematically miserable early softlock while still permitting late-human strikeout odds below one tenth of one percent because three Strikes, Balls, Fouls, and fair contact all interact. The floor disappears after human baseball, where arms, bats, count compression, saved hits, and repeated prestige provide additional tactical axes.
 
-- a Foul advances the Strike count unless two Strikes are already present;
-- a Ball advances the Ball count and a completed walk ends the batter like a Single;
-- protected hits and two-strike Fouls are self-loops that consume pitches and time without erasing the count;
-- an unprotected fair hit terminates the at-bat;
-- a completed Strike count is the only XP-earning terminal state;
-- post-human volleys can advance a count by more than one at impact.
+Sticky Bambino, Xylophax, Ball-rog, and Octathulhu gates cannot be replaced or completed offline. First-contact exhibitions force their story outcomes rather than offering a misleading `0.0001%` lottery.
 
-XP remains strikeout-only, but every called Strike now banks one live-count share of that opponent's former strikeout mastery award. A normal three-Strike count still produces the same total mastery as before; receiving it incrementally means an unlucky early run always makes visible progress. Mastery also makes that exact matchup easier by `+120 displayed Quality × log₂(1 + mastery / requirement)`.
+## XP and spending
 
-Frustration is based on bad results rather than elapsed time: Grand Slam `+12`, Home Run `+8`, Triple `+5`, Double `+3`, Single `+1`, Ball `+0.20`, Foul `+0.10`, and Strike `+0`. Every independently resolved ball contributes its own severity, so a disastrous multi-arm volley is appropriately frustrating. Its quality bonus is `+0.08 × log₂(1 + frustration / 4)`; a completed strikeout resets it. Closed-form offline play retains the expected bad-result tail after its final strikeout. Both adaptation curves are uncapped but logarithmic, so they smooth ugly runs without replacing upgrades or guaranteeing an immediate result. The interface displays these compact simulation ratings at `×1000`: for example, internal `0.039` is `39`, internal `6` is `6000`, and unwieldy values use scientific notation.
+Range has no XP multiplier. Each opponent owns a calibrated strikeout bounty; farther range is already represented by physical flight, drag, threat, and the opponent’s direct reward.
 
-The fully purchased audit profile reaches a 100% Strike result, and its 2,048-ball terminal volley exceeds Octathulhu's 61 live Strikes after compression. That final form is intentionally a victory lap. Earlier eldritch builds still have smaller volleys and imperfect odds, so they depend on count preservation: genetics guarantee saves on Singles, Doubles, and Triples; five clone ranks leave `0.60⁵ = 7.776%` ordinary-hit failure; portals apply a second independent save layer. Grand Slams remain unsavable at every stage.
+The economy has three lanes:
 
-## Counts, payout, and downtime
+1. Training costs grow exponentially and provides small repeatable deltas. Every visible base stat has one axis. x10/x100 price the exact sum of sequential rounded ranks and buy the full batch or nothing.
+2. Ball shells replace one another. They are meaningful payload upgrades without pretending to render payload as extra fake projectiles.
+3. Facilities use 256× their authored baseline price, with premium human capital projects another 4× above that. Their multiplicative effects remain exciting, but the first-lifetime policy buys roughly one or two catalog items per numbered frontier rather than every revealed project immediately.
 
-Human baseball keeps three Strikes and four Balls throughout. Alien counts climb from four to nine Strikes and eventually shrink to three Balls; eldritch counts climb through 12, 18, 28, 42, and 64 Strikes while the last two gods allow only two Balls. Genetic Strike compression affects only post-human opponents and can never reduce the requirement below three.
+Training is deliberately the fallback sink, not the best answer to every wall. Speed has high early value and modest built-in Quality. Command remains useful but its repeatable delta is smaller than a strong pitch draft or Facility. At the physical ceiling, Speed Training bends continuously into an asymptote and reports its real next-rank delta; the finite prestige velocity tracks are the practical way through Mach/c licenses.
 
-Only the final Strike pays. The opening bounty ramps by one base XP per opponent until it meets the normal five XP per unmodified required Strike:
+## Physical anchors
 
-| Opponent / base Strike count | Strikeout base XP |
-|---|---:|
-| Human level 1 | 5 |
-| Human level 2 | 6 |
-| Human level 5 | 9 |
-| Human level 10 | 14 |
-| Human level 11+ / 3 | 15 |
-| Post-human / 4 | 20 |
-| Post-human / 6 | 30 |
-| Post-human / 9 | 45 |
-| Post-human / 12 | 60 |
-| Post-human / 18 | 90 |
-| Post-human / 28 | 140 |
-| Post-human / 42 | 210 |
-| Post-human / 64 | 320 |
+| Boundary | Range concept | Body ceiling / license |
+|---|---|---:|
+| Fresh | 3 ft | 1 ft/s |
+| Human finale | regulation baseball | 115 mph |
+| Alien finale | Olympus Mound / planetary arc | Mach 5,000 |
+| Final defense | Earth orbit to Pluto | 5,000c |
 
-Compression retains the original payout. A six-Strike alien compressed to three still pays 30 base XP.
+The championship gate accepts 80% of the post-human era ceiling so an asymptotic stat never requires mathematical infinity. The display and representative pitches still approach the named anchor. Eight genetic Fast-Twitch tiers and six eldritch Velocity Without Distance tiers make those trials reachable across multiple meaningful resets without perfect loot or an impossible repeatable-rank bill.
 
-Every completed plate appearance includes a three-second lineup-change baseline. The outcome cards show only the additional delay:
+Human air drag uses the released shell and distance. Plate speed is `release × e^(−kd)` and travel integrates the same deceleration. Alien/eldritch atmosphere is authored by environment. A released projectile never changes because an upgrade was bought after release.
 
-| Terminal outcome | Added delay | Total fresh delay |
-|---|---:|---:|
-| Grand Slam | +9 s | 12 s |
-| Home Run | +5 s | 8 s |
-| Triple | +3 s | 6 s |
-| Double | +2 s | 5 s |
-| Single | +1 s | 4 s |
-| Walk | +1 s | 4 s |
-| Strikeout | +0 s | 3 s |
+## Run choices
 
-Fouls are not terminal. Lineup Hustle subtracts `0.15 s` per rank from the universal three-second baseline, down to 1.5 seconds. Shake It Off subtracts `0.05` per rank from the factor applied only to the added fair-hit delay, down to `×0.60`. Facility multipliers stack separately, and later Time Compression divides the completed downtime. Reliable pitching therefore earns the only payout and returns to an occupied plate sooner.
+Every finite level grants a perk draft. Its level equals the defeated level, so identical names remain valuable later. Every sub-era finale guarantees Rare-or-better quality and grants a separate Pitch draft. Prestige can add choices and rarity weight, but the baseline board always has a viable stat-category spread and deterministic fallback.
 
-## Achievement income
+The choice-aware audit saves every offer and scores the actual resulting state rather than assuming every perk exists. A poor draft can be slower, but no tested draft needs perfect gear or a specific single card to satisfy a physical gate. Corrupted cards remain optional high-variance build tools because their negative stat is serialized alongside their 2–3× positive effect.
 
-The 130 achievements are deliberately modest individually and additive rather than multiplicative with one another:
+## Multi-ball and defense
 
-```text
-achievement XP multiplier = 1 + completed achievements × 0.005
-```
+Each ball is authoritative. A volley shares pitch identity and speed family, not outcome.
 
-Ten achievements therefore produce `×1.05`, fifty produce `×1.25`, and all 130 produce `×1.65`. The multiplier applies alongside ball, opponent, prestige, mastery, and equipment factors and survives every prestige reset. Level-assigned range never multiplies income. The dedicated first-lifetime runner reaches the human boundary in 12 hours 05 minutes, and the complete no-loot multiverse runner reaches its first cosmic victory in 12 days 06 hours. A hidden achievement provides no mechanical or narrative clue before its subject is encountered. **Past Your Bedtime** rewards completing human baseball without leaving the Toddler stage. **Puberty Has Entered the Bullpen** marks the Teenager body. **Wait… That’s Illegal** marks the first post-human pitch. Twenty-one newer event-driven achievements cover post-rebirth toddler bullying, simultaneous double/triple/thousand Strikes, hits and Strikes together, bat overload, impossible base arithmetic, multi-ball strikeouts, and full eight-outcome chaos. The final No Hitter slot remains an extreme post-victory replay challenge rather than baseline progression: a God Prestige opens the attempt, any fair contact—including a saved hit—spoils it, and known prestige exhibitions pause before throwing so scripted story contact cannot make it impossible.
+- Every ball beyond visible bat coverage multiplies remaining contact by 0.18 again.
+- Every surplus bat attacks the remaining no-contact chance with the reciprocal 0.42 factor.
+- Arms add real simultaneous capacity.
+- Clone count determines immutable spatial coverage.
+- Catch practice determines the independent catch roll.
+- Fielding clearance determines which hit severity is eligible.
+- Grand Slams are never eligible.
 
-## Complete reset cadence
+A human catch retires the batter without XP. A post-human catch preserves the count. Mixed simultaneous results stack Strikes, Balls, bases, and delays before terminal-state resolution.
 
-The current greedy no-loot audit uses 12 genetic and eldritch resets before its first cosmic victory. The exact sequence is not mandatory. Cube-root DNA rewards favor meaningful jumps rather than constant restarts, while Arcana's `0.60` exponent rewards accumulated DNA across several lifetimes before destroying a reality. Early DNA priorities are arms—which now grant their own ball capacity—count compression, fielding, speed/quality, aggressive Recovery from Alternating Pitching Lobes and Elastic UCL Colony, then automation. Eldritch priorities are clones and portals for count survival, geometry and Time Compression for the visual salvo and cadence, velocity for the final gate, and quality/mastery for huge counts.
+## Tapping and automation
 
-## Speed and rate calibration
+Manual and automatic input share a rolling 1.5-second tap rate. The effective timer-speed bonus uses a saturating curve with separate rapid-burst fatigue. Long phases receive up to substantially more help than a one-second phase, but input always acts on a shrinking remaining duration rather than deleting a fixed fraction.
 
-- The first released pitch is exactly 1 ft/s and takes three real seconds to cross three feet.
-- Pitch type then supplies a small speed range; the exact sampled speed is shown in the field and remains immutable in flight.
-- Human development caps at 115 mph without equipment: a little beyond the fastest verified real pitch rather than twice it.
-- Alien biology caps at Mach 12; the alien championship gate requires Mach 3.
-- Eldritch bodies can reach exactly 1c; Octathulhu rejects anything slower.
-- Fresh recovery is `0.25 pitches/s`: a four-second wind-up before flight.
-- Human recovery approaches a combined `0.72/s` cap before equipment, or about 1.39 seconds of wind-up at the limit. Human play still permits only one unresolved pitch, so recovery starts after impact and travel time remains visible.
+Auto-tapper rate grows logarithmically and has no authored rank cap. Eldritch clicker count is separately repeatable. Neither unbounded axis is included as required power in the no-active-input pacing audit.
 
-Human air drag is deterministic per released shell and range. Plate speed uses `v_plate=v_release×e^(−kd)` and physical travel integrates that deceleration exactly; the untouched opening Wiffle Ball uses zero drag to preserve the literal title joke. Purchased lightweight balls lose visibly more speed than regulation leather, while alien and eldritch vacuum fields use zero drag. Release speed, plate speed, drag coefficient, range, and duration are immutable once a ball leaves the hand.
+Automation is capacity-based and never prestiges automatically:
 
-Speed Training always retains another exponentially priced rank. Raw speed is unchanged through 85% of the current body's cap, then a continuous exponential curve approaches the cap without crossing it or switching the purchase off. The card reports the exact effective next-rank change, so BODY and Facility multipliers remain visible in the decision.
+- one genetic license per repeatable Training stat;
+- one genetic human destination per auto-advance rank;
+- one eldritch alien destination per auto-advance rank;
+- later eldritch switches for one-time catalogs;
+- no bypass of pending choices or unwitnessed story gates.
 
-## Cost and content cadence
+## Loot and achievements
 
-The optional BODY catalog contains 12 sequential ages—Toddler, Preschooler, Grade-School Kid, Preteen, Young Teen, Teenager, Older Teen, Young Adult, Adult, Prime-Age Adult, Veteran Adult, and Regular Ol’ Guy. Costs run from 3 XP to 150B XP and arrive alongside the matching human leagues. Their individual speed multipliers stay between `×1.025` and `×1.04`; Quality adds only `12–18` on the displayed scale, recovery adds only `×1.006–1.015`, and visual size rises gradually from `×1.00` to `×1.32`.
+Loot is disabled in pacing runners. Normal equipment remains a moderate sidegrade with one to three affixes and aggregate stat caps. Relics are intentionally much larger one-stat effects but have limited slots. Opponent-visible rarity controls the drop pool; overmastery can favor better worn pieces but cannot invent a future tier.
 
-Twelve optional BODY modifiers share that tab in paired build choices. Playground Conditioning and Cardio Basics begin the split; later pairs cover strength versus conditioning, Creatine versus mobility, Suspicious Vitamins versus professional nutrition, advanced strength versus altitude cardio, and Extremely Obvious Steroids versus professional rehab. They are one-time multiplicative purchases, not duplicate additive Training buttons. The opening 1 ft/s, 0.45-Quality, 0.25/s body remains a deliberately weak toddler. Body purchases do not raise the human cap, and skipping them remains a valid challenge route rather than a progression softlock.
+There are 130 achievements. Each adds an additive 0.5% XP, so the complete current catalog supplies ×1.65. The large catalog is permanent flavor and a modest long-run bonus, not a prerequisite for the first clear. Unknown secret achievements reveal no future nouns or mechanics.
 
-Ordinary Training has one clear purchase per displayed base stat:
+## Offline and renderer limits
 
-| Training | Unlock level | Effect per rank | Cost growth | Limit |
-|---|---:|---|---:|---:|
-| Speed Training | 1 | raw speed +0.75 ft/s; asymptotic above 85% of body limit | ×1.18 | none |
-| Command Drills | 2 | base Quality +18 displayed | ×1.18 | none |
-| Field Hustle | 3 | remaining gap to 4% ×0.92 | ×1.62 | none |
-| Recovery Drills | 4 | remaining gap to 0.48/s ×0.90; human total soft-caps from 0.60 toward 0.72/s | ×1.42 | none |
-| Scorebook Study | 5 | remaining gap to 75% ×0.94 | ×1.55 | none |
-| Long-Toss Mechanics | 6 | remaining distance threat ×0.94 | ×1.58 | none |
-| Lineup Hustle | 8 | remaining gap to 1.25s ×0.90 | ×1.82 | none |
-| Shake It Off | 10 | remaining hit-delay gap to ×0.35 ×0.90 | ×1.82 | none |
-| Pitch Calling | 12 | best-option bias +0.85 × ln(rank + 1) | ×1.72 | none |
-| Core Transfer | 13 | base payload +0.01× | ×1.76 | none |
-| Scouting Notebook | 14 | base mastery gain +0.015× | ×1.78 | none |
-| Seam Conditioning | 15 | air drag ×0.985 | ×1.80 | none |
-| Contract Incentives | 17 | base strikeout XP +0.01× | ×1.84 | none |
-| Locker-Room Networking | 19 | remaining gap to 100% loot chance ×0.995 | ×1.88 | none |
-| Competitive Memory | 21 | Frustration quality per doubling +1% | ×1.92 | none |
+Offline simulation covers up to seven days. XP and Mastery begin at 1% efficiency and approach 75% through Scorebook Study. Offline play may fill ordinary Mastery but cannot perform a prestige, choose a draft, fill a witnessed exhibition, or bypass a sticky boss.
 
-Only Speed begins unlocked; the other 14 axes appear gradually. Every displayed base stat has one repeatable Training purchase. Distinct operations intentionally stack across systems: Training raises the additive base or approaches a transparent asymptote, while one-time Facilities and BODY choices multiply the completed stat.
+The finite design tops out at a 2,048-ball volley. Native rendering reserves the entire volley. Browser rendering shows 512 weighted representatives after the exact scene becomes unreadable, while the solver still resolves every ball. A hard 20,000 physical-balls/s guard keeps pathological imported saves finite.
 
-Active field taps begin at 1.7% on a timer of one second or less. Duration adds a saturating bonus: a fresh ten-second wait advances by exactly 0.5 seconds per tap, and even an arbitrarily long timer gains at most four additional percentage points. Repeatable Field Hustle independently raises the base toward 4%. A quarter-second moving burst rate leaves roughly four taps per second or less untouched, then applies a smooth inverse-hypotenuse reduction above that grace rate. This makes very fast manual and automatic input approach finite sustained throughput instead of scaling linearly. Separate same-timer diminishing returns multiply each advance by the share of the original timer that input has not already supplied. There is no fixed 50% wall: the effect approaches completion smoothly while the authoritative timer and visible meter remain synchronized.
+## Release gates
 
-The first genetic auto-clicker rank supplies `0.20 clicks/s` from one clicker. Rank `r` supplies `0.20 × log2(r + 1)` clicks/s per clicker with no authored maximum and raises burst tolerance from the base `8/s` to `8 × (1 + 0.50 × log2(r + 1))/s`. Each repeatable eldritch Hands rank adds one clicker, and every clicker inherits both genetic values. Aggregate/offline cycle math solves the same duration curve, sustained-fatigue estimate, and same-timer asymptote used by the foreground field.
+The automated release is rejected if any of these fail:
 
-Thirty-one pitch types, 26 replacement ball shells, and 84 one-time facilities/projects run from level 1 through level 45. Facilities are costly, high-impact multipliers: effective prices are `×4` their authored baseline, while the premium human project lane is `×8`, so large balances retain aspirational targets instead of collapsing into repeatable Command. Several purchases are gated by actual measured speed, a campaign level that supplies the required range, or lifetime Strikeouts. Human chemistry now lives in BODY, where Suspicious Vitamins arrive long before Extremely Obvious Steroids. Every tab is sorted by unlock level and cost; Pitch, Ball, Facility, and BODY each have an independent saved Hide Purchased filter. Every learned pitch joins the automatic mix; Pitch Calling gradually favors stronger options instead of deleting weaker pitches. The 14 post-human pitches use much larger bonuses and meaningful speed/Quality detriments, including Gazorpian Strudelball, Bubonic Swerve, and The Pitch of the First Death. Ball shells replace rather than multiply one another, so the strongest owned payload is easy to understand. Railgun Jackets, plasma, and causal construction begin only after the human story boundary.
-
-Opponent mastery is authored as completed-count equivalents rather than one global exponential. Human targets begin at 5.6 ordinary strikeouts and rise to roughly 55 at the MLB Champion; the former curve ended above 1,200. Alien targets begin at 50 uncompressed counts and rise with their four-to-nine-Strike rules; eldritch targets rise more sharply because one clone volley can contribute many called Strikes. Every called Strike still awards one count-share immediately. Late-human threat anchors rise more aggressively, so the ladder's resistance comes from earning rare strikeouts against better batters rather than repeating an already-solved matchup. Direct human opponent bounties grow by `×2.015` per level; the alien and eldritch continuations use their own steeper authored curves. These bounties replace the former distance-income factor rather than inheriting it, so range remains a physics/difficulty axis only. Inherited Scorebook Cortex multiplies the live requirement by `0.85^rank`; the same reduced threshold controls unlocks, full bars, cosmic completion, matchup adaptation, and the start of logarithmic farming bonuses. Auto-scout evaluates the expected XP-per-second model across unlocked opponents at their assigned ranges.
-
-## Renderer and simulation budget
-
-Human baseball is fixed at one unresolved ball and its Recovery ceiling is unchanged. Post-human sources come from arms, clones, and time layers; arms automatically grant matching usable capacity, while eldritch geometry raises the complete volley to 2,048 balls. Every real ball samples an independent outcome, saved-hit flag, count contribution, Frustration contribution, and return path while sharing the pitch type sampled for that volley. Once the ball index exceeds the batter's visible bat count, its remaining contact chance is multiplied by `0.18` again for each uncovered ball. Matching outcomes use Double/Triple/etc. calls; mixed hit bases and fair-hit delays add, while Strike and Ball totals can independently complete the same plate appearance. Alternating Pitching Lobes grants `Recovery ×2`, Elastic UCL Colony `×1.50`, and Time Compression `×2`, all downstream of the human ceiling. The native MultiMesh reserves 4,000 outbound balls, so every designed projectile renders one-for-one. The browser profile draws 512 outbound representatives before applying a visible weight, without changing the simulated volley or its rewards. Stars and visually dense return volleys are drawn in batches, with smaller browser-only cosmetic ceilings. On the development Mac's Radeon Pro 560X, the fresh native scene holds 60 FPS; a ten-second complete stress run spans 44–60 FPS across launch, impact, and return phases, with most samples at 58–60. A 20,000 balls/s physical-throughput ceiling keeps all economy values finite.
-
-At readable rates, projectile creation is driven only by authoritative release events. A release snapshots pitch type, exact speed, distance, duration, color, path, and source hand. Movement and upgrades cannot mutate it. No release occurs while the plate is empty or while the previous human pitch is unresolved, and returning a batter never creates a catch-up burst.
-
-Dense and offline production use the exact count-state renewal model rather than iterating every pitch. It retains terminal-outcome mix, saved-hit volume, walks, strikeouts, downtime, mastery, and statistically equivalent loot rolls while allowing seven days of offline play to resolve quickly. Raw strikeout XP and raw called-Strike mastery from that same solution are multiplied by the saved body's 1%–75% asymptotic offline efficiency before they reach spendable XP or the opponent's mastery total; foreground pacing audits explicitly use the full-rate path.
-
-## Verified failure modes
-
-The automated suite explicitly checks that:
-
-- hits, walks, Fouls, and partial Strikes cannot award XP; only called Strikes award mastery;
-- Fouls stop adding Strikes at two and four human Balls cause a walk;
-- unprotected hits and walks clear both counts and start the correct full downtime;
-- protected hits hold the count, while Grand Slams bypass every protection layer;
-- human counts stay at three Strikes/four Balls and post-human Strike compression never drops below three;
-- every release has exactly one authoritative simulation event and no pitch appears on an empty plate;
-- a released ball keeps its type, release speed, plate speed, drag, release distance, and travel time through upgrades or opponent changes;
-- choosing another unlocked batter during flight resolves that same pitch against the chosen target;
-- missed Strikes and Balls continue through the plate without an unexplained speed change;
-- the pitch and on-deck meters reflect their authoritative cooldowns;
-- each purchased body age affects speed, quality, recovery, subtitle, loadout, and rendered size while every reset begins as a toddler;
-- the toddler human-league clear unlocks only when no age has been purchased;
-- Xylophax remains at the plate with 100% Grand Slams under arbitrary stats, taunts after each one, fills HELP's twelve-hit meter only from witnessed impacts, and never advances from offline time;
-- all eight outcome cards remain compact and expose detail through tooltips;
-- every exact and bulk loot drop copies a player-wearable slot and rarity visible on the defeated batter; mastery may favor better worn gear but cannot invent an unworn rarity;
-- human opponents progress through Human Common–Unique and end fully Unique; alien and eldritch opponents expand the possible wardrobe with five new family tiers each while retaining older-family possibilities;
-- loot obeys Power sorting, no-auto-equip default, prestige-only auto-equip, item amplification, caps, starred protection, Scrap conversion, resets, inheritance, and save rules;
-- every level-gated catalog is displayed in unlock order, and alternate speed/range/Strikeout gates conceal effects until met;
-- the achievement catalog contains 130 unique entries, stacks exactly +0.5% XP apiece, persists through prestige and save/load, records simultaneous-volley event history, keeps every unencountered entry anonymous, and offers a saved Hide Achieved filter without making card text consume scroll gestures;
-- each one-time catalog filter is independent, saved, touch-sized on phone, and never hides locked or available purchases;
-- human and alien Auto-advance stop at their separately purchased destination capacities, while auto-buy purchases only explicitly licensed stats and catalogs;
-- progressive interface layers remain hidden until their story boundary;
-- a giant iOS-style resumed frame is split into a small live tick and one offline catch-up interval;
-- all 45 levels, costs, deterministic era-name combinations, signature names, traits, prestige boundaries, and migrations remain valid;
-- Octathulhu cannot be completed below 1c and cosmic victory fires only once.
-
-The remaining balance risk is deliberate: a player can select an aspirational opponent whose long count and authored range produce worse income than farming backward. Every unlocked opponent remains selectable, but its distance is fixed by level, so farming is a matchup decision rather than a repetitive "move closer" tax.
+- campaign is not exactly 33/33/33+1;
+- a fresh opening ball is not 1 ft/s for three physical seconds;
+- the no-loot human run cannot reach first contact at 115 mph;
+- the no-loot multiverse cannot pass Mach-5,000 and 5,000c licenses and reach level 100 inside the guardrail;
+- the focused witnessed-final-K contract cannot turn a ready level-100 Octathulhu into cosmic victory;
+- mastery-only contact unlocks a level;
+- offline play crosses a witnessed boss or exhibition;
+- a saved choice rerolls after load;
+- an old public save loses permanent progress;
+- balls in one volley share outcomes;
+- an abandoned volley resolves against a replacement batter;
+- desktop or 390×844 phone content clips outside its bounded viewport;
+- Web source hashes, artifact hashes, update metadata, and packaged archives disagree.
