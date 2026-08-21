@@ -2,7 +2,7 @@
 
 ## Status
 
-M1 and M2 are implemented and accepted from the clean published v0.17.1 baseline. M3 integration, exact-build browser acceptance, and packaging have passed; synchronized publication and live verification remain.
+Complete. M1 and M2 are implemented and accepted, and M3 packaged, published, and verified the synchronized v0.17.2 browser, native, Pages, and owner-only Sites release from the clean v0.17.1 baseline.
 
 ## Goal
 
@@ -125,7 +125,7 @@ Make a fresh human run feel like a narrated baseball life rather than an unexpla
 - [x] Defined product decisions and measurable adulthood target.
 - [x] Complete and accept M1 through one delegated Terra implementation milestone.
 - [x] Complete and accept M2 through one delegated Terra implementation milestone.
-- [ ] Complete M3 primary integration, browser acceptance, packaging, and synchronized deployment.
+- [x] Complete M3 primary integration, browser acceptance, packaging, and synchronized deployment.
 
 ### M1 accepted implementation and evidence
 
@@ -155,7 +155,10 @@ Make a fresh human run feel like a narrated baseball life rather than an unexpla
 - `package_all_platforms.sh` completed twice, with the corrected final run passing core, desktop UI, and portrait UI suites; exporting and validating macOS Universal, Windows x86_64/ARM64, Linux x86_64/ARM64, source, browser, desktop bundle, and all-platform bundle archives; and retaining only v0.17.2 artifacts.
 - `verify_web_parity.sh` passes against the final source tree. The Sites adapter builds from the same PCK (`985bc2789c7d25e586ebd81892eb8cfd0187831565af8e90dd075b664cf76a1c`) and all four rendered-host tests pass.
 - Tested the exact exported WebAssembly build through a temporary localhost server at 1280×720 and 390×844. Desktop and phone fresh-campaign pickers keep every slot action and Back control in-frame; an empty slot starts without typed reset; `THREE FEET OF DESTINY` is immediately visible and readable; the opening profile shows 1 ft/s, 3 ft, and −0.6% atmospheric drag; the Facility catalog starts with Hide Purchased enabled; and no browser warnings/errors appeared.
+- Published app commit `2c0aeca4210817261f6ffa4371a618e3468d7a86` to `main`. GitHub Pages workflow run `32499852549` completed successfully from that exact commit. The live update manifest reports v0.17.2, and the deployed 728,348-byte PCK hashes to `985bc2789c7d25e586ebd81892eb8cfd0187831565af8e90dd075b664cf76a1c`, matching the packaged build.
+- Published GitHub release `v0.17.2` with eight verified uploaded assets: browser, Universal macOS, Windows x86_64/ARM64, Linux x86_64/ARM64, release manifest, and checksums. Every GitHub-provided asset digest matches the local archive manifest.
+- Synced Sites source commit `ab724ea2dbe7e8550f55a5ee82c2c60eb9d637c7`, saved owner-only Sites version 32 as an 88-file archive (`sha256:4d6811a51bf93f3ab1e54c3c6abdc1fb3c340781c6a52b4c66602783d01f87eb`), and deployed it successfully as production deployment `appgdep_6a887691af7c81918dc419b9db040df5`. Access remains custom with exactly one allowed user and no groups; an unauthenticated request reaches the expected sign-in gate.
 
 ## Exact next action
 
-Publish the accepted v0.17.2 tree and verified assets, verify the GitHub Pages workflow/release and owner-only Sites version without opening either hosted page, record immutable release identifiers here, and perform the final Sol acceptance review.
+Release complete. Preserve v0.17.1 and Sites version 31 as rollback points; begin later feedback from the clean, published v0.17.2 baseline.
