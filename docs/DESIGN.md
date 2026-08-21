@@ -126,6 +126,8 @@ Each slot stores ten items. Equipped and starred items are protected; overflow s
 
 The Story tab stores every revealed beat and popup, newest first by default, with a saved Reverse Order switch. A fresh slot immediately presents the one-foot-per-second prologue; each authored first-lifetime human sub-era records its distinct arrival only when the player actually enters it after resolving rewards. Genetic-replay and eldritch-replay variants remain separate one-time entries. The title illustration and subtitle also advance only through known history.
 
+For future narrative work, read [the story voice seed](writing/story-voice-seed.md) first. It is the primary source for authorial voice and canonical story facts; shipped runtime copy remains authored in `scripts/run_content.gd`, never parsed from Markdown.
+
 Ordinary names use a broad grammar of single names, initials, multiple given names, surnames, nicknames, and era-appropriate titles. Authored bosses keep exclusive signatures. Later eras progressively relax the rules into alien and Elden-Ring-style absurdity.
 
 Achievements are permanent and additive at +0.5% XP each. Hidden achievements occupy visible anonymous slots but reveal no name, condition, progress, or future subject. New mechanics should normally ship with a few funny event achievements. The extreme secret No Hitter requires a complete post-victory campaign without any fair contact.

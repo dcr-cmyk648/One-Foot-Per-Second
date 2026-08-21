@@ -14,7 +14,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 28
+const SAVE_VERSION := 30
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -375,6 +375,7 @@ var purchased_body_modifiers: Array[String] = []
 var active_campaign_slot := -1
 var unlocked_achievements: Array[String] = []
 var achievement_event_totals := {}
+var live_action_achievement_totals := {}
 var achievement_revision := 0
 var catalog_hide_purchased := {
 	"pitch": true,
@@ -606,6 +607,15 @@ func get_run_body_adjectives() -> Array[String]:
 		if not adjective.is_empty() and adjective not in result:
 			result.append(adjective)
 	return result
+
+func get_run_body_adjective_effect_text(adjective: String) -> String:
+	var modifier_by_adjective := {
+		"athletic": "playground_conditioning", "buff": "pushup_phase",
+		"toned": "running_laps", "creatine-loaded": "creatine",
+		"suspiciously vitaminized": "suspicious_vitamins", "roided-out": "steroids",
+	}
+	var definition := Content.body_modifier_by_id(str(modifier_by_adjective.get(adjective, "")))
+	return str(definition.get("description", "Body effect unavailable."))
 
 func _perk_definition_is_offerable(
 	definition: Dictionary,
@@ -1196,6 +1206,8 @@ func _seed_legacy_story_journal() -> void:
 	if lifetime_genetic_rebirths > 0:
 		record_story("genetic_help", "", "", false)
 		record_story("first_rebirth", "", "", false)
+		if highest_unlocked >= 12:
+			record_story("rebirth_middle_school", "", "", false)
 	if highest_unlocked >= Content.ALIEN_FINAL_INDEX:
 		record_story("alien_olympus", "", "", false)
 	if eldritch_offer_unlocked or lifetime_eldritch_ascensions > 0:
@@ -1284,6 +1296,16 @@ func _load_run_and_story_state(data: Dictionary, saved_version: int) -> void:
 			story_serial = maxi(story_serial, int(entry.get("order", 0)))
 	else:
 		_seed_legacy_story_journal()
+	# This beat was introduced after genetic rebirths and needs the same durable
+	# once-only story identity as a live entry. Older saves that have already
+	# reached Middle School after time travel receive it quietly in their journal.
+	if (
+		saved_version < 30
+		and lifetime_genetic_rebirths > 0
+		and highest_unlocked >= 12
+		and "rebirth_middle_school" not in story_seen
+	):
+		record_story("rebirth_middle_school", "", "", false)
 	story_reverse_order = bool(data.get("story_reverse_order", false))
 	campaign_story_phase = str(data.get("campaign_story_phase", Campaign.league_for_index(current_opponent))).substr(0, 48)
 	endless_unlocked = bool(data.get("endless_unlocked", false)) and divine_ascensions > 0
@@ -1876,6 +1898,7 @@ func reset_fresh() -> void:
 	purchased_body_modifiers.clear()
 	unlocked_achievements.clear()
 	achievement_event_totals.clear()
+	live_action_achievement_totals.clear()
 	achievement_revision += 1
 	catalog_hide_purchased = {
 		"pitch": true,
@@ -2487,6 +2510,7 @@ func _resolve_elapsed(
 	offline_reward_multiplier := 1.0
 ) -> Dictionary:
 	var summary := _empty_resolution_summary()
+	summary["live_resolution"] = should_emit
 	_drain_orphaned_volley_events(summary)
 	var actual_seconds := maxf(seconds, 0.0)
 	current_run_seconds = minf(MAX_NUMBER, current_run_seconds + actual_seconds)
@@ -2692,7 +2716,8 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	pending_volley_distance_index = distance_index
 	pending_volley_drag_per_foot = drag_per_foot
 	pending_volley_opponent_index = current_opponent
-	_sample_pending_volley_interactions(current_opponent)
+	# The result is sampled now, so later shell purchases cannot affect this volley.
+	_sample_pending_volley_interactions(current_opponent, get_current_ball_profile().quality)
 	var outcomes: Array[int] = pending_volley_outcomes.duplicate()
 	var saved_flags: Array[bool] = pending_volley_saved_flags.duplicate()
 	var duration := get_resolved_flight_seconds_for_speed(
@@ -3141,7 +3166,8 @@ func _apply_volley_outcomes(
 		saved_hit_count,
 		struck_out,
 		resolved_opponent,
-		opening_plate_balls
+		opening_plate_balls,
+		bool(summary.get("live_resolution", true))
 	)
 	var call_lines := _build_volley_call_lines(
 		outcome_counts,
@@ -3219,14 +3245,27 @@ func _increment_achievement_event(id: String, amount := 1.0) -> void:
 		MAX_NUMBER
 	)
 
+func _record_live_action_achievement_totals(pitches: float, strikeouts: float, saved_hits: float, counts: Array, max_volley_size: int) -> void:
+	live_action_achievement_totals["pitches"] = minf(float(live_action_achievement_totals.get("pitches", 0.0)) + maxf(pitches, 0.0), MAX_NUMBER)
+	live_action_achievement_totals["strikeouts"] = minf(float(live_action_achievement_totals.get("strikeouts", 0.0)) + maxf(strikeouts, 0.0), MAX_NUMBER)
+	live_action_achievement_totals["saved_hits"] = minf(float(live_action_achievement_totals.get("saved_hits", 0.0)) + maxf(saved_hits, 0.0), MAX_NUMBER)
+	# Maximum balls in one live volley, never cumulative pitches.
+	live_action_achievement_totals["volley_size"] = maxf(float(live_action_achievement_totals.get("volley_size", 0.0)), float(maxi(max_volley_size, 0)))
+	for index in mini(counts.size(), Content.OUTCOME_NAMES.size()):
+		var key := "outcome_%d" % index
+		live_action_achievement_totals[key] = minf(float(live_action_achievement_totals.get(key, 0.0)) + maxf(float(counts[index]), 0.0), MAX_NUMBER)
+
 func _record_volley_achievement_events(
 	outcome_counts: Array[int],
 	unsaved_hit_counts: Array[int],
 	saved_hit_count: int,
 	struck_out: bool,
 	resolved_opponent: int,
-	opening_plate_balls: int
+	opening_plate_balls: int,
+	live_resolution: bool
 ) -> void:
+	if not live_resolution:
+		return
 	var volley_size := 0
 	var distinct_outcomes := 0
 	for count in outcome_counts:
@@ -3447,10 +3486,13 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, reward_multiplier
 	lifetime_pitches = minf(MAX_NUMBER, lifetime_pitches + pitch_count)
 	lifetime_strikeouts = minf(MAX_NUMBER, lifetime_strikeouts + strikeouts)
 	current_body_strikeouts = minf(MAX_NUMBER, current_body_strikeouts + strikeouts)
-	lifetime_saved_hits = minf(
-		MAX_NUMBER,
-		lifetime_saved_hits + float(summary.get("saved_hits", 0.0))
-	)
+	lifetime_saved_hits = minf(MAX_NUMBER, lifetime_saved_hits + float(summary.get("saved_hits", 0.0)))
+	if should_emit:
+		var max_live_volley_size := 0
+		for event_value in (summary.get("pitch_events", []) as Array):
+			if typeof(event_value) == TYPE_DICTIONARY and str((event_value as Dictionary).get("phase", "")) == "release":
+				max_live_volley_size = maxi(max_live_volley_size, int((event_value as Dictionary).get("ball_count", 0)))
+		_record_live_action_achievement_totals(pitch_count, strikeouts, float(summary.get("saved_hits", 0.0)), counts, max_live_volley_size)
 	_resolve_strikeout_loot(strikeouts, float(summary.elapsed_seconds), summary, reward_opponent)
 	opponent_mastery[reward_opponent] = minf(
 		MAX_NUMBER,
@@ -3460,9 +3502,11 @@ func _apply_resolution(summary: Dictionary, should_emit: bool, reward_multiplier
 	_apply_determination_summary(summary)
 	summary.unlocked_message = _check_opponent_unlock(
 		strikeouts,
-		should_emit and reward_multiplier >= 0.999999
+		should_emit and reward_multiplier >= 0.999999,
+		reward_opponent
 	)
-	check_achievements()
+	if should_emit:
+		check_achievements()
 	last_batch = summary
 	if should_emit and (pitch_count > 0.0 or released_count > 0.0):
 		batch_resolved.emit(summary)
@@ -4311,20 +4355,22 @@ func get_outcome_probabilities_for_volley_ball(
 	pitch_speed_fps: float,
 	ball_index: int,
 	opponent_index: int = current_opponent,
-	distance_index: int = -1
+	distance_index: int = -1,
+	ball_quality_bonus: float = -1.0e30
 ) -> Array[float]:
 	return _apply_bat_overload_penalty(
 		get_outcome_probabilities_for_pitch(
 			pitch_id,
 			pitch_speed_fps,
 			opponent_index,
-			distance_index
+			distance_index,
+			ball_quality_bonus
 		),
 		maxi(ball_index, 0),
 		opponent_index
 	)
 
-func _sample_pending_volley_interactions(opponent_index: int) -> void:
+func _sample_pending_volley_interactions(opponent_index: int, ball_quality_bonus: float = 0.0) -> void:
 	pending_volley_outcomes.clear()
 	pending_volley_saved_flags.clear()
 	for ball_index in maxi(pending_volley_size, 1):
@@ -4333,7 +4379,8 @@ func _sample_pending_volley_interactions(opponent_index: int) -> void:
 			pending_volley_speed_fps,
 			ball_index,
 			opponent_index,
-			pending_volley_distance_index
+			pending_volley_distance_index,
+			ball_quality_bonus
 		))
 		var saved := sample_hit_save(outcome, opponent_index)
 		pending_volley_outcomes.append(outcome)
@@ -4417,8 +4464,9 @@ func get_pitch_speed_range(pitch_id: String) -> Vector2:
 	var definition := Content.pitch_by_id(pitch_id)
 	if definition.is_empty():
 		definition = Content.pitch_by_id("dead_fish")
-	var base_speed := get_velocity_fps()
-	var gear_limit := get_velocity_cap_fps() * (1.0 + float(get_equipment_bonuses().speed_bonus))
+	var shell_speed := float(get_current_ball_profile().speed)
+	var base_speed := get_velocity_fps() * shell_speed
+	var gear_limit := get_velocity_cap_fps() * (1.0 + float(get_equipment_bonuses().speed_bonus)) * shell_speed
 	return Vector2(
 		minf(base_speed * float(definition.get("speed_min", 1.0)), gear_limit),
 		minf(base_speed * float(definition.get("speed_max", 1.0)), gear_limit)
@@ -4444,15 +4492,17 @@ func get_outcome_probabilities_for_pitch(
 	pitch_id: String,
 	pitch_speed_fps: float,
 	opponent_index: int = current_opponent,
-	distance_index: int = -1
+	distance_index: int = -1,
+	ball_quality_bonus: float = -1.0e30
 ) -> Array[float]:
 	if (
 		(opponent_index == current_opponent and not special_encounter.is_empty())
 		or is_speed_gate_blocked(opponent_index)
 	):
 		return [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-	var margin := (
-		get_pitch_quality_for_pitch(pitch_id, pitch_speed_fps)
+	var resolved_ball_quality: float = float(get_current_ball_profile().quality) if ball_quality_bonus < -1.0e20 else ball_quality_bonus
+	var margin: float = (
+		get_pitch_quality_for_pitch(pitch_id, pitch_speed_fps) + resolved_ball_quality
 		+ get_opponent_mastery_quality_bonus(opponent_index)
 		+ get_determination_quality_bonus()
 		- get_effective_opponent_difficulty(opponent_index, distance_index)
@@ -5478,12 +5528,59 @@ func get_pitch_rate() -> float:
 	# Actual throughput also includes immutable flight and batter replacement.
 	return minf(get_recovery_rate() * float(get_volley_size()), MAX_PHYSICAL_PITCH_RATE)
 
+func get_current_ball_definition() -> Dictionary:
+	var current: Dictionary = {}
+	for definition_value in Content.BALL_UPGRADES:
+		var definition: Dictionary = definition_value
+		if str(definition.id) in purchased_ball_upgrades:
+			current = definition
+	return current
+
+func get_current_ball_profile() -> Dictionary:
+	var definition := get_current_ball_definition()
+	var profile: Dictionary = Content.BALL_PROFILES.get(str(definition.get("id", "")), {})
+	return {
+		"payload": float(profile.get("payload", definition.get("potency", 1.0))),
+		"speed": float(profile.get("speed", 1.0)),
+		"quality": float(profile.get("quality", 0.0)),
+		"drag": float(profile.get("drag", 1.0)),
+	}
+
+func get_ball_profile_text(id: String = "") -> String:
+	var definition := get_current_ball_definition() if id.is_empty() else Content.ball_upgrade_by_id(id)
+	var profile: Dictionary = Content.BALL_PROFILES.get(str(definition.get("id", "")), {})
+	return "Payload ×%s • Release Speed ×%s • Quality %s • Air Drag ×%s" % [
+		format_number(float(profile.get("payload", 1.0)), 2),
+		format_number(float(profile.get("speed", 1.0)), 2),
+		format_rating(float(profile.get("quality", 0.0)), true),
+		format_number(float(profile.get("drag", 1.0)), 2),
+	]
+
+func get_ball_upgrade_delta_text(id: String) -> String:
+	var index := -1
+	for candidate_index in Content.BALL_UPGRADES.size():
+		if str(Content.BALL_UPGRADES[candidate_index].id) == id:
+			index = candidate_index
+			break
+	if index < 0:
+		return ""
+	var current: Dictionary = Content.BALL_PROFILES.get(id, {})
+	var previous: Dictionary = {} if index == 0 else Content.BALL_PROFILES.get(str(Content.BALL_UPGRADES[index - 1].id), {})
+	var changes: Array[String] = []
+	for key in ["payload", "speed", "quality", "drag"]:
+		var before := float(previous.get(key, 1.0 if key != "quality" else 0.0))
+		var after := float(current.get(key, before))
+		if not is_equal_approx(before, after):
+			var before_text := format_rating(before, true) if key == "quality" else format_number(before, 2)
+			var after_text := format_rating(after, true) if key == "quality" else format_number(after, 2)
+			changes.append("%s %s → %s" % [
+				{"payload": "Payload ×", "speed": "Speed ×", "quality": "Quality +", "drag": "Air Drag ×"}[key],
+				before_text, after_text
+			])
+	return " • ".join(changes)
+
 func get_pitch_potency() -> float:
-	var potency := 1.0
-	for id in purchased_ball_upgrades:
-		var definition := Content.ball_upgrade_by_id(id)
-		if not definition.is_empty():
-			potency = maxf(potency, float(definition.potency))
+	var potency := float(get_current_ball_profile().payload)
 	potency *= get_milestone_effect_multiplier("payload")
 	potency *= get_body_growth_effect_multiplier("payload")
 	potency *= get_run_stat_multiplier("payload")
@@ -5589,6 +5686,16 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 	var metric := str(definition.get("metric", ""))
 	var key = definition.get("key", "")
 	match metric:
+		"live_pitches":
+			return float(live_action_achievement_totals.get("pitches", 0.0))
+		"live_strikeouts":
+			return float(live_action_achievement_totals.get("strikeouts", 0.0))
+		"live_saved_hits":
+			return float(live_action_achievement_totals.get("saved_hits", 0.0))
+		"live_outcome":
+			return float(live_action_achievement_totals.get("outcome_%d" % clampi(int(key), 0, Content.OUTCOME_NAMES.size() - 1), 0.0))
+		"live_volley_size":
+			return float(live_action_achievement_totals.get("volley_size", 0.0))
 		"lifetime_pitches":
 			return lifetime_pitches
 		"field_taps":
@@ -6007,6 +6114,7 @@ func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
 			total_exponent
 			/ maxf(float(distance.get("feet", 1.0)), 1.0)
 			* training_factor
+			* float(get_current_ball_profile().drag)
 			* get_run_stat_multiplier("drag")
 			/ maxf(1.0 + float(get_equipment_bonuses().drag_bonus), 0.05)
 		)
@@ -6030,6 +6138,7 @@ func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
 	return (
 		base_drag
 		* training_factor
+		* float(get_current_ball_profile().drag)
 		* get_body_growth_effect_multiplier("drag")
 		* get_run_stat_multiplier("drag")
 		/ maxf(1.0 + float(get_equipment_bonuses().drag_bonus), 0.05)
@@ -6199,6 +6308,8 @@ func _record_campaign_entry_story(index: int) -> void:
 	var story_id := str(descriptor.get("story_key", ""))
 	if story_id.is_empty():
 		return
+	if story_id == "arrive_middle_school" and lifetime_genetic_rebirths > 0:
+		record_story("rebirth_middle_school")
 	record_story(story_id)
 
 func _record_campaign_speedrun(cleared_index: int) -> void:
@@ -6209,21 +6320,24 @@ func _record_campaign_speedrun(cleared_index: int) -> void:
 	elif cleared_index == Content.FINAL_BOSS_INDEX and current_run_seconds <= 15.0 * 60.0:
 		_increment_achievement_event("cosmos_clear_under_fifteen_minutes")
 
-func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool = true) -> String:
+func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool = true, resolved_opponent_index: int = current_opponent) -> String:
+	var resolved_opponent := clampi(resolved_opponent_index, 0, opponents.size() - 1)
 	if is_story_transition_pending() or is_story_exhibition_blocked():
 		return ""
-	if current_opponent != highest_unlocked:
+	# A delayed volley belongs to its release target; it must never evaluate the
+	# currently displayed opponent after the player has moved elsewhere.
+	if resolved_opponent != current_opponent or resolved_opponent != highest_unlocked:
 		return ""
-	var requirement := get_mastery_requirement(current_opponent)
-	if opponent_mastery[current_opponent] < requirement:
+	var requirement := get_mastery_requirement(resolved_opponent)
+	if opponent_mastery[resolved_opponent] < requirement:
 		return ""
 	# Mastery can make an opponent ready, but only a completed strikeout actually
 	# clears the level. This remains true if a Foul/Ball/hit award crosses 100%.
 	if completing_strikeouts <= 0.0:
-		_update_sticky_boss_state(current_opponent)
+		_update_sticky_boss_state(resolved_opponent)
 		return ""
-	if is_league_boss_level(current_opponent) and not witnessed:
-		_update_sticky_boss_state(current_opponent)
+	if is_league_boss_level(resolved_opponent) and not witnessed:
+		_update_sticky_boss_state(resolved_opponent)
 		return ""
 	if is_endless_active():
 		var cleared_inning := endless_level
@@ -6245,7 +6359,7 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 		return endless_message
 	if highest_unlocked >= opponents.size() - 1 and cosmos_conquered:
 		return ""
-	var cleared_index := current_opponent
+	var cleared_index := resolved_opponent
 	_record_campaign_speedrun(cleared_index)
 	if is_league_boss_level(cleared_index):
 		if cleared_index not in defeated_boss_levels:
@@ -7285,7 +7399,7 @@ func decode_save_text(text: String) -> Dictionary:
 		}
 	var dictionary_fields := [
 		"training_levels", "genetic_levels", "eldritch_levels", "equipped_loot",
-		"catalog_hide_purchased", "achievement_event_totals",
+		"catalog_hide_purchased", "achievement_event_totals", "live_action_achievement_totals",
 	]
 	for field in dictionary_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_DICTIONARY:
@@ -7483,6 +7597,7 @@ func to_save_data() -> Dictionary:
 		"purchased_milestones": purchased_milestones,
 		"unlocked_achievements": unlocked_achievements,
 		"achievement_event_totals": achievement_event_totals,
+		"live_action_achievement_totals": live_action_achievement_totals,
 		"catalog_hide_purchased": catalog_hide_purchased,
 		"achievement_hide_achieved": achievement_hide_achieved,
 		"opponent_mastery": opponent_mastery,
@@ -8018,6 +8133,12 @@ func apply_save_data(data: Dictionary) -> void:
 			0.0,
 			MAX_NUMBER
 		)
+	live_action_achievement_totals.clear()
+	var saved_live_actions: Dictionary = data.get("live_action_achievement_totals", {})
+	for action_id_value in saved_live_actions:
+		var action_id := str(action_id_value)
+		if action_id.length() <= 80:
+			live_action_achievement_totals[action_id] = clampf(float(saved_live_actions[action_id_value]), 0.0, MAX_NUMBER)
 	unlocked_achievements.clear()
 	for id in data.get("unlocked_achievements", []):
 		var achievement_id := str(id)
@@ -8102,15 +8223,9 @@ func get_best_pitch() -> Dictionary:
 	return best
 
 func get_current_ball_name() -> String:
-	var strongest_name := ""
-	var strongest_potency := 0.0
-	for id in purchased_ball_upgrades:
-		var definition := Content.ball_upgrade_by_id(id)
-		if not definition.is_empty() and float(definition.potency) > strongest_potency:
-			strongest_potency = float(definition.potency)
-			strongest_name = str(definition.name)
-	if not strongest_name.is_empty():
-		return strongest_name
+	var current := get_current_ball_definition()
+	if not current.is_empty():
+		return str(current.name)
 	if has_milestone("regulation_ball"):
 		return "Regulation Baseball"
 	return "Dented Wiffle Ball"

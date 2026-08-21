@@ -53,6 +53,8 @@ func _run() -> void:
 	main.is_web_build = false
 	main._configure_title_layout(Vector2(390.0, 844.0))
 	_expect(main.title_art._visible_era() == 0, "Fresh phone title art must remain spoiler-free")
+	_expect(main.title_art.get_animation_state(0.0).phase == "windup", "Phone title art should retain the deterministic windup phase")
+	_expect(main.title_art.get_animation_state(main.title_art.WINDUP_SECONDS + main.title_art.OUTBOUND_SECONDS + main.title_art.CONTACT_SECONDS + 0.01).phase == "batted_return", "Phone title art should retain the visible batted-return phase")
 	var phone_title_stage: Rect2 = main.title_art._stage_rect(Vector2(340.0, 420.0))
 	_expect(absf(phone_title_stage.size.x / phone_title_stage.size.y - 0.92) < 0.02 and phone_title_stage.size.x > 310.0, "Phone title art should enlarge the icon-style matchup in a portrait frame")
 	if "--capture-title" in OS.get_cmdline_user_args():
@@ -290,6 +292,58 @@ func _run() -> void:
 	_expect(not main.upgrade_tabs.get_tab_bar().visible, "The native TabBar and its tiny overflow arrows should be absent on phone layouts")
 	_expect(main.mobile_tab_label.text.begins_with("TRAIN") and not main.mobile_tab_label.text.contains("TAB"), "The large phone navigation should identify the current section without repetitive TAB copy")
 	_expect(main.mobile_tab_label_card.visible and main.mobile_tab_label.get_theme_font_size("font_size") >= 18, "The current phone upgrade section should use a readable card")
+	var phone_purchase_tabs: Array[String] = []
+	for tab_index in main._visible_upgrade_tab_indices():
+		phone_purchase_tabs.append(main.upgrade_tabs.get_tab_title(tab_index))
+	_expect(phone_purchase_tabs == ["TRAIN", "FACILITY", "BALL", "BODY"], "Phone UPGRADES must expose purchases only in TRAIN → FACILITY → BALL → BODY order")
+	_expect(main.mobile_tab_next_button.get_combined_minimum_size().y >= 44.0, "Purchase navigator must remain touch-sized")
+	main._close_mobile_overlay()
+	main._show_mobile_overlay(main.equipment_sidebar, "LOADOUT")
+	(main.equipment_labels.pitch.inspect_button as Button).pressed.emit()
+	await process_frame
+	_expect(main.pitch_arsenal_dialog.visible and main.pitch_arsenal_dialog.title == "PITCH ARSENAL", "Phone Loadout Arsenal must open the read-only pitch inspector")
+	_expect(main.pitch_arsenal_dialog.borderless and main.pitch_arsenal_dialog.has_theme_stylebox_override("panel"), "Phone Pitch Arsenal must use the opaque app-owned modal surface without native chrome")
+	_expect(main.pitch_arsenal_dialog.position.y + main.pitch_arsenal_dialog.size.y <= root.size.y + 1.0, "Phone Pitch Arsenal inspector must remain in frame")
+	for definition in Content.PITCHES:
+		var id := str(definition.id)
+		if id not in main.game.unlocked_pitches:
+			main.game.unlocked_pitches.append(id)
+		main.game.pitch_levels[id] = 2
+		main.game.pitch_draft_power[id] = 0.25
+	main._open_pitch_arsenal()
+	await process_frame
+	var final_pitch_card := main.pitch_arsenal_entries.get_child(main.pitch_arsenal_entries.get_child_count() - 1) as PanelContainer
+	var final_pitch_copy := final_pitch_card.get_child(0) as Label
+	_expect(final_pitch_copy.text.contains(str(Content.PITCHES.back().name)), "Phone Arsenal must retain the final learned pitch after a many-pitch scroll")
+	_expect(main.pitch_arsenal_close_button.get_combined_minimum_size().y >= 44.0, "Phone Arsenal Close must stay touch-sized")
+	if "--capture-ui" in OS.get_cmdline_user_args():
+		var arsenal_image := root.get_texture().get_image()
+		var arsenal_error := arsenal_image.save_png("/private/tmp/no-hitter-arsenal-phone.png")
+		_expect(arsenal_error == OK, "Could not capture the phone Pitch Arsenal")
+	main._close_pitch_arsenal()
+	_expect(not main.pitch_arsenal_dialog.visible, "Phone Arsenal Close must not trap the player")
+	main._close_mobile_overlay()
+	main._open_mobile_log_hub()
+	await process_frame
+	_expect(main.mobile_overlay_control == main.mobile_log_hub and main.mobile_overlay_title.text == "LOG", "Phone LOG must open its touch-sized hub")
+	if "--capture-ui" in OS.get_cmdline_user_args():
+		var log_hub_image := root.get_texture().get_image()
+		var log_hub_error := log_hub_image.save_png("/private/tmp/no-hitter-log-phone.png")
+		_expect(log_hub_error == OK, "Could not capture the phone Log hub")
+	for child in main.mobile_log_hub.get_child(0).get_children():
+		if child is Button:
+			_expect((child as Button).get_combined_minimum_size().y >= 44.0, "Every LOG destination must be touch-sized")
+	for destination in [
+		[main.event_log_panel, "EVENTS"], [main.achievement_tab, "ACHIEVEMENTS"], [main.story_tab, "STORY"], [main.stats_tab, "STATS"], [main.guide_tab, "HELP"],
+	]:
+		main._open_mobile_log_destination(destination[0], destination[1])
+		await process_frame
+		_expect(main.mobile_overlay_control == destination[0] and main.mobile_overlay_title.text.contains(destination[1]), "LOG destination %s must open through the reusable overlay" % destination[1])
+		_expect(main.mobile_overlay_surface.get_global_rect().encloses((destination[0] as Control).get_global_rect()), "LOG destination %s must remain in-frame" % destination[1])
+		main._close_mobile_overlay()
+		await process_frame
+		_expect(not main.mobile_overlay_panel.visible and main.mobile_overlay_control == null, "Closing a LOG destination must return to play without a trap")
+	main._show_mobile_overlay(main.upgrade_panel, "UPGRADES")
 	main.pitch_field.batter_phase = "leaving"
 	main.pitch_field.batter_phase_age = 0.5
 	main.pitch_field.batter_phase_duration = 1.0
@@ -310,10 +364,7 @@ func _run() -> void:
 	for body_section_button_value in main.body_section_buttons.values():
 		var body_section_button := body_section_button_value as Button
 		_expect(body_section_button.get_combined_minimum_size().y >= 44.0, "Every BODY subtab should provide a 44-pixel touch target")
-	main.upgrade_tabs.current_tab = main.achievement_tab.get_index()
-	main._refresh_achievement_tab(true)
-	await process_frame
-	_expect(main.achievement_cards.size() == Content.ACHIEVEMENTS.size(), "The phone achievement browser should expose every catalog slot")
+	_expect(main.achievement_cards.size() == Content.ACHIEVEMENTS.size(), "The phone Log achievement browser should expose every catalog slot")
 	_expect(main.achievement_hide_achieved_toggle.get_combined_minimum_size().y >= 44.0, "Phone achievements should provide a touch-sized Hide Achieved filter")
 	var phone_first_card: Dictionary = main.achievement_cards.first_pitch
 	_expect((phone_first_card.panel as PanelContainer).mouse_filter == Control.MOUSE_FILTER_PASS, "Phone achievement copy should remain a passive scrolling surface")

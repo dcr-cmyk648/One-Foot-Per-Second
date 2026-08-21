@@ -22,6 +22,10 @@ It contains the browser ZIP, a Universal macOS DMG, x86_64 and ARM64 Windows ZIP
 
 Native packages are portable, ad-hoc/unsigned test builds rather than store submissions. They check the stable manifest at startup and every five minutes, then offer the correct replacement package. Saves live outside the application, so replacing the app or portable folder retains progress. Browser/PWA installation is the seamless in-place update path.
 
+### macOS remote-update test
+
+To exercise the real native update prompt without an old installed build, run `./scripts/launch_native_update_test.sh --dry-run` to inspect the selected local/installed app, then run `./scripts/launch_native_update_test.sh` (or add `--app "/path/to/No Hitter.app"`). The app opens in a clearly labeled, forced-outdated test session that reads the official Pages manifest and offers the official GitHub DMG; test-session play is not saved. Choose **DOWNLOAD UPDATE**, quit the test app, install the downloaded replacement normally, then reopen it and confirm your external save is still present. The helper is only a launcher: it never mounts, copies, overwrites, deletes, or installs anything.
+
 ## Build
 
 Install Godot 4.7.1, then run the project directly:

@@ -623,6 +623,33 @@ const BATTER_NAME_COMPONENTS := [
 	},
 ]
 
+# Extra era-specific scorecard parts keep replacement batters varied without
+# touching campaign classes or authored boss signatures. They are merged by the
+# deterministic component accessor below, so a save never needs cosmetic state.
+const BATTER_NAME_EXPANSIONS := [
+	{"given": ["Avery", "Junie", "Micah", "Piper", "Theo", "Wren"], "family": ["Puddle", "Cracker", "Velcro", "Doodle", "Pancake", "Mittens"], "nickname": ["Nap Escapee", "Crayon General", "Juice Box", "Slide Racer", "Mud Pie", "Blankie"], "mononym": ["Bubbles", "Nugget", "Waffles", "Pebble", "Zippy", "Giggles"]},
+	{"given": ["Dakota", "Emerson", "Finley", "Hayden", "Logan", "Quinn"], "family": ["Snyder", "Park", "Reed", "Garcia", "Bennett", "Foster"], "nickname": ["Bracket", "Cleat Check", "Dugout DJ", "Sunblock", "Warmup", "Snack Draft"], "mononym": ["RBI", "Bunt", "Cleats", "Rallycap", "Fielder", "Slugfest"]},
+	{"given": ["Ari", "Bailey", "Cameron", "Devon", "Jules", "Rowan"], "family": ["Keller", "Ortiz", "Shaw", "Vega", "Fletcher", "Dawson"], "nickname": ["Late Pass", "Group Project", "Locker Key", "Popcorn", "Bell Ringer", "Study Buddy"], "mononym": ["Detention", "Cafeteria", "Pencil", "Bell", "Bleachers", "Binder"]},
+	{"given": ["Maren", "Nico", "Priya", "Reed", "Sasha", "Toby"], "family": ["Hughes", "Mendoza", "Price", "Sullivan", "Yates", "Zhang"], "nickname": ["Registrar", "Lab Fee", "Campus Tour", "Finals Week", "Dorm Room", "Office Hours"], "mononym": ["Thesis", "Dorms", "Lecture", "Credit", "Finals", "Quad"]},
+	{"given": ["Andre", "Bianca", "Cruz", "Darla", "Eli", "Fiona"], "family": ["Hollis", "Ibarra", "Jensen", "Keane", "Lombardi", "Morrow"], "nickname": ["Bat Bag", "Room Service", "Road Trip", "Taxi Squad", "Bus Seat", "Roster Move"], "mononym": ["Shuttle", "Locker", "Stretch", "Bullpen", "Boxscore", "Tryout"]},
+	{"given": ["Gia", "Hank", "Imani", "Jonah", "Kira", "Luca"], "family": ["Merritt", "Navarro", "Owens", "Pruitt", "Quincy", "Rios"], "nickname": ["Press Box", "Pinch Hit", "Clubhouse", "Trade Talk", "Day Game", "Road Whites"], "mononym": ["Pinch", "Scorecard", "Diamond", "Mascot", "Roster", "Pennant"]},
+	{"given": ["Axiom", "Bex", "Cinder", "Dynamo", "Evo", "Flux"], "family": ["Allele", "Biomesh", "Chimera", "Doublestrand", "Enhancer", "Fleshcode"], "nickname": ["Side Effect", "Test Group", "Second Opinion", "Lab Leak", "Consent Form", "Hotfix Two"], "mononym": ["Splice", "Mitosis", "Helix", "Upgrade", "Morphic", "Vial"]},
+	{"given": ["Arcturus", "Boreal", "Ceti", "Dione", "Eris", "Fomalhaut"], "family": ["Glimmer", "Heliarch", "Iontrail", "Kepler", "Lagrange", "Meteoric"], "nickname": ["Orbit Skip", "Solar Noon", "Comms Lag", "Dust Ring", "Starlight", "Cold Sun"], "mononym": ["Aster", "Nova", "Cosma", "Zenith", "Pulsar", "Radian"]},
+	{"given": ["Abyss", "Cthon", "Dread", "Eidolon", "Fallow", "Gloam"], "family": ["Hollowscore", "Inkwell", "Knot", "Liminal", "Maw", "Null"], "nickname": ["No Umpire", "Wrong Angle", "Last Echo", "Night Game", "Unwritten", "Cold Glove"], "mononym": ["Hush", "Rift", "Morrow", "Omen", "Vanta", "Woe"]},
+]
+
+const BATTER_NAME_ORDINALS := [
+	["Junior", "II", "the Tiny", "Third Snack", "After Nap", "of T-Ball"],
+	["Jr.", "II", "of Pool B", "the Select", "Saturday Edition", "of Field Three"],
+	["Jr.", "II", "After Lunch", "of Third Period", "the Varsity", "Late Again"],
+	["Jr.", "II", "the Enrolled", "of West Campus", "With Credits", "After Finals"],
+	["Jr.", "II", "on Option", "of Double-A", "the Called-Up", "After Midnight"],
+	["Jr.", "II", "the Marketable", "of October", "With Incentives", "After Arbitration"],
+	["Mk. II", "Version 8", "the Patched", "of Vat Nine", "With Waiver", "Post-Upgrade"],
+	["Mk. II", "of Europa", "the Orbital", "After Aphelion", "From Low-G", "Starborn"],
+	["the Second", "Unnumbered", "of the Rift", "After Midnight", "the Unnamed", "Before Time"],
+]
+
 # Humans usually get human-looking scorecard names. The name generator only
 # leans hard into titles, origins, and mononyms after baseball leaves biology
 # behind; signature bosses remain deliberately ornate at generation zero.
@@ -683,24 +710,24 @@ const ACHIEVEMENT_TIER_NAMES := {
 const ACHIEVEMENTS := [
 	# Human baseball — 54 achievements. New milestones are additive: the catalog
 	# is allowed to grow when a distinct joke or challenge earns its place.
-	{"id": "first_pitch", "tier": "human", "name": "A Threat Has Been Issued", "metric": "lifetime_pitches", "threshold": 1.0, "description": "Resolve your first pitch."},
+	{"id": "first_pitch", "tier": "human", "name": "A Threat Has Been Issued", "metric": "live_pitches", "threshold": 1.0, "description": "Resolve your first live pitch."},
 	{"id": "first_field_tap", "tier": "human", "name": "This Is Supposed to Be Idle", "metric": "field_taps", "threshold": 1.0, "description": "Hurry an active timer with a field tap."},
 	{"id": "field_taps_100", "tier": "human", "name": "Wear Pattern on the Screen", "metric": "field_taps", "threshold": 100.0, "description": "Land 100 successful field taps."},
-	{"id": "first_strike", "tier": "human", "name": "Technically a Strike", "metric": "outcome", "key": STRIKE_INDEX, "threshold": 1.0, "description": "Record your first Strike."},
-	{"id": "first_strikeout", "tier": "human", "name": "Sit Down, Tiny Kevin", "metric": "lifetime_strikeouts", "threshold": 1.0, "description": "Complete your first strikeout."},
-	{"id": "strikeouts_10", "tier": "human", "name": "Toddler Whisperer", "metric": "lifetime_strikeouts", "threshold": 10.0, "description": "Complete 10 career strikeouts."},
-	{"id": "strikeouts_100", "tier": "human", "name": "Backyard Menace", "metric": "lifetime_strikeouts", "threshold": 100.0, "description": "Complete 100 career strikeouts."},
-	{"id": "strikeouts_1000", "tier": "human", "name": "The Thousand-Yard Windup", "metric": "lifetime_strikeouts", "threshold": 1000.0, "description": "Complete 1,000 career strikeouts."},
-	{"id": "strikeouts_10000", "tier": "human", "name": "Ten Thousand Tiny Ks", "metric": "lifetime_strikeouts", "threshold": 10000.0, "description": "Complete 10,000 career strikeouts."},
-	{"id": "pitches_100", "tier": "human", "name": "Century of Apologies", "metric": "lifetime_pitches", "threshold": 100.0, "description": "Resolve 100 career pitches."},
-	{"id": "pitches_1000", "tier": "human", "name": "Rubber Arm, Foam Ball", "metric": "lifetime_pitches", "threshold": 1000.0, "description": "Resolve 1,000 career pitches."},
-	{"id": "pitches_10000", "tier": "human", "name": "Pitch-Clock Enthusiast", "metric": "lifetime_pitches", "threshold": 10000.0, "description": "Resolve 10,000 career pitches."},
-	{"id": "pitches_100000", "tier": "human", "name": "This Is Probably Employment", "metric": "lifetime_pitches", "threshold": 100000.0, "description": "Resolve 100,000 career pitches."},
-	{"id": "first_grand_slam", "tier": "human", "name": "There Goes the Neighborhood", "metric": "outcome", "key": GRAND_SLAM_INDEX, "threshold": 1.0, "description": "Allow your first Grand Slam."},
-	{"id": "home_runs_25", "tier": "human", "name": "Souvenir Distributor", "metric": "outcome", "key": 1, "threshold": 25.0, "description": "Allow 25 Home Runs."},
-	{"id": "fouls_100", "tier": "human", "name": "Living on the Edge", "metric": "outcome", "key": FOUL_INDEX, "threshold": 100.0, "description": "Produce 100 Fouls."},
-	{"id": "balls_100", "tier": "human", "name": "The Zone Is More of a Suggestion", "metric": "outcome", "key": BALL_INDEX, "threshold": 100.0, "description": "Throw 100 Balls."},
-	{"id": "strikes_1000", "tier": "human", "name": "Blue Likes It", "metric": "outcome", "key": STRIKE_INDEX, "threshold": 1000.0, "description": "Record 1,000 Strikes."},
+	{"id": "first_strike", "tier": "human", "name": "Technically a Strike", "metric": "live_outcome", "key": STRIKE_INDEX, "threshold": 1.0, "description": "Record your first live Strike."},
+	{"id": "first_strikeout", "tier": "human", "name": "Sit Down, Tiny Kevin", "metric": "live_strikeouts", "threshold": 1.0, "description": "Complete your first live strikeout."},
+	{"id": "strikeouts_10", "tier": "human", "name": "Toddler Whisperer", "metric": "live_strikeouts", "threshold": 10.0, "description": "Complete 10 live strikeouts."},
+	{"id": "strikeouts_100", "tier": "human", "name": "Backyard Menace", "metric": "live_strikeouts", "threshold": 100.0, "description": "Complete 100 live strikeouts."},
+	{"id": "strikeouts_1000", "tier": "human", "name": "The Thousand-Yard Windup", "metric": "live_strikeouts", "threshold": 1000.0, "description": "Complete 1,000 live strikeouts."},
+	{"id": "strikeouts_10000", "tier": "human", "name": "Ten Thousand Tiny Ks", "metric": "live_strikeouts", "threshold": 10000.0, "description": "Complete 10,000 live strikeouts."},
+	{"id": "pitches_100", "tier": "human", "name": "Century of Apologies", "metric": "live_pitches", "threshold": 100.0, "description": "Resolve 100 live pitches."},
+	{"id": "pitches_1000", "tier": "human", "name": "Rubber Arm, Foam Ball", "metric": "live_pitches", "threshold": 1000.0, "description": "Resolve 1,000 live pitches."},
+	{"id": "pitches_10000", "tier": "human", "name": "Pitch-Clock Enthusiast", "metric": "live_pitches", "threshold": 10000.0, "description": "Resolve 10,000 live pitches."},
+	{"id": "pitches_100000", "tier": "human", "name": "This Is Probably Employment", "metric": "live_pitches", "threshold": 100000.0, "description": "Resolve 100,000 live pitches."},
+	{"id": "first_grand_slam", "tier": "human", "name": "There Goes the Neighborhood", "metric": "live_outcome", "key": GRAND_SLAM_INDEX, "threshold": 1.0, "description": "Allow your first live Grand Slam."},
+	{"id": "home_runs_25", "tier": "human", "name": "Souvenir Distributor", "metric": "live_outcome", "key": 1, "threshold": 25.0, "description": "Allow 25 live Home Runs."},
+	{"id": "fouls_100", "tier": "human", "name": "Living on the Edge", "metric": "live_outcome", "key": FOUL_INDEX, "threshold": 100.0, "description": "Produce 100 live Fouls."},
+	{"id": "balls_100", "tier": "human", "name": "The Zone Is More of a Suggestion", "metric": "live_outcome", "key": BALL_INDEX, "threshold": 100.0, "description": "Throw 100 live Balls."},
+	{"id": "strikes_1000", "tier": "human", "name": "Blue Likes It", "metric": "live_outcome", "key": STRIKE_INDEX, "threshold": 1000.0, "description": "Record 1,000 live Strikes."},
 	{"id": "reach_level_5", "tier": "human", "name": "Preschool Suspension", "metric": "level", "threshold": 4.0, "description": "Reach Level 5."},
 	{"id": "reach_level_10", "tier": "human", "name": "Parent-Teacher Conference", "metric": "level", "threshold": 9.0, "description": "Reach Level 10."},
 	{"id": "reach_level_15", "tier": "human", "name": "Varsity Adjacent", "metric": "level", "threshold": 14.0, "description": "Reach Level 15."},
@@ -780,10 +807,10 @@ const ACHIEVEMENTS := [
 	{"id": "arms_2", "tier": "genetic", "name": "The Other Other Hand", "metric": "arms", "threshold": 2.0, "description": "Grow a second pitching arm."},
 	{"id": "arms_4", "tier": "genetic", "name": "Four-Seam, Four Arms", "metric": "arms", "threshold": 4.0, "description": "Pitch with four arms."},
 	{"id": "arms_8", "tier": "genetic", "name": "Octo-Pitcher, Biologically", "metric": "arms", "threshold": 8.0, "description": "Pitch with eight arms."},
-	{"id": "volley_2", "tier": "genetic", "name": "One Swing, Two Problems", "metric": "volley", "threshold": 2.0, "description": "Release two real balls in one volley."},
-	{"id": "volley_4", "tier": "genetic", "name": "Arm-Based Load Balancing", "metric": "volley", "threshold": 4.0, "description": "Release four real balls in one volley."},
+	{"id": "volley_2", "tier": "genetic", "name": "One Swing, Two Problems", "metric": "live_volley_size", "threshold": 2.0, "description": "Release two real balls in one live volley."},
+	{"id": "volley_4", "tier": "genetic", "name": "Arm-Based Load Balancing", "metric": "live_volley_size", "threshold": 4.0, "description": "Release four real balls in one live volley."},
 	{"id": "compressed_count", "tier": "genetic", "name": "Three Strikes, Eventually", "metric": "genetic_upgrade", "key": "compressed_strike_genome", "threshold": 1.0, "description": "Buy Compressed Strike Genome."},
-	{"id": "saved_hits_100", "tier": "genetic", "name": "Catch, Return, Reuse", "metric": "saved_hits", "threshold": 100.0, "description": "Preserve the count through 100 ordinary hits."},
+	{"id": "saved_hits_100", "tier": "genetic", "name": "Catch, Return, Reuse", "metric": "live_saved_hits", "threshold": 100.0, "description": "Preserve the count through 100 live ordinary hits."},
 	{"id": "auto_advance", "tier": "genetic", "name": "The Legs Know the Schedule", "metric": "genetic_upgrade", "key": "migratory_instinct", "threshold": 1.0, "description": "Auto-advance through your first human level."},
 	{"id": "auto_advance_human_full", "tier": "genetic", "name": "Human League on Rails", "metric": "genetic_upgrade", "key": "migratory_instinct", "threshold": 32.0, "description": "License Auto-advance through every human level."},
 	{"id": "auto_coach", "tier": "genetic", "name": "Coach in the Medulla", "metric": "genetic_upgrade", "key": "autonomic_coach", "threshold": 1.0, "description": "Unlock Auto-coach."},
@@ -830,9 +857,9 @@ const ACHIEVEMENTS := [
 	{"id": "clones_32", "tier": "eldritch", "name": "Thirty-Two Pitchers, One Soul", "metric": "clones", "threshold": 32.0, "description": "Pitch with 32 versions of yourself."},
 	{"id": "time_layers_8", "tier": "eldritch", "name": "Eight Innings at Once", "metric": "time_layers", "threshold": 8.0, "description": "Stack eight time-compressed innings."},
 	{"id": "auto_advance_alien_full", "tier": "eldritch", "name": "No Away Games, Only Away Planets", "metric": "eldritch_upgrade", "key": "interstellar_itinerary", "threshold": 33.0, "description": "License Auto-advance through every alien level."},
-	{"id": "volley_16", "tier": "eldritch", "name": "Anime Bullpen Initiated", "metric": "volley", "threshold": 16.0, "description": "Release 16 real balls in one volley."},
-	{"id": "volley_256", "tier": "eldritch", "name": "Missile Budget Exceeded", "metric": "volley", "threshold": 256.0, "description": "Release 256 real balls in one volley."},
-	{"id": "volley_2048", "tier": "eldritch", "name": "Two Thousand Forty-Eight Problems", "metric": "volley", "threshold": 2048.0, "description": "Release the designed maximum 2,048-ball volley."},
+	{"id": "volley_16", "tier": "eldritch", "name": "Anime Bullpen Initiated", "metric": "live_volley_size", "threshold": 16.0, "description": "Release 16 real balls in one live volley."},
+	{"id": "volley_256", "tier": "eldritch", "name": "Missile Budget Exceeded", "metric": "live_volley_size", "threshold": 256.0, "description": "Release 256 real balls in one live volley."},
+	{"id": "volley_2048", "tier": "eldritch", "name": "Two Thousand Forty-Eight Problems", "metric": "live_volley_size", "threshold": 2048.0, "description": "Release the designed maximum 2,048-ball live volley."},
 	{"id": "first_portal", "tier": "eldritch", "name": "The Ball Was Never There", "metric": "eldritch_upgrade", "key": "portal_outfield", "threshold": 1.0, "description": "Open your first bullpen portal."},
 	{"id": "reverse_terminator", "tier": "eldritch", "name": "Reverse Terminator", "metric": "eldritch_upgrade", "key": "reverse_terminator", "threshold": 1.0, "description": "Teach one outfit to time travel."},
 	{"id": "reach_phase_hitter", "tier": "eldritch", "name": "Phase Me Once", "metric": "level", "threshold": 72.0, "reveal_level": 72, "description": "Reach the Venus defense line and its phase-shifting gods."},
@@ -1743,6 +1770,38 @@ const BALL_UPGRADES := [
 		"description": "Payload ×1,000,000,000.",
 	},
 ]
+
+# A shell is one complete replacement profile, selected by owned catalog order.
+# Payload anchors preserve the former human/alien/eldritch endpoints; the quiet
+# shells between them deliberately advance a different physical property.
+const BALL_PROFILES := {
+	"fresh_wiffle": {"payload": 1.10, "speed": 1.00, "quality": 0.00, "drag": 1.00},
+	"taped_seams": {"payload": 1.10, "speed": 1.04, "quality": 0.00, "drag": 1.00},
+	"backyard_rubber": {"payload": 1.45, "speed": 1.04, "quality": 0.00, "drag": 1.00},
+	"real_leather": {"payload": 1.45, "speed": 1.04, "quality": 0.08, "drag": 1.00},
+	"youth_cork": {"payload": 1.45, "speed": 1.04, "quality": 0.08, "drag": 0.88},
+	"cork_core": {"payload": 1.45, "speed": 1.09, "quality": 0.08, "drag": 0.88},
+	"raised_seams": {"payload": 3.10, "speed": 1.09, "quality": 0.08, "drag": 0.88},
+	"superball_core": {"payload": 3.10, "speed": 1.09, "quality": 0.18, "drag": 0.88},
+	"college_hide": {"payload": 3.10, "speed": 1.09, "quality": 0.18, "drag": 0.74},
+	"tungsten_winding": {"payload": 8.00, "speed": 1.09, "quality": 0.18, "drag": 0.74},
+	"mud_rubbed": {"payload": 8.00, "speed": 1.16, "quality": 0.18, "drag": 0.74},
+	"triple_a_winding": {"payload": 8.00, "speed": 1.16, "quality": 0.32, "drag": 0.74},
+	"juiced_ball": {"payload": 35.00, "speed": 1.16, "quality": 0.32, "drag": 0.74},
+	"derby_overrun": {"payload": 35.00, "speed": 1.16, "quality": 0.32, "drag": 0.60},
+	"commissioner_denied": {"payload": 35.00, "speed": 1.25, "quality": 0.32, "drag": 0.60},
+	"world_series_ball": {"payload": 140.00, "speed": 1.25, "quality": 0.50, "drag": 0.60},
+	"dragonhide_cover": {"payload": 140.00, "speed": 1.25, "quality": 0.50, "drag": 0.46},
+	"railgun_jacket": {"payload": 140.00, "speed": 1.38, "quality": 0.50, "drag": 0.46},
+	"plasma_filament": {"payload": 140.00, "speed": 1.38, "quality": 0.78, "drag": 0.46},
+	"neutron_pearls": {"payload": 140.00, "speed": 1.38, "quality": 0.78, "drag": 0.30},
+	"quantum_lacing": {"payload": 10000.00, "speed": 1.38, "quality": 0.78, "drag": 0.30},
+	"causality_seams": {"payload": 10000.00, "speed": 1.60, "quality": 0.78, "drag": 0.30},
+	"pocket_singularity": {"payload": 10000.00, "speed": 1.60, "quality": 1.15, "drag": 0.30},
+	"void_leather": {"payload": 10000.00, "speed": 1.60, "quality": 1.15, "drag": 0.16},
+	"event_horizon_core": {"payload": 200000000.00, "speed": 1.60, "quality": 1.15, "drag": 0.16},
+	"eightfold_causality": {"payload": 1000000000.00, "speed": 1.90, "quality": 1.70, "drag": 0.08},
+}
 
 const MILESTONES := [
 	{
@@ -2932,6 +2991,22 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 		return str(authored.signature_name)
 	if generation <= 0 and Campaign.SIGNATURE_NAMES.has(opponent_index):
 		return str(Campaign.SIGNATURE_NAMES[opponent_index])
+	var candidate := _batter_display_name_candidate(opponent_index, generation)
+	if generation <= 0:
+		return candidate
+	var previous := _batter_display_name_candidate(opponent_index, generation - 1)
+	if _batter_names_obviously_repeat(candidate, previous):
+		# A stable alternate salt breaks local cosmetic repetition without rerolls
+		# or save history. It cannot affect authored generation-zero signatures.
+		candidate = _batter_display_name_candidate(opponent_index, generation + 7919)
+	return candidate
+
+static func _batter_display_name_candidate(opponent_index: int, generation: int) -> String:
+	var authored := Campaign.level(opponent_index)
+	if generation <= 0 and not str(authored.get("signature_name", "")).is_empty():
+		return str(authored.signature_name)
+	if generation <= 0 and Campaign.SIGNATURE_NAMES.has(opponent_index):
+		return str(Campaign.SIGNATURE_NAMES[opponent_index])
 	var era_index := name_pool_for(opponent_index)
 	var legacy_pool: Array = BATTER_NAME_POOLS[era_index]
 	var parts: Dictionary = BATTER_NAME_COMPONENTS[era_index]
@@ -2942,14 +3017,18 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 	var seed := bounded_generation * 104729 + bounded_opponent * 15485863 + era_index * 32452843
 	var style_table: Array = BATTER_NAME_STYLE_TABLES[era_index]
 	var style := int(style_table[posmod(seed, style_table.size())])
-	var first := _batter_name_component(parts, "given", seed, 1)
-	var middle := _batter_name_component(parts, "middle", seed, 2)
-	var family := _batter_name_component(parts, "family", seed, 3)
-	var nickname := _batter_name_component(parts, "nickname", seed, 4)
-	var epithet := _batter_name_component(parts, "epithet", seed, 5)
-	var mononym := _batter_name_component(parts, "mononym", seed, 6)
-	var title := _batter_name_component(parts, "title", seed, 7)
-	var origin := _batter_name_component(parts, "origin", seed, 8)
+	if posmod(seed, 29) == 0:
+		style = 15
+	elif posmod(seed, 31) == 0:
+		style = 16
+	var first := _batter_name_component(parts, era_index, "given", seed, 1)
+	var middle := _batter_name_component(parts, era_index, "middle", seed, 2)
+	var family := _batter_name_component(parts, era_index, "family", seed, 3)
+	var nickname := _batter_name_component(parts, era_index, "nickname", seed, 4)
+	var epithet := _batter_name_component(parts, era_index, "epithet", seed, 5)
+	var mononym := _batter_name_component(parts, era_index, "mononym", seed, 6)
+	var title := _batter_name_component(parts, era_index, "title", seed, 7)
+	var origin := _batter_name_component(parts, era_index, "origin", seed, 8)
 	match style:
 		0:
 			return str(legacy_pool[posmod(int(seed / 11), legacy_pool.size())])
@@ -2981,8 +3060,19 @@ static func batter_display_name(opponent_index: int, generation: int) -> String:
 			return family
 		14:
 			return "%s of %s" % [first, origin]
+		15:
+			return "%s %s %s" % [first, family, _batter_name_ordinal(era_index, seed)]
+		16:
+			return "%s \"%s\", %s" % [first, nickname, _batter_name_ordinal(era_index, seed)]
 		_:
 			return "%s %s, %s" % [title, mononym, _batter_epithet_after_comma(epithet)]
+
+static func _batter_names_obviously_repeat(first: String, second: String) -> bool:
+	return first.to_lower().replace(" ", "").replace("-", "").replace(".", "").replace("'", "") == second.to_lower().replace(" ", "").replace("-", "").replace(".", "").replace("'", "")
+
+static func _batter_name_ordinal(era_index: int, seed: int) -> String:
+	var values: Array = BATTER_NAME_ORDINALS[clampi(era_index, 0, BATTER_NAME_ORDINALS.size() - 1)]
+	return str(values[posmod(int(seed / 19) + 23, values.size())])
 
 static func _batter_epithet_after_comma(epithet: String) -> String:
 	if epithet.begins_with("The "):
@@ -2996,8 +3086,11 @@ static func _batter_epithet_as_standalone_title(epithet: String) -> String:
 		return "The One %s" % epithet
 	return "The %s" % epithet
 
-static func _batter_name_component(parts: Dictionary, key: String, seed: int, salt: int) -> String:
-	var pool: Array = parts.get(key, [])
+static func _batter_name_component(parts: Dictionary, era_index: int, key: String, seed: int, salt: int) -> String:
+	var pool: Array = parts.get(key, []).duplicate()
+	var expansions: Dictionary = BATTER_NAME_EXPANSIONS[clampi(era_index, 0, BATTER_NAME_EXPANSIONS.size() - 1)]
+	for value in expansions.get(key, []):
+		pool.append(value)
 	if pool.is_empty():
 		return "Unknown"
 	var divisor := salt * 13 + 7

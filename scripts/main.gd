@@ -24,6 +24,8 @@ const NATIVE_UPDATE_MANIFEST_URL := "https://dcr-cmyk648.github.io/One-Foot-Per-
 const NATIVE_UPDATE_CHECK_INTERVAL := 300.0
 const NATIVE_UPDATE_INITIAL_DELAY := 3.0
 const OFFICIAL_RELEASE_URL_PREFIX := "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/"
+const NATIVE_UPDATE_TEST_ARGUMENT := "--native-update-test"
+const NATIVE_UPDATE_TEST_VERSION := "0.0.0-update-test"
 const BROWSER_SAVE_MIRROR_KEY := "no_hitter_portable_save_mirror_v1"
 const BROWSER_SAVE_ROLLBACK_KEY := "no_hitter_portable_save_rollback_v1"
 const BROWSER_SAVE_CHECKPOINT_KEY := "no_hitter_update_checkpoint_v1"
@@ -45,6 +47,7 @@ var ui_elapsed := 0.0
 var expensive_ui_elapsed := 0.0
 var autosave_elapsed := 0.0
 var development_session := false
+var native_update_test_session := false
 
 var xp_label: Label
 var rate_label: Label
@@ -101,10 +104,11 @@ var automation_catalog_heading: Label
 var stat_labels := {}
 var stat_rows := {}
 var upgrade_tabs: TabContainer
-var pitch_tab: Control
 var rebirth_tab: Control
 var achievement_tab: Control
 var story_tab: Control
+var stats_tab: Control
+var guide_tab: Control
 var story_reverse_toggle: CheckButton
 var story_entries_stack: VBoxContainer
 var story_last_signature := ""
@@ -192,6 +196,9 @@ var import_save_confirmation: ConfirmationDialog
 var save_transfer_message_dialog: AcceptDialog
 var mobile_install_dialog: AcceptDialog
 var mobile_inspection_dialog: AcceptDialog
+var pitch_arsenal_dialog: Window
+var pitch_arsenal_entries: VBoxContainer
+var pitch_arsenal_close_button: Button
 var story_dialog: AcceptDialog
 var run_choice_dialog: Window
 var run_choice_title: Label
@@ -264,6 +271,7 @@ var mobile_overlay_title: Label
 var mobile_overlay_xp_label: Label
 var mobile_nav: HBoxContainer
 var mobile_install_button: Button
+var mobile_log_hub: PanelContainer
 var mobile_overlay_control: Control
 var mobile_overlay_home: Control
 var mobile_overlay_home_index := -1
@@ -333,6 +341,7 @@ var title_screen_active := false
 
 func _ready() -> void:
 	is_web_build = OS.has_feature("web") or OS.has_feature("browser_build")
+	native_update_test_session = _is_native_update_test_session()
 	if is_web_build:
 		# Browser layouts use a fluid canvas rather than the desktop 1600×1000 base.
 		# The canvas backing store is still rendered in device pixels, so a Retina
@@ -354,7 +363,15 @@ func _ready() -> void:
 	game.automatic_field_tap_applied.connect(_on_automatic_field_tap_applied)
 	_build_interface()
 	_configure_platform_ui()
-	var offline_summary := game.load_game()
+	# This fixed test flag deliberately avoids even read/recovery loading: load_game
+	# can repair a pending generation, which is a write. The test game is fresh,
+	# in-memory only, and remains write-locked for its whole lifetime.
+	var offline_summary := {} if native_update_test_session else game.load_game()
+	if native_update_test_session:
+		development_session = true
+		game.reset_fresh()
+		game.save_writes_locked = true
+		native_update_check_elapsed = NATIVE_UPDATE_CHECK_INTERVAL
 	if is_web_build:
 		var mirror_summary := _recover_browser_save_mirror()
 		if browser_save_recovered:
@@ -368,7 +385,7 @@ func _ready() -> void:
 		_log_event("Browser storage is temporary here. Use EXPORT after playing if you want to keep this run.")
 	_refresh_interface()
 	_show_title_screen(false)
-	if game.save_writes_locked:
+	if game.save_writes_locked and not native_update_test_session:
 		_log_event("An existing save could not be read and has not been overwritten. Use LOAD to recover it or RESET to deliberately start over.")
 		call_deferred("_show_save_recovery_required")
 	resized.connect(_on_root_resized)
@@ -911,7 +928,7 @@ func _update_browser_release_status(delta: float) -> void:
 		update_banner.move_to_front()
 
 func _update_native_release_status(delta: float) -> void:
-	if development_session or native_update_request == null:
+	if (development_session and not native_update_test_session) or native_update_request == null:
 		return
 	native_update_check_elapsed += maxf(delta, 0.0)
 	if native_update_check_elapsed < NATIVE_UPDATE_CHECK_INTERVAL:
@@ -969,7 +986,7 @@ func _on_native_update_manifest_received(
 		return
 	var manifest: Dictionary = parsed
 	var candidate_version := str(manifest.get("version", ""))
-	var current_version := str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	var current_version := _native_update_current_version()
 	if (
 		candidate_version.is_empty()
 		or candidate_version == native_update_notified_version
@@ -983,11 +1000,23 @@ func _on_native_update_manifest_received(
 		return
 	native_update_notified_version = candidate_version
 	native_update_download_url = platform_url
-	native_update_confirmation.title = "NO HITTER v%s IS READY" % candidate_version
+	native_update_export_button.visible = not native_update_test_session
+	native_update_confirmation.title = (
+		"UPDATE TEST • NO HITTER v%s IS READY" % candidate_version
+		if native_update_test_session
+		else "NO HITTER v%s IS READY" % candidate_version
+	)
 	native_update_confirmation.dialog_text = (
-		"This installed build is v%s. Download the current package now?\n\n"
-		+ "Your automatic and manual saves live outside the application and remain in place when the new build replaces it. EXPORT BACKUP is available as an optional portable fallback."
-	) % current_version
+		(
+			"UPDATE TEST SESSION\nTest version: v%s\nOfficial candidate: v%s\n\n"
+			+ "This forced-outdated session checks the real published manifest and opens only the official release package. Test-session play is not saved. Your existing automatic and manual saves live outside the application and remain in place when you install the replacement normally."
+		) % [current_version, candidate_version]
+		if native_update_test_session
+		else (
+			"This installed build is v%s. Download the current package now?\n\n"
+			+ "Your automatic and manual saves live outside the application and remain in place when the new build replaces it. EXPORT BACKUP is available as an optional portable fallback."
+		) % current_version
+	)
 	native_update_confirmation.popup_centered_clamped(Vector2i(500, 250), 0.90)
 
 func _handle_native_update_custom_action(action: StringName) -> void:
@@ -1003,6 +1032,12 @@ func _download_native_update() -> void:
 		game.save_game()
 	OS.shell_open(native_update_download_url)
 	_log_event("Opened the official v%s update download. Your local save remains in the shared No Hitter data folder." % native_update_notified_version)
+
+func _is_native_update_test_session() -> bool:
+	return not (OS.has_feature("web") or OS.has_feature("browser_build")) and NATIVE_UPDATE_TEST_ARGUMENT in OS.get_cmdline_user_args()
+
+func _native_update_current_version() -> String:
+	return NATIVE_UPDATE_TEST_VERSION if native_update_test_session else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 
 func _on_browser_update_available() -> void:
 	if not is_web_build:
@@ -1586,6 +1621,15 @@ func _on_upgrade_tab_changed(tab_index: int) -> void:
 	_refresh_mobile_tab_navigation(tab_index)
 	_refresh_achievement_tab(true)
 
+func _set_information_tabs_visible(visible: bool) -> void:
+	if upgrade_tabs == null:
+		return
+	for tab in [achievement_tab, story_tab, stats_tab, guide_tab]:
+		if tab != null and tab.get_parent() == upgrade_tabs:
+			upgrade_tabs.set_tab_hidden(tab.get_index(), not visible)
+	if not visible and upgrade_tabs.is_tab_hidden(upgrade_tabs.current_tab):
+		upgrade_tabs.current_tab = 0
+
 func _build_interface() -> void:
 	var background := ColorRect.new()
 	background.color = COLOR_BG
@@ -1627,6 +1671,7 @@ func _build_interface() -> void:
 	_build_upgrade_area(body_container)
 	_build_mobile_navigation(page_container)
 	_build_event_log(page_container)
+	_build_mobile_log_hub(page_container)
 	_build_mobile_overlay()
 	_build_confirmation_dialog()
 	_build_update_banner()
@@ -1900,7 +1945,11 @@ func _leave_title_screen(show_pending_offline := true) -> void:
 func _refresh_title_screen() -> void:
 	if title_screen == null or game == null:
 		return
-	title_subtitle_label.text = _get_game_subtitle()
+	title_subtitle_label.text = (
+		"UPDATE TEST SESSION • PLAY HERE IS NOT SAVED"
+		if native_update_test_session
+		else _get_game_subtitle()
+	)
 	var highest := game.get_historical_highest_opponent()
 	var has_progress := _browser_save_has_progress(game.to_save_data())
 	if has_progress:
@@ -1910,7 +1959,7 @@ func _refresh_title_screen() -> void:
 			str(authored.get("subera", authored.get("era", "BACKYARD"))),
 		]
 	else:
-		title_progress_label.text = "THE BACKYARD IS WAITING"
+		title_progress_label.text = "UPDATE TEST • CHECKING OFFICIAL RELEASE" if native_update_test_session else "THE BACKYARD IS WAITING"
 	title_art.configure(
 		highest,
 		_has_genetic_reveal(),
@@ -2411,7 +2460,7 @@ func _build_mobile_navigation(parent: Control) -> void:
 	var entries := [
 		["UPGRADES", "Upgrades", func() -> void: _show_mobile_overlay(upgrade_panel, "UPGRADES")],
 		["LOADOUT", "Current stats, ball, pitches, body, and owned upgrades", func() -> void: _show_mobile_overlay(equipment_sidebar, "LOADOUT")],
-		["LOG", "Recent game events", func() -> void: _show_mobile_overlay(event_log_panel, "EVENT LOG")],
+		["LOG", "Events, achievements, story, stats, and help", _open_mobile_log_hub],
 		["SAVES", "Save, export, load, or reset this run", func() -> void: _show_mobile_overlay(save_stack, "SAVES & TRANSFER")],
 	]
 	for entry in entries:
@@ -2437,6 +2486,48 @@ func _build_mobile_navigation(parent: Control) -> void:
 	mobile_install_button.pressed.connect(_show_mobile_install)
 	mobile_install_button.visible = false
 	mobile_nav.add_child(mobile_install_button)
+
+func _build_mobile_log_hub(parent: Control) -> void:
+	mobile_log_hub = PanelContainer.new()
+	mobile_log_hub.name = "MobileLogHub"
+	mobile_log_hub.visible = false
+	mobile_log_hub.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mobile_log_hub.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mobile_log_hub.add_theme_stylebox_override("panel", _compact_panel_style(10.0, 8.0, 8))
+	parent.add_child(mobile_log_hub)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	mobile_log_hub.add_child(stack)
+	_section_label(stack, "LOG")
+	var explainer := Label.new()
+	explainer.text = "Your non-purchase information lives here. Choose a section; CLOSE always returns to the field."
+	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	explainer.add_theme_font_size_override("font_size", 13)
+	explainer.add_theme_color_override("font_color", COLOR_MUTED)
+	stack.add_child(explainer)
+	for entry in [
+		["EVENTS", "Recent game calls and notices", event_log_panel],
+		["ACHIEVEMENTS", "Completed challenges and permanent XP bonus", achievement_tab],
+		["STORY", "The recorded scorebook for this save", story_tab],
+		["STATS", "Current and lifetime pitching numbers", stats_tab],
+		["HELP", "Rules, controls, and progression guidance", guide_tab],
+	]:
+		var button := Button.new()
+		button.name = "MobileLog%s" % str(entry[0]).capitalize()
+		button.text = str(entry[0])
+		button.tooltip_text = str(entry[1])
+		button.custom_minimum_size.y = 48.0
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(_open_mobile_log_destination.bind(entry[2], str(entry[0])))
+		stack.add_child(button)
+
+func _open_mobile_log_hub() -> void:
+	_show_mobile_overlay(mobile_log_hub, "LOG")
+
+func _open_mobile_log_destination(control: Control, title: String) -> void:
+	if control == null:
+		return
+	_show_mobile_overlay(control, "LOG  •  %s" % title)
 
 func _build_mobile_overlay() -> void:
 	mobile_overlay_panel = Control.new()
@@ -2584,7 +2675,7 @@ func _recenter_visible_dialogs() -> void:
 		divine_confirmation, story_dialog, offline_progress_dialog, browser_update_confirmation,
 		native_update_confirmation, alien_help_dialog, alien_arrival_dialog,
 		eldritch_arrival_dialog, genetic_rebirth_explanation_dialog, mobile_install_dialog,
-		mobile_inspection_dialog, import_save_confirmation, save_transfer_message_dialog,
+		mobile_inspection_dialog, pitch_arsenal_dialog, import_save_confirmation, save_transfer_message_dialog,
 		new_game_overwrite_dialog,
 	]:
 		if dialog != null and (dialog as Window).visible:
@@ -2729,6 +2820,7 @@ func _set_mobile_layout(enabled: bool, portrait := true, dense := false) -> void
 	upgrade_panel.visible = not mobile_layout
 	equipment_sidebar.visible = not mobile_layout
 	event_log_panel.visible = not mobile_layout
+	_set_information_tabs_visible(not mobile_layout)
 	upgrade_panel.custom_minimum_size.x = 0.0 if mobile_layout else (350.0 if dense_wide else 370.0)
 	equipment_sidebar.custom_minimum_size.x = 0.0 if mobile_layout else (220.0 if dense_wide else 250.0)
 	equipment_sidebar_heading.text = "LOADOUT"
@@ -3993,7 +4085,7 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 		inspect_button.text = ""
 		inspect_button.focus_mode = Control.FOCUS_NONE
 		inspect_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		inspect_button.tooltip_text = "Open the Pitch catalog to inspect every learned pitch and its automatic-use chance."
+		inspect_button.tooltip_text = "Open the read-only Pitch Arsenal: learned pitch names, levels, draft profiles, and automatic-use chances."
 		inspect_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		inspect_button.pressed.connect(_open_pitch_arsenal)
 		card.add_child(inspect_button)
@@ -4001,12 +4093,44 @@ func _equipment_card(parent: Control, id: String, heading: String) -> void:
 	equipment_labels[id] = entry
 
 func _open_pitch_arsenal() -> void:
-	if upgrade_tabs == null or pitch_tab == null:
+	if pitch_arsenal_dialog == null or pitch_arsenal_entries == null:
 		return
-	upgrade_tabs.current_tab = pitch_tab.get_index()
-	_refresh_mobile_tab_navigation()
-	if mobile_layout:
-		_show_mobile_overlay(upgrade_panel, "UPGRADES  •  PITCH ARSENAL")
+	var selection_probabilities := {}
+	for selection_entry in game.get_pitch_selection_entries():
+		selection_probabilities[str(selection_entry.id)] = float(selection_entry.probability)
+	for child in pitch_arsenal_entries.get_children():
+		pitch_arsenal_entries.remove_child(child)
+		child.queue_free()
+	var explainer := Label.new()
+	explainer.text = "Learned pitches are selected automatically. Pitch Calling increasingly favors stronger options; drafts add or improve entries."
+	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	explainer.add_theme_font_size_override("font_size", 13)
+	explainer.add_theme_color_override("font_color", COLOR_MUTED)
+	pitch_arsenal_entries.add_child(explainer)
+	for definition in _definitions_by_unlock(Content.PITCHES):
+		var id := str(definition.id)
+		if id not in game.unlocked_pitches:
+			continue
+		var card := PanelContainer.new()
+		card.custom_minimum_size.y = 104.0
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
+		card.add_theme_stylebox_override("panel", _compact_panel_style(8.0, 6.0, 7))
+		pitch_arsenal_entries.add_child(card)
+		var copy := Label.new()
+		copy.text = "%s  •  LEVEL %d  •  %.1f%% USE\nDraft Quality %s\nBase profile: %s" % [
+			str(definition.name), maxi(int(game.pitch_levels.get(id, 1)), 1),
+			float(selection_probabilities.get(id, 0.0)) * 100.0,
+			BaseballGameState.format_rating(maxf(float(game.pitch_draft_power.get(id, 0.0)), 0.0), true), str(definition.description),
+		]
+		copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		copy.add_theme_font_size_override("font_size", 13)
+		card.add_child(copy)
+	pitch_arsenal_dialog.popup_centered_clamped(Vector2i(580, 560) if not mobile_layout else Vector2i(360, 620), 0.94)
+
+func _close_pitch_arsenal() -> void:
+	if pitch_arsenal_dialog != null:
+		pitch_arsenal_dialog.hide()
 
 func _build_upgrade_area(parent: Control) -> void:
 	upgrade_panel = PanelContainer.new()
@@ -4086,9 +4210,8 @@ func _build_upgrade_area(parent: Control) -> void:
 	upgrade_tabs.tab_changed.connect(_on_upgrade_tab_changed)
 	upgrade_stack.add_child(upgrade_tabs)
 	_build_training_tab(upgrade_tabs)
-	_build_pitch_tab(upgrade_tabs)
-	_build_ball_tab(upgrade_tabs)
 	_build_scale_tab(upgrade_tabs)
+	_build_ball_tab(upgrade_tabs)
 	_build_rebirth_tab(upgrade_tabs)
 	_build_achievement_tab(upgrade_tabs)
 	_build_story_tab(upgrade_tabs)
@@ -4222,21 +4345,6 @@ func _build_training_tab(tabs: TabContainer) -> void:
 		(entry.button as Button).pressed.connect(_buy_training.bind(str(definition.id)))
 		content.add_child(entry.container)
 		training_buttons[definition.id] = entry
-
-func _build_pitch_tab(tabs: TabContainer) -> void:
-	var content := _create_scroll_tab(tabs, "PITCH")
-	pitch_tab = content.get_parent().get_parent() as Control
-	_section_label(content, "AUTOMATIC ARSENAL")
-	var explainer := Label.new()
-	explainer.text = "Pitches are learned or improved through level drafts. Every learned pitch enters the automatic mix; Pitch Calling favors the better ones."
-	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	explainer.add_theme_font_size_override("font_size", 13)
-	explainer.add_theme_color_override("font_color", COLOR_MUTED)
-	content.add_child(explainer)
-	for definition in _definitions_by_unlock(Content.PITCHES):
-		var entry := _upgrade_row(_definition_tooltip(definition, ["quality", "speed"]))
-		content.add_child(entry.container)
-		pitch_buttons[definition.id] = entry
 
 func _select_training_batch(quantity: int) -> void:
 	if quantity not in [1, 10, 100]:
@@ -4639,7 +4747,7 @@ func _build_story_tab(tabs: TabContainer) -> void:
 	story_tab = content.get_parent().get_parent() as Control
 	_section_label(content, "THE SCOREBOOK")
 	var explainer := Label.new()
-	explainer.text = "Major events from this save are recorded here. Newest entries appear first."
+	explainer.text = "Major events from this save are recorded here. Newest entries appear first. On phone, open LOG → STORY."
 	explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	explainer.add_theme_font_size_override("font_size", 12)
 	explainer.add_theme_color_override("font_color", COLOR_MUTED)
@@ -4720,6 +4828,7 @@ func _refresh_story_tab() -> void:
 
 func _build_stats_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "STATS")
+	stats_tab = content.get_parent().get_parent() as Control
 	_section_label(content, "CURRENT PITCHING PROFILE")
 	var stat_names := {
 		"quality": "Quality",
@@ -4807,6 +4916,7 @@ func _build_stats_tab(tabs: TabContainer) -> void:
 
 func _build_guide_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "HELP")
+	guide_tab = content.get_parent().get_parent() as Control
 	_section_label(content, "HOW NO HITTER WORKS")
 	guide_label = Label.new()
 	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -4944,6 +5054,7 @@ func _build_confirmation_dialog() -> void:
 	_build_save_transfer_dialogs()
 	_build_mobile_install_dialog()
 	_build_mobile_inspection_dialog()
+	_build_pitch_arsenal_dialog()
 	_build_offline_progress_dialog()
 	_build_browser_update_confirmation()
 	_build_native_update_confirmation()
@@ -4997,7 +5108,7 @@ func _style_app_owned_dialogs() -> void:
 		browser_update_confirmation, native_update_confirmation,
 		alien_help_dialog, alien_arrival_dialog, eldritch_arrival_dialog,
 		genetic_rebirth_explanation_dialog, mobile_install_dialog,
-		mobile_inspection_dialog, import_save_confirmation,
+		mobile_inspection_dialog, pitch_arsenal_dialog, import_save_confirmation,
 		save_transfer_message_dialog, new_game_overwrite_dialog,
 	]
 	for dialog in dialogs:
@@ -5151,7 +5262,10 @@ func _run_effect_text(effect: Dictionary) -> String:
 				BaseballGameState.format_number(float(age_step.get("recovery_multiplier", 1.0)), 3),
 				BaseballGameState.format_number(float(age_step.get("visual_size_multiplier", 1.0)), 3),
 			]
-		return "+%s body adjective" % str(effect.get("adjective", "changed")).capitalize()
+		return "BODY EFFECT • %s\n+%s body adjective" % [
+			game.get_run_body_adjective_effect_text(str(effect.get("adjective", ""))),
+			str(effect.get("adjective", "changed")).capitalize(),
+		]
 	var value := float(effect.get("value", effect.get("magnitude", 0.0)))
 	match operation:
 		"multiplier":
@@ -5298,6 +5412,7 @@ func _build_native_update_confirmation() -> void:
 		true,
 		"export_backup"
 	)
+	native_update_export_button.visible = not native_update_test_session
 	add_child(native_update_confirmation)
 
 func _build_alien_help_dialog() -> void:
@@ -5386,6 +5501,51 @@ func _build_mobile_inspection_dialog() -> void:
 	mobile_inspection_dialog.get_ok_button().text = "CLOSE"
 	mobile_inspection_dialog.get_ok_button().add_theme_font_size_override("font_size", 22)
 	add_child(mobile_inspection_dialog)
+
+func _build_pitch_arsenal_dialog() -> void:
+	pitch_arsenal_dialog = Window.new()
+	pitch_arsenal_dialog.name = "PitchArsenalInspector"
+	pitch_arsenal_dialog.title = "PITCH ARSENAL"
+	pitch_arsenal_dialog.visible = false
+	pitch_arsenal_dialog.borderless = true
+	pitch_arsenal_dialog.min_size = Vector2i(330, 300)
+	pitch_arsenal_dialog.size = Vector2i(580, 560)
+	pitch_arsenal_dialog.transient = true
+	pitch_arsenal_dialog.close_requested.connect(_close_pitch_arsenal)
+	add_child(pitch_arsenal_dialog)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	pitch_arsenal_dialog.add_child(margin)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 7)
+	margin.add_child(stack)
+	var heading := HBoxContainer.new()
+	stack.add_child(heading)
+	var label := Label.new()
+	label.text = "PITCH ARSENAL"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", COLOR_ACCENT)
+	heading.add_child(label)
+	pitch_arsenal_close_button = Button.new()
+	pitch_arsenal_close_button.text = "CLOSE"
+	pitch_arsenal_close_button.custom_minimum_size = Vector2(96.0, 44.0)
+	pitch_arsenal_close_button.focus_mode = Control.FOCUS_NONE
+	pitch_arsenal_close_button.pressed.connect(_close_pitch_arsenal)
+	heading.add_child(pitch_arsenal_close_button)
+	var scroll := ScrollContainer.new()
+	scroll.name = "PitchArsenalScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(scroll)
+	pitch_arsenal_entries = VBoxContainer.new()
+	pitch_arsenal_entries.name = "PitchArsenalEntries"
+	pitch_arsenal_entries.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pitch_arsenal_entries.add_theme_constant_override("separation", 7)
+	scroll.add_child(pitch_arsenal_entries)
 
 func _build_save_transfer_dialogs() -> void:
 	export_save_dialog = FileDialog.new()
@@ -5672,7 +5832,7 @@ func _refresh_guide_text(
 			"RUN CHOICES\n"
 			+ "• Every cleared level queues a run perk. Sub-era finales guarantee Rare-or-better perk choices; every fifth level and authored bosses also queue a Pitch draft. Unchosen rewards wait safely in order.\n"
 			+ "• Perk level matches the cleared level, rarity changes its strength, and the same perk cannot be drafted twice in one run. Aging remains optional, but the next age becomes more likely when overdue; its card shows the exact body bonus.\n"
-			+ "• Learned Pitches are called automatically. PITCH is your read-only arsenal; Pitch Calling increasingly favors its stronger options."
+			+ "• Learned Pitches are called automatically. Open LOADOUT → Pitch Arsenal to inspect them; Pitch Calling increasingly favors its stronger options."
 		),
 		(
 			"PITCH FLOW\n"
@@ -5700,6 +5860,10 @@ func _refresh_guide_text(
 			+ "• Closing or suspending the game simulates up to seven days at the displayed Offline %. It scales both XP and called-Strike mastery; your return popup shows the exact deposit.\n"
 			+ "• Autosave runs every 10 seconds. SAVES has manual slots, EXPORT, IMPORT, and title return. Save rows show every revealed prestige balance plus lifetime-earned points, so a fresh rebirth is easy to identify.\n"
 			+ "• Browser installs preserve verified save generations while updating on their Web channel; native builds check every five minutes and offer the matching official package. EXPORT is an optional portable fallback."
+		),
+		(
+			"PHONE NAVIGATION\n"
+			+ "• UPGRADES contains purchases only: TRAIN, FACILITY, BALL, and BODY. Open LOG → HELP for this guide and LOG → STORY for the scorebook. LOADOUT contains your current ball, gear, body, and Pitch Arsenal."
 		),
 		(
 			"VISUALS\n"
@@ -6180,7 +6344,7 @@ func _refresh_equipment() -> void:
 	var ball_effect: Label = ball_entry.effect
 	ball_value.text = game.get_current_ball_name()
 	ball_value.tooltip_text = ball_value.text
-	ball_effect.text = "Payload ×%s" % BaseballGameState.format_number(game.get_pitch_potency())
+	ball_effect.text = game.get_ball_profile_text()
 
 	var best_pitch := game.get_best_pitch()
 	var pitch_entry: Dictionary = equipment_labels.pitch
@@ -6601,38 +6765,6 @@ func _refresh_purchase_buttons() -> void:
 				diminishing_warning
 			)
 
-	var pitch_selection_probabilities := {}
-	for selection_entry in game.get_pitch_selection_entries():
-		pitch_selection_probabilities[str(selection_entry.id)] = float(selection_entry.probability)
-	for definition in Content.PITCHES:
-		var id := str(definition.id)
-		var entry: Dictionary = pitch_buttons[id]
-		var pitch_owned := id in game.unlocked_pitches
-		# Unseen pitches are draft spoilers. The Arsenal is a read-only description
-		# of this run's learned mix; new pitches only appear after choosing them.
-		_set_upgrade_row_visible(entry, pitch_owned)
-		if not _upgrade_row_is_visible(entry):
-			continue
-		var use_chance := float(pitch_selection_probabilities.get(id, 0.0)) * 100.0
-		var pitch_level := maxi(int(game.pitch_levels.get(id, 1)), 1)
-		var draft_quality := maxf(float(game.pitch_draft_power.get(id, 0.0)), 0.0)
-		_set_upgrade_row(
-			entry,
-			"%s  •  LEVEL %d  •  %.1f%% USE\nDraft Quality %s  •  %s" % [
-				definition.name,
-				pitch_level,
-				use_chance,
-				BaseballGameState.format_rating(draft_quality, true),
-				definition.description,
-			],
-			true,
-			_definition_tooltip(definition, ["quality", "speed"]) + "\n\nAutomatic use chance: %.2f%%. Draft Quality: %s." % [
-				use_chance,
-				BaseballGameState.format_rating(draft_quality, true),
-			],
-			"LEVEL %d" % pitch_level
-		)
-
 	for definition in Content.BALL_UPGRADES:
 		var id := str(definition.id)
 		var entry: Dictionary = ball_upgrade_buttons[id]
@@ -6644,15 +6776,15 @@ func _refresh_purchase_buttons() -> void:
 		if not _upgrade_row_is_visible(entry):
 			continue
 		if game.has_ball_upgrade(id):
-			_set_upgrade_row(entry, "%s\n%s" % [definition.name, definition.description], true, _definition_tooltip(definition, ["payload"]), "INSTALLED")
+			_set_upgrade_row(entry, "%s\n%s" % [definition.name, game.get_ball_upgrade_delta_text(id)], true, "%s\nFULL PROFILE • %s" % [game.get_ball_upgrade_delta_text(id), game.get_ball_profile_text(id)], "INSTALLED")
 		elif game.highest_unlocked < Content.catalog_required_level(definition):
 			_set_catalog_lock(entry, definition)
 		else:
 			_set_upgrade_row(
 				entry,
-				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_ball_upgrade_cost(id)), definition.description],
+				"%s  •  %s XP\n%s" % [definition.name, BaseballGameState.format_cost(game.get_ball_upgrade_cost(id)), game.get_ball_upgrade_delta_text(id)],
 				not game.can_buy_ball_upgrade(id),
-				_definition_tooltip(definition, ["payload"]),
+				"%s\nFULL PROFILE • %s" % [game.get_ball_upgrade_delta_text(id), game.get_ball_profile_text(id)],
 				"%s XP" % BaseballGameState.format_cost(game.get_ball_upgrade_cost(id))
 			)
 

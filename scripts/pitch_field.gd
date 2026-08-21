@@ -809,7 +809,10 @@ func _get_arm_release_offset(arm_index: int, arm_count: int) -> Vector2:
 	return Vector2(_get_throw_arm_geometry(arm_index, arm_count, 1.0).end)
 
 func _get_throw_arm_geometry(arm_index: int, arm_count: int, motion: float) -> Dictionary:
-	var bounded_motion := clampf(motion, 0.0, 1.0)
+	# Negative motion is the cocked-back pose.  It is visual-only: the release
+	# source continues to request exactly 1.0, so immutable projectile snapshots
+	# remain coupled to the forward endpoint.
+	var bounded_motion := clampf(motion, -0.68, 1.0)
 	var spread_position := (
 		-0.5 + float(arm_index) / float(maxi(arm_count - 1, 1))
 		if arm_count > 1
@@ -819,11 +822,17 @@ func _get_throw_arm_geometry(arm_index: int, arm_count: int, motion: float) -> D
 	# desktop field, which rotates to screen-right when facing up on a phone.
 	var resting_angle := 0.58 if arm_count == 1 else spread_position * 1.30
 	var release_angle := 0.0 if arm_count == 1 else spread_position * 0.62
-	var angle := lerp_angle(resting_angle, release_angle, bounded_motion)
+	var cocked_angle := resting_angle + (0.82 if arm_count == 1 else signf(spread_position if spread_position != 0.0 else 1.0) * 0.68)
+	var angle := (
+		lerp_angle(resting_angle, cocked_angle, -bounded_motion / 0.68)
+		if bounded_motion < 0.0
+		else lerp_angle(resting_angle, release_angle, bounded_motion)
+	)
 	var direction := Vector2(cos(angle), sin(angle))
 	var body_scale := _get_pitcher_visual_scale()
-	var start_distance := (6.4 + bounded_motion * 1.5) * body_scale
-	var end_distance := (14.0 + bounded_motion * 3.7) * body_scale
+	var forward_motion := maxf(bounded_motion, 0.0)
+	var start_distance := (6.4 + forward_motion * 1.5) * body_scale
+	var end_distance := (14.0 + forward_motion * 3.7) * body_scale
 	var start := direction * start_distance
 	var finish := direction * end_distance
 	var normal := Vector2(-direction.y, direction.x)
@@ -2590,7 +2599,7 @@ func _draw_pitcher(origin: Vector2) -> void:
 	# The compact rectangular arm advances through the visible cooldown, reaches
 	# its release point exactly where a ball is spawned, then retracts in flight.
 	# It never free-runs just because the rate stat is large.
-	var motion := throw_animation if volley_in_flight else get_pitch_cooldown_progress()
+	var motion := get_throw_arm_motion()
 	var clone_visuals := clampi(int(snapshot.clones), 1, clone_visual_capacity)
 	# Preserve every clone body. Once the bullpen becomes crowded, show a bounded
 	# representative set of limbs per clone while the primary body still displays
@@ -2664,7 +2673,7 @@ func _draw_pitcher_arm_rectangles(
 	# exact release tip returned by the same geometry function.
 	var pitcher_scale := _get_pitcher_visual_scale()
 	for arm_index in arm_count:
-		var arm_motion := clampf(motion * (0.92 + float(arm_index % 3) * 0.04), 0.0, 1.0)
+		var arm_motion := clampf(motion * (0.92 + float(arm_index % 3) * 0.04), -0.68, 1.0)
 		var geometry := _get_throw_arm_geometry(arm_index, arm_count, arm_motion)
 		var start := origin + Vector2(geometry.start)
 		var finish := origin + Vector2(geometry.end)
@@ -2672,6 +2681,21 @@ func _draw_pitcher_arm_rectangles(
 		# A square-ended wide line is the same compact rectangle visually, without
 		# allocating and triangulating a new polygon for every limb every frame.
 		draw_line(start, finish, Color(color, alpha), half_width * 2.0, false)
+
+func get_throw_arm_motion() -> float:
+	# Most of recovery is a readable, deliberate windup.  The last quarter whips
+	# through release. Flight begins at that exact forward pose, then uses the
+	# existing short follow-through decay while the immutable ball flies. An empty
+	# plate rests the pitcher.
+	if volley_in_flight:
+		return clampf(throw_animation, 0.0, 1.0)
+	if not _is_batter_visually_present():
+		return 0.0
+	var cooldown := get_pitch_cooldown_progress()
+	const COCK_FRACTION := 0.76
+	if cooldown <= COCK_FRACTION:
+		return lerpf(0.0, -0.68, cooldown / COCK_FRACTION)
+	return lerpf(-0.68, 1.0, (cooldown - COCK_FRACTION) / (1.0 - COCK_FRACTION))
 
 func _draw_home_plate(origin: Vector2) -> void:
 	# Plate and people share perspective. Letting the environmental zoom enlarge

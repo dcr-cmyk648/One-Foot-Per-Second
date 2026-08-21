@@ -6,6 +6,18 @@ const HUMAN_FINAL_INDEX := Campaign.HUMAN_FINAL_INDEX
 const ALIEN_FINAL_INDEX := Campaign.ALIEN_FINAL_INDEX
 const FINAL_BOSS_INDEX := Campaign.FINAL_BOSS_INDEX
 
+const PHASE_WINDUP := "windup"
+const PHASE_OUTBOUND := "outbound_pitch"
+const PHASE_CONTACT := "contact"
+const PHASE_RETURN := "batted_return"
+const PHASE_RESET := "reset_rest"
+const WINDUP_SECONDS := 0.82
+const OUTBOUND_SECONDS := 1.14
+const CONTACT_SECONDS := 0.20
+const RETURN_SECONDS := 1.18
+const RESET_SECONDS := 0.66
+const LOOP_SECONDS := WINDUP_SECONDS + OUTBOUND_SECONDS + CONTACT_SECONDS + RETURN_SECONDS + RESET_SECONDS
+
 var highest_opponent := 0
 var genetic_revealed := false
 var eldritch_revealed := false
@@ -29,8 +41,39 @@ func configure(
 	queue_redraw()
 
 func _process(delta: float) -> void:
-	animation_time = fmod(animation_time + maxf(delta, 0.0), 120.0)
+	animation_time = fmod(animation_time + maxf(delta, 0.0), LOOP_SECONDS)
 	queue_redraw()
+
+func get_animation_state(time_override := -1.0) -> Dictionary:
+	# Kept independent of drawing so focused runners can assert the full story
+	# without taking timing-sensitive screenshots.
+	var loop_time := fmod(time_override if time_override >= 0.0 else animation_time, LOOP_SECONDS)
+	if loop_time < WINDUP_SECONDS:
+		var progress := loop_time / WINDUP_SECONDS
+		# The arm takes most of the windup to cock back, then whips forward in
+		# the final fraction. At the exact outbound boundary its endpoint already
+		# matches the ball source; it never continues swinging during flight.
+		var arm := lerpf(-0.12, -0.72, progress / 0.76) if progress <= 0.76 else lerpf(-0.72, 0.58, (progress - 0.76) / 0.24)
+		return {"phase": PHASE_WINDUP, "progress": progress, "pitcher_arm": arm, "batter_bat": -0.18}
+	loop_time -= WINDUP_SECONDS
+	if loop_time < OUTBOUND_SECONDS:
+		var progress := loop_time / OUTBOUND_SECONDS
+		return {"phase": PHASE_OUTBOUND, "progress": progress, "pitcher_arm": 0.58, "batter_bat": -0.18}
+	loop_time -= OUTBOUND_SECONDS
+	if loop_time < CONTACT_SECONDS:
+		var progress := loop_time / CONTACT_SECONDS
+		return {"phase": PHASE_CONTACT, "progress": progress, "pitcher_arm": 0.58, "batter_bat": lerpf(-0.18, 1.02, progress)}
+	loop_time -= CONTACT_SECONDS
+	if loop_time < RETURN_SECONDS:
+		var progress := loop_time / RETURN_SECONDS
+		return {"phase": PHASE_RETURN, "progress": progress, "pitcher_arm": 0.18, "batter_bat": lerpf(1.02, 0.28, progress)}
+	loop_time -= RETURN_SECONDS
+	return {"phase": PHASE_RESET, "progress": loop_time / RESET_SECONDS, "pitcher_arm": lerpf(0.18, -0.12, loop_time / RESET_SECONDS), "batter_bat": lerpf(0.28, -0.18, loop_time / RESET_SECONDS)}
+
+func get_batted_return_direction_multiplier() -> float:
+	# pitch_direction points pitcher → batter; a batted ball heads back into the
+	# field, away from home plate and generally toward the pitcher.
+	return -1.0
 
 func _draw() -> void:
 	var extent := size
@@ -148,44 +191,98 @@ func _draw_matchup(extent: Vector2, era: int) -> void:
 	draw_dashed_line(pitcher + pitch_direction * pitcher_radius * 1.25, plate, lane_color, 1.4, 8.0, true)
 	draw_line(plate, plate + side * batter_radius * 1.45 - pitch_direction * batter_radius * 1.55, Color(0.58, 0.76, 0.78, 0.22), 1.2, true)
 	draw_line(plate, plate - side * batter_radius * 1.45 - pitch_direction * batter_radius * 1.55, Color(0.58, 0.76, 0.78, 0.22), 1.2, true)
+	var animation := get_animation_state()
+	var source_count := _get_pitcher_arm_count(era)
+	var pitcher_arms := get_pitcher_arm_geometry(pitcher, pitcher_radius, era, float(animation.pitcher_arm), source_count)
 	_draw_home_plate(plate, pitch_direction, batter_radius * 0.46)
-	_draw_player(pitcher, pitcher_radius, Color("63d9ff"), false, era)
-	_draw_player(batter, batter_radius, Color("d78cff") if era > 0 else Color("ffd36b"), true, era)
-	var source_count := 1
-	if era == 1:
-		source_count = 2 + clampi(highest_opponent - HUMAN_FINAL_INDEX, 0, 3)
-	elif era == 2:
-		source_count = 7
-	elif era == 3:
-		source_count = 10
-	var travel := fmod(animation_time * (0.14 + float(era) * 0.035), 1.0)
+	_draw_player(pitcher, pitcher_radius, Color("63d9ff"), false, era, float(animation.pitcher_arm), pitcher_arms)
+	_draw_player(batter, batter_radius, Color("d78cff") if era > 0 else Color("ffd36b"), true, era, float(animation.batter_bat))
 	for ball_index in source_count:
 		var spread := float(ball_index) - float(source_count - 1) * 0.5
-		var source := pitcher + Vector2(0.0, spread * pitcher_radius * 0.24)
+		var source := Vector2((pitcher_arms[ball_index] as Dictionary).end)
 		var target := batter + Vector2(0.0, -spread * batter_radius * 0.16)
 		if portrait:
-			source = pitcher + Vector2(spread * pitcher_radius * 0.24, 0.0)
 			target = batter + Vector2(-spread * batter_radius * 0.16, 0.0)
 		var sideways := Vector2(-(target - source).y, (target - source).x).normalized()
 		var arc_strength := 0.0 if era == 0 else spread * minf(stage.size.x, stage.size.y) * 0.032
-		var control := (source + target) * 0.5 + sideways * arc_strength
+		var control := (source + plate) * 0.5 + sideways * arc_strength
 		var points := PackedVector2Array()
 		for point_index in 17:
-			points.append(_quadratic_bezier(source, control, target, float(point_index) / 16.0))
+			points.append(_quadratic_bezier(source, control, plate, float(point_index) / 16.0))
 		draw_polyline(points, Color(0.39, 0.85, 1.0, 0.13 + float(era) * 0.05), maxf(base_radius * 0.08, 2.0), true)
-		var staggered := fmod(travel + float(ball_index) / float(maxi(source_count, 1)) * 0.72, 1.0)
-		var ball_position := _quadratic_bezier(source, control, target, staggered)
+		var return_finish := plate + pitch_direction * get_batted_return_direction_multiplier() * minf(stage.size.x, stage.size.y) * (0.48 + absf(spread) * 0.035) + sideways * spread * base_radius * 2.4
+		var return_control := (plate + return_finish) * 0.5 - pitch_direction * base_radius * (2.0 + absf(spread)) + sideways * spread * base_radius * 2.0
+		var return_points := PackedVector2Array()
+		for point_index in 17:
+			return_points.append(_quadratic_bezier(plate, return_control, return_finish, float(point_index) / 16.0))
+		draw_polyline(return_points, Color(1.0, 0.79, 0.38, 0.15 + float(era) * 0.04), maxf(base_radius * 0.07, 1.8), true)
+		var phase := str(animation.phase)
+		var ball_position := source
+		var ball_visible := phase == PHASE_OUTBOUND or phase == PHASE_CONTACT or phase == PHASE_RETURN
+		if phase == PHASE_OUTBOUND:
+			ball_position = _quadratic_bezier(source, control, plate, float(animation.progress))
+		elif phase == PHASE_CONTACT:
+			ball_position = plate
+		elif phase == PHASE_RETURN:
+			ball_position = _quadratic_bezier(plate, return_control, return_finish, float(animation.progress))
+		if not ball_visible:
+			continue
 		for trail_index in 9:
-			var trail_t := maxf(staggered - float(trail_index + 1) * 0.026, 0.0)
-			var trail_position := _quadratic_bezier(source, control, target, trail_t)
+			var trail_t := maxf(float(animation.progress) - float(trail_index + 1) * 0.065, 0.0)
+			var trail_position := _quadratic_bezier(source, control, plate, trail_t) if phase == PHASE_OUTBOUND else _quadratic_bezier(plate, return_control, return_finish, trail_t)
 			var trail_alpha := (0.30 - float(trail_index) * 0.026) * (1.0 if era == 0 else 0.82)
 			draw_circle(trail_position, maxf(base_radius * (0.22 - float(trail_index) * 0.011), 2.0), Color(0.39, 0.85, 1.0, maxf(trail_alpha, 0.03)))
 		for glow_index in range(3, 0, -1):
 			draw_circle(ball_position, maxf(base_radius * (0.22 + glow_index * 0.12), 3.0), Color(0.55, 0.88, 1.0, 0.045 * glow_index))
 		draw_circle(ball_position, maxf(base_radius * 0.30, 3.8), Color("f4f7ff"))
 		draw_arc(ball_position, maxf(base_radius * 0.30, 3.8), 0.0, TAU, 20, Color("9fe9ff"), maxf(base_radius * 0.08, 1.4), true)
+	if str(animation.phase) == PHASE_CONTACT:
+		for burst_index in 6:
+			var burst_direction := Vector2.from_angle(float(burst_index) * TAU / 6.0 + pitch_direction.angle())
+			draw_line(plate + burst_direction * base_radius * 0.24, plate + burst_direction * base_radius * 0.92, Color("fff3bd"), maxf(base_radius * 0.09, 1.5), true)
 
-func _draw_player(center: Vector2, radius: float, color: Color, is_batter: bool, era: int) -> void:
+func _get_pitcher_arm_count(era: int) -> int:
+	if era == 1:
+		return 2 + clampi(highest_opponent - HUMAN_FINAL_INDEX, 0, 3)
+	if era == 2:
+		return 7
+	if era == 3:
+		return 10
+	return 1
+
+func get_pitcher_arm_geometry(center: Vector2, radius: float, era: int, action_angle: float, arm_count := -1) -> Array[Dictionary]:
+	var count := _get_pitcher_arm_count(era) if arm_count < 0 else arm_count
+	var facing := Vector2(1.0, 0.0)
+	if size.y > size.x * 1.15:
+		facing = Vector2(0.0, -1.0)
+	var arms: Array[Dictionary] = []
+	for limb_index in count:
+		var spread := float(limb_index) - float(count - 1) * 0.5
+		var angle := facing.angle() + spread * (0.28 if era > 0 else 0.0) + action_angle
+		var direction := Vector2.from_angle(angle)
+		var side := Vector2(-direction.y, direction.x)
+		var start := center + side * spread * radius * 0.13
+		arms.append({"start": start, "end": start + direction * radius * 1.12})
+	return arms
+
+func get_outbound_pitch_arm_contract(extent: Vector2, era: int) -> Dictionary:
+	var stage := _stage_rect(extent)
+	var portrait := stage.size.y > stage.size.x * 1.15
+	var pitcher := stage.position + stage.size * Vector2(0.20, 0.58)
+	if portrait:
+		pitcher = stage.position + stage.size * Vector2(0.44, 0.76)
+	var progress := float(highest_opponent) / float(FINAL_BOSS_INDEX)
+	var radius := minf(stage.size.x, stage.size.y) * 0.095 * (1.12 + progress * 0.12)
+	var arms := get_pitcher_arm_geometry(pitcher, radius, era, 0.58, _get_pitcher_arm_count(era))
+	var sources: Array[Vector2] = []
+	var endpoints: Array[Vector2] = []
+	for arm in arms:
+		var endpoint := Vector2(arm.end)
+		sources.append(endpoint)
+		endpoints.append(endpoint)
+	return {"sources": sources, "endpoints": endpoints}
+
+func _draw_player(center: Vector2, radius: float, color: Color, is_batter: bool, era: int, action_angle: float, pitcher_arms: Array[Dictionary] = []) -> void:
 	draw_circle(center + Vector2(radius * 0.18, radius * 0.24), radius * 1.10, Color(0.0, 0.0, 0.0, 0.24))
 	draw_circle(center, radius, Color("07101b"))
 	draw_arc(center, radius, 0.0, TAU, 56, color, maxf(radius * 0.14, 2.0), true)
@@ -194,6 +291,10 @@ func _draw_player(center: Vector2, radius: float, color: Color, is_batter: bool,
 	var facing := Vector2(-1.0, 0.0) if is_batter else Vector2(1.0, 0.0)
 	if size.y > size.x * 1.15:
 		facing = Vector2(0.0, 1.0) if is_batter else Vector2(0.0, -1.0)
+	if not is_batter and not pitcher_arms.is_empty():
+		for arm in pitcher_arms:
+			draw_line(Vector2(arm.start), Vector2(arm.end), color, maxf(radius * 0.18, 3.0), true)
+		return
 	var limb_count := 1
 	if era == 1:
 		limb_count = 3 if is_batter else 2
@@ -201,8 +302,6 @@ func _draw_player(center: Vector2, radius: float, color: Color, is_batter: bool,
 		limb_count = 6 if is_batter else 4
 	for limb_index in limb_count:
 		var spread := float(limb_index) - float(limb_count - 1) * 0.5
-		var motion := sin(animation_time * 2.2 + float(limb_index) * 0.35)
-		var action_angle := motion * (0.24 if is_batter else 0.13)
 		var angle := facing.angle() + spread * (0.28 if era > 0 else 0.0) + action_angle
 		var direction := Vector2.from_angle(angle)
 		var side := Vector2(-direction.y, direction.x)

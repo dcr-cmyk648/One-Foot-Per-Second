@@ -42,6 +42,41 @@ func _run() -> void:
 	_expect(main.title_screen_active and main.title_screen.visible, "The game should open on its title screen instead of pitching behind an unexplained UI")
 	_expect(main.title_subtitle_label.text == "A baseball game about a regular ol’ toddler", "The fresh title should remain spoiler-free")
 	_expect(main.title_art._visible_era() == 0, "Fresh title art must not reveal alien or cosmic imagery")
+	var title_phase_samples := [
+		{"time": 0.0, "phase": "windup"},
+		{"time": main.title_art.WINDUP_SECONDS + 0.01, "phase": "outbound_pitch"},
+		{"time": main.title_art.WINDUP_SECONDS + main.title_art.OUTBOUND_SECONDS + 0.01, "phase": "contact"},
+		{"time": main.title_art.WINDUP_SECONDS + main.title_art.OUTBOUND_SECONDS + main.title_art.CONTACT_SECONDS + 0.01, "phase": "batted_return"},
+		{"time": main.title_art.WINDUP_SECONDS + main.title_art.OUTBOUND_SECONDS + main.title_art.CONTACT_SECONDS + main.title_art.RETURN_SECONDS + 0.01, "phase": "reset_rest"},
+	]
+	for sample in title_phase_samples:
+		var phase_state: Dictionary = main.title_art.get_animation_state(float(sample.time))
+		_expect(str(phase_state.phase) == str(sample.phase), "Title animation must expose deterministic %s phase" % str(sample.phase))
+	_expect(float(main.title_art.get_animation_state(0.0).pitcher_arm) != float(main.title_art.get_animation_state(main.title_art.WINDUP_SECONDS + 0.5).pitcher_arm), "Pitcher arm should derive from the shared pitch phase")
+	_expect(float(main.title_art.get_animation_state(0.0).pitcher_arm) != float(main.title_art.get_animation_state(main.title_art.WINDUP_SECONDS - 0.01).pitcher_arm), "Windup should visibly move the pitcher arm from rest into the cocked pose")
+	_expect(float(main.title_art.get_animation_state(0.0).batter_bat) != float(main.title_art.get_animation_state(main.title_art.WINDUP_SECONDS + main.title_art.OUTBOUND_SECONDS + 0.1).batter_bat), "Batter bat should derive from the shared contact phase")
+	_expect(main.title_art.get_batted_return_direction_multiplier() < 0.0, "Batted returns must travel back into the field, opposite the pitcher-to-batter pitch direction")
+	for title_era in range(4):
+		var title_contract: Dictionary = main.title_art.get_outbound_pitch_arm_contract(Vector2(700.0, 440.0), title_era)
+		_expect(title_contract.sources == title_contract.endpoints, "Every title outbound source must equal its corresponding forward arm endpoint")
+	main.native_update_test_session = true
+	main.development_session = true
+	main.game.save_writes_locked = true
+	_expect(main._native_update_current_version() == main.NATIVE_UPDATE_TEST_VERSION, "Update test mode must use its fixed forced-outdated version")
+	_expect(not main.game.save_game(), "Update test mode must keep persistent save writes locked")
+	main._on_native_update_manifest_received(
+		HTTPRequest.RESULT_SUCCESS,
+		200,
+		PackedStringArray(),
+		JSON.stringify({"version": "99.0.0", "downloads": {"macos": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v99.0.0/No-Hitter.dmg"}}).to_utf8_buffer()
+	)
+	_expect(main.native_update_confirmation.visible, "Forced update-test mode should immediately show an official candidate")
+	_expect(main.native_update_confirmation.title.contains("UPDATE TEST") and main.native_update_confirmation.dialog_text.contains("Test version") and main.native_update_confirmation.dialog_text.contains("Official candidate") and main.native_update_confirmation.dialog_text.contains("not saved"), "Update-test copy must identify the test session, both versions, and volatile play")
+	_expect(not main.native_update_export_button.visible, "Update-test mode must hide backup export because test sessions cannot export persistent state")
+	_expect(main.native_update_download_url.begins_with(main.OFFICIAL_RELEASE_URL_PREFIX), "Update-test mode must retain the official release URL allowlist")
+	main.native_update_confirmation.hide()
+	main.native_update_test_session = false
+	main.game.save_writes_locked = false
 	_expect(main.title_menu_stack.get_child_count() == 3, "The title should expose Resume, New Game, and Import Save")
 	main._configure_title_layout(Vector2(1600.0, 900.0))
 	await process_frame
@@ -196,7 +231,11 @@ func _run() -> void:
 	_expect(not main.guide_label.text.contains("God"), "Fresh Guide implies the divine layer")
 	_expect(main.era_label.text.begins_with("LEVEL 01") and not main.era_label.text.contains("/"), "The campaign header should show only the current level")
 	_expect(main.upgrade_tabs.find_child("LOCKER", false, false) == null, "The full-width Locker tab should be removed")
-	_expect(main.upgrade_tabs.find_child("PITCH", false, false) != null, "Pitch types should have their own tab")
+	var purchase_tab_titles: Array[String] = []
+	for tab_index in main._visible_upgrade_tab_indices():
+		purchase_tab_titles.append(main.upgrade_tabs.get_tab_title(tab_index))
+	_expect(purchase_tab_titles.slice(0, 4) == ["TRAIN", "FACILITY", "BALL", "BODY"], "Purchasable navigation must begin TRAIN → FACILITY → BALL → BODY")
+	_expect(main.upgrade_tabs.find_child("PITCH", false, false) == null, "PITCH must not be an upgrade tab")
 	_expect(main.upgrade_tabs.find_child("BALL", false, false) != null, "Ball upgrades should have their own tab")
 	_expect(main.upgrade_tabs.find_child("FACILITY", false, false) != null, "Facilities should have their own tab")
 	_expect(main.upgrade_tabs.find_child("ACHIEVE", false, false) != null, "Achievements should have their own tab")
@@ -226,8 +265,31 @@ func _run() -> void:
 	main.game.achievement_revision += 1
 	main._refresh_achievement_tab(true)
 	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Ball, Facility, and BODY run catalogs should each have Hide Purchased")
-	_expect((main.pitch_buttons.dead_fish.container as Control).visible, "The read-only Arsenal should show its learned opening pitch")
-	_expect(not (main.pitch_buttons.knuckleball.container as Control).visible, "The Arsenal must hide unseen draft pitches instead of leaking them as locks")
+	_expect(main.equipment_labels.pitch.has("inspect_button"), "Loadout must expose a dedicated Pitch Arsenal inspector")
+	main._open_pitch_arsenal()
+	_expect(main.pitch_arsenal_dialog.visible and main.pitch_arsenal_dialog.title == "PITCH ARSENAL", "Loadout Arsenal should open a reusable scrollable inspector")
+	_expect(main.pitch_arsenal_dialog.borderless and main.pitch_arsenal_dialog.has_theme_stylebox_override("panel"), "Desktop Pitch Arsenal must use the opaque app-owned modal surface without native chrome")
+	_expect(main.pitch_arsenal_entries.get_child_count() == 2, "Fresh Pitch Arsenal should show only its explainer and learned opening pitch")
+	var first_pitch_copy := (main.pitch_arsenal_entries.get_child(1) as PanelContainer).get_child(0) as Label
+	_expect(first_pitch_copy.text.contains("Dead-Fish") and first_pitch_copy.text.contains("LEVEL 1") and first_pitch_copy.text.contains("USE") and first_pitch_copy.text.contains("Base profile"), "Pitch Arsenal must show learned pitch identity, level, profile, and automatic selection behavior")
+	_expect(main.pitch_arsenal_close_button.get_combined_minimum_size().y >= 44.0, "Pitch Arsenal Close must be touch-sized")
+	main._close_pitch_arsenal()
+	main.pitch_field.snapshot.pitch_cycle_progress = 0.0
+	main.pitch_field.pitch_cycle_sample_time = main.pitch_field.total_time
+	var arm_rest: float = main.pitch_field.get_throw_arm_motion()
+	main.pitch_field.snapshot.pitch_cycle_progress = 0.60
+	main.pitch_field.pitch_cycle_sample_time = main.pitch_field.total_time
+	var arm_cocked: float = main.pitch_field.get_throw_arm_motion()
+	main.pitch_field.snapshot.pitch_cycle_progress = 0.99
+	main.pitch_field.pitch_cycle_sample_time = main.pitch_field.total_time
+	var arm_release: float = main.pitch_field.get_throw_arm_motion()
+	_expect(arm_rest <= 0.0 and arm_cocked < arm_rest and arm_release > arm_cocked, "Live arm must slowly cock through recovery then whip forward at release")
+	main.pitch_field.volley_in_flight = true
+	main.pitch_field.throw_animation = 1.0
+	_expect(is_equal_approx(main.pitch_field.get_throw_arm_motion(), 1.0), "A live released volley must begin at the exact forward release pose")
+	main.pitch_field.throw_animation = 0.35
+	_expect(main.pitch_field.get_throw_arm_motion() < 1.0, "A live released volley must visibly retract after release")
+	main.pitch_field.volley_in_flight = false
 	main.game.selected_run_perks.append({
 		"definition_id": "age_little_kid", "name": "Become a Little Kid", "level": 1,
 		"rarity_name": "COMMON", "color": "a9b6c5",
@@ -707,7 +769,6 @@ func _run() -> void:
 
 func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 	var collections := [
-		{"kind": "pitch", "definitions": Content.PITCHES, "buttons": main.pitch_buttons, "owned": main.game.unlocked_pitches},
 		{"kind": "catalog", "definitions": Content.BALL_UPGRADES, "buttons": main.ball_upgrade_buttons, "owned": main.game.purchased_ball_upgrades},
 		{"kind": "catalog", "definitions": Content.MILESTONES, "buttons": main.milestone_buttons, "owned": main.game.purchased_milestones},
 	]
@@ -721,10 +782,8 @@ func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 			var required_level := Content.catalog_required_level(definition)
 			var tier := 0 if required_level <= Content.HUMAN_FINAL_INDEX else (1 if required_level <= Content.ALIEN_FINAL_INDEX else 2)
 			var owned: bool = id in collection.owned
-			var should_show: bool = owned if str(collection.kind) == "pitch" else (owned or tier <= visible_tier)
+			var should_show: bool = owned or tier <= visible_tier
 			_expect(container.visible == should_show, "%s catalog visibility is wrong for %s" % [stage, definition.name])
-			if str(collection.kind) == "pitch":
-				continue
 			if not should_show or owned or main.game.highest_unlocked >= required_level:
 				continue
 			_expect(button.disabled, "%s should lock %s until its level requirement" % [stage, definition.name])
@@ -736,7 +795,6 @@ func _audit_catalog_visibility(main, visible_tier: int, stage: String) -> void:
 func _audit_upgrade_order(main) -> void:
 	var collections := [
 		{"definitions": Content.TRAINING, "buttons": main.training_buttons},
-		{"definitions": Content.PITCHES, "buttons": main.pitch_buttons},
 		{"definitions": Content.BALL_UPGRADES, "buttons": main.ball_upgrade_buttons},
 		{"definitions": Content.MILESTONES, "buttons": main.milestone_buttons},
 	]

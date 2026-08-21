@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.18.0 — The Wiffle Ball developed a personality
+
+- Rebuilt every replacement ball as a cumulative physical profile instead of a Payload-only ladder. Human, alien, and eldritch shells now make visible choices across release Speed, Quality, air Drag, and Payload while preserving old ownership IDs and established tier endpoints.
+- Made every generated perk card state its exact numerical effect, including Body adjectives, and clarified ball rows with both the precise change from the prior shell and the complete equipped profile.
+- Fixed Mastery’s finishing play: crossing the requirement on a strikeout unlocks immediately, crossing it on anything else waits for the next strikeout, and delayed balls can no longer unlock whichever batter happens to be on screen later.
+- Separated live feats from idle bookkeeping. Offline play still earns its intended XP, Mastery, loot, and career totals, but action achievements now require actions actually witnessed online.
+- Added a durable story-voice source, rewrote the prologue and every first-run human chapter in the game’s melodramatic baseball voice, expanded human/alien/eldritch name grammar, and added once-only rebirth and cosmic-threat story beats.
+- Reorganized mobile navigation around purchase-only **Train → Facility → Ball → Body** upgrades, a touch-sized **Log** hub for Events/Achievements/Story/Stats/Help, and a scrollable read-only Pitch Arsenal under Loadout.
+- Synchronized the live and title pitchers around one readable motion: a slow rectangular-arm windup, a fast whip to the exact release point, ball contact, a real batted return, and a clean reset. Already released balls remain independent of later upgrades and UI state.
+- Added a save-isolated native update test pathway so installed macOS builds can exercise the official update prompt without loading or writing a real run. Browser/PWA and native update channels continue to share one release source.
+- Advanced saves to schema 30 for live-action achievement totals and the once-only post-rebirth story marker. Older saves migrate in place, and the release keeps the browser checkpoint/manual-slot recovery model intact.
+
 ## 0.17.2 — The toddler aged on schedule
 
 - Added an immediate fresh-run prologue: one toddler, one Wiffle Ball, three feet, and one foot per second. Every later human chapter now has distinct first-lifetime arrival copy that appears only after rewards are resolved and the new level is actually entered.
