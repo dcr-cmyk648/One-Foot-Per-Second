@@ -2,7 +2,7 @@
 
 ## Status
 
-M1, M2, and M3 are accepted after primary diff and visual review. M1 has cumulative multi-axis ball profiles, exact Body-adjective copy, resolved-opponent mastery identity, persisted live-action achievement counters separated from true career statistics, source-gated volley feats, and exact ball delta/full-profile tooltips. M2 adds a durable authorial prose seed, rewrites the full first-run human story in the requested dramatic/absurd voice, preserves the player as pitcher in Coach Pitch, adds save-compatible once-only post-rebirth Middle School copy, strengthens the genetic/eldritch story anchors, and substantially expands deterministic names without changing boss signatures. M3 makes mobile Upgrades purchase-only in Train → Facility → Ball → Body order, adds a touch-safe Log hub, moves learned pitches into a scrollable Loadout Arsenal, and synchronizes live/title windup, release, contact, return, and retraction geometry. Focused M1/M2/M3 runners, `overhaul_runner`, `progression_audit`, desktop/390×844 UI suites, and `git diff --check` pass. M4 is stamping the accepted source as v0.18.0 (save schema 30); the pre-feedback Web artifact is stale and must be replaced by the final pipeline.
+M1, M2, and M3 are accepted after primary diff and visual review. M1 has cumulative multi-axis ball profiles, exact Body-adjective copy, resolved-opponent mastery identity, persisted live-action achievement counters separated from true career statistics, source-gated volley feats, and exact ball delta/full-profile tooltips. M2 adds a durable authorial prose seed, rewrites the full first-run human story in the requested dramatic/absurd voice, preserves the player as pitcher in Coach Pitch, adds save-compatible once-only post-rebirth Middle School copy, strengthens the genetic/eldritch story anchors, and substantially expands deterministic names without changing boss signatures. M3 makes mobile Upgrades purchase-only in Train → Facility → Ball → Body order, adds a touch-safe Log hub, moves learned pitches into a scrollable Loadout Arsenal, and synchronizes live/title windup, release, contact, return, and retraction geometry. Focused M1/M2/M3 runners, `overhaul_runner`, `progression_audit`, desktop/390×844 UI suites, and `git diff --check` pass. M4 locked source commit `146ebc0` as v0.18.0 (save schema 30), ran the one all-platform pipeline successfully, and produced the exact Web/native/source artifacts now awaiting synchronized publication.
 
 ## Goal
 
@@ -163,8 +163,21 @@ Every unresolved note is tracked here even when implemented in a later milestone
 - [x] Complete and accept M1 through delegated Terra implementation and focused contract review.
 - [x] Complete and accept M2 through one delegated Terra implementation milestone.
 - [x] Complete and accept M3 through one delegated Terra implementation milestone.
-- [ ] Complete M4 Sol integration and launch one deterministic publication pipeline.
+- [x] Lock accepted v0.18.0 source revision `146ebc0` and run the one deterministic all-platform validation/package pipeline.
+- [ ] Publish and verify the exact v0.18.0 artifacts across the approved synchronized destinations.
+
+## M4 release record
+
+- Accepted source: `146ebc0` (`Release No Hitter v0.18.0 source`)
+- Version / save schema: `0.18.0` / `30`
+- Release gate: PASS (`test_runner`, desktop UI, 390×844 mobile UI, macOS Universal, Windows x86_64/ARM64, Linux x86_64/ARM64, Browser, archive validation, Web parity)
+- Sites wrapper build and four rendered-response tests: PASS, reusing the exact Web artifact
+- Web PCK / Sites fingerprint: `6bce5c4d4b0935ec90b8f852801c66802372e6b9ad1cd44e9579568b54cd96ec`
+- Browser ZIP: `062c7a12f02c1ed18d469054abfd49a4c531bcbace982f9754610199c5b0c5b3`
+- All Desktop Platforms ZIP: `31f6c015ab5d1cf89977d8940a8ca0a5eaacc50ec4ae42a9d92adaf499ac7774`
+- All Platforms ZIP: `3233bbe7d9f78ad536446cb2d57bab7c3f1620ff3ad90b21b33334adf92af3cf`
+- Per-platform checksums are recorded in `release/No Hitter v0.18.0/SHA256SUMS.txt`.
 
 ## Exact next action
 
-In Sol, finish M4: review the integrated working tree, bump/stamp one release version, identify and commit the accepted source revision, run `scripts/package_all_platforms.sh` exactly once, reuse those artifacts for GitHub Pages, the existing GitHub release/update channel, and owner-only Sites, and record the source revision, artifact checksums, publication identifiers, and destination verification here. Do not regenerate successful artifacts per destination.
+Commit the generated v0.18.0 Web/update metadata, push the synchronized artifact revision to `main`, publish the exact prebuilt archives to GitHub Releases, deploy the already-built Sites wrapper privately, verify Pages/Release/Sites once, and record the publication identifiers here. Do not rebuild successful artifacts.
