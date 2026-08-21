@@ -2,7 +2,7 @@
 
 ## Status
 
-The complete gameplay/UI overhaul is implemented and the delegated final-validation milestone is accepted. Core, progression, first-lifetime, desktop, and portrait suites pass; desktop/compact/phone captures were reviewed; and the slow multiverse diagnostic has current evidence through every league and the 5,000c level-100 gate. The final synchronized v0.17.0 Web and native artifacts are built, archive-verified, and browser-accepted. Only commit/push, GitHub release/Pages publication, Sites publication, and host verification remain.
+The complete gameplay/UI overhaul is implemented, validated, and published as v0.17.0. Core, progression, first-lifetime, desktop, and portrait suites pass; desktop/compact/phone captures were reviewed; and the slow multiverse diagnostic has evidence through every league and the 5,000c level-100 gate. The synchronized Web and native artifacts are archive-verified, GitHub Pages is live, all native/browser release assets are published, and owner-only Sites version 30 is deployed successfully.
 
 ## Goal
 
@@ -233,7 +233,7 @@ The notes describe one coherent structure when interpreted as follows:
 - [x] Complete delegated responsive desktop/phone visual acceptance.
 - [x] Fix the multiverse audit's final-boss policy so it holds level 100 for the witnessed winning K instead of taking an immediately preceding deeper ascension.
 - [x] Run final repository-wide suites, Web parity, Sites adapter tests, real-browser responsive acceptance, and package every target.
-- [ ] Publish synchronized Pages/Sites/native update releases and verify both live hosts.
+- [x] Publish synchronized Pages/Sites/native update releases and verify both live hosts.
 
 ## Discoveries
 
@@ -256,7 +256,8 @@ The notes describe one coherent structure when interpreted as follows:
 - Delegated desktop and 390×844 logical-layout suites pass. Primary capture review accepted the landscape title composition, compact 1179×720 play layout, 1256×696 wide-edge tri-pane, desktop Training/Story/equipment states, opening 1.5:1 pitcher-to-toddler scale, readable text, and unclipped controls. The native capture harness retains its physical desktop window while testing a 390×844 logical root, so its portrait PNG has surrounding desktop pixels; the headless logical-geometry suite is the authoritative native-mobile assertion and browser portrait rendering remains part of final Web acceptance.
 - Final browser acceptance used a fresh local origin after the last export. The 1280×720 title and three-pane play screen, 1179×720 compact transition, and 390×844 portrait equipment and mandatory-choice windows all fit without page scrolling. The remaining desktop equipment-window defect was traced to a Web child-window title bar outside a 720-pixel canvas; the shipped build now uses an explicit in-content Close action, viewport-clamped geometry, and live recentering across responsive breakpoints.
 - The final `package_all_platforms.sh` run passed the core, progressive-interface, and portrait-interface suites; exported and verified browser/PWA, Universal macOS, Windows x86_64/ARM64, and Linux x86_64/ARM64 targets; validated the DMG and every archive; and produced a 206 MB `No Hitter v0.17.0 All Platforms.zip`. `verify_web_parity.sh` passes, and the Sites adapter rebuild passes four rendered/runtime tests including segmented WebAssembly reconstruction.
+- GitHub Pages workflow run 32433177756 completed successfully from the accepted v0.17.0 app commit. The live shell reports No Hitter, the shipped `index.pck` size, manifest, and service worker, while the live update manifest reports v0.17.0 and the matching native-download URLs. The GitHub release contains all eight expected verified assets. Sites version 30 saved the tested 88-file deployment archive and its owner-only production deployment completed successfully; an unauthenticated request correctly receives the existing access gate.
 
 ## Exact next action
 
-Perform Sol's final diff review, commit and push the exact accepted source/build state, publish the synchronized GitHub Pages/native release and approved Sites deployment, and verify both hosts without opening them for the user.
+Release complete. Preserve the v0.17.0 release/tag and Sites version 30 as rollback points; begin later feedback from this clean published baseline.
