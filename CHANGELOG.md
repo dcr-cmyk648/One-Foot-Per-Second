@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.19.0 — The perk cards learned to level up
+
+- Determination now fills 20% more slowly while each logarithmic quality step is 15% stronger, preserving smooth decay and slower early ramps while improving endgame payoff.
+- Owned perk upgrades now appear after three eligible perks on a seeded 20% board roll, with rarity-scaled primary improvements, optional compatible secondary effects, and deterministic serialized state.
+- Human pitch cards now expose immutable Speed, Quality, and air-Drag sidegrades in the released snapshot so the exact release profile persists through later upgrades and load cycles.
+- Fixed Offline and Loot percentage formatting to sane values and added exact before/after effect copy for owned perk upgrades and selection previews.
+- Concise equipment comparisons now show only meaningful effective stat differences, and detail panels use a bounded scroll body to preserve action visibility on 390×844 phones.
+- Broadened deterministic name generation with more components and ordering patterns, and added the once-only Tee Ball and Little Timmy hat story beats at their authoritative moments.
+- Advanced to save schema 31 with migration compatibility for schema 28+ runs, while preserving all cross-platform parity, update behavior, and current external save locations.
+
 ## 0.18.0 — The Wiffle Ball developed a personality
 
 - Rebuilt every replacement ball as a cumulative physical profile instead of a Payload-only ladder. Human, alien, and eldritch shells now make visible choices across release Speed, Quality, air Drag, and Payload while preserving old ownership IDs and established tier endpoints.

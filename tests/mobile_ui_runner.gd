@@ -431,9 +431,12 @@ func _run() -> void:
 		"name": "Phone Test Cap", "stats": {"quality_bonus": 0.01},
 		"roll_quality": 1.0, "color": "a9b6c5", "favorite": false,
 	})
+	var phone_comparison_stats := {}
+	for stat_definition in Content.LOOT_STATS:
+		phone_comparison_stats[str(stat_definition.id)] = 0.02
 	main.game._add_loot_item({
 		"id": "phone_compare_hat", "slot": "hat", "item_level": 2, "rarity": 1,
-		"name": "Readable Comparison Cap", "stats": {"quality_bonus": 0.02, "speed_bonus": 0.01},
+		"name": "Readable Comparison Cap", "stats": phone_comparison_stats,
 		"roll_quality": 1.0, "color": "66a6ff", "favorite": false,
 	})
 	main.game.equip_loot("phone_equipped_hat")
@@ -492,7 +495,11 @@ func _run() -> void:
 	_expect(main.loot_item_dialog.position.y >= 0 and main.loot_item_dialog.position.y + main.loot_item_dialog.size.y <= 844, "The item comparison must remain entirely inside the phone viewport")
 	_expect(main.loot_item_name_label.text == "Readable Comparison Cap", "The item comparison should show the complete item name")
 	_expect(main.loot_item_equipped_label.text.contains("Phone Test Cap"), "The phone comparison should identify the equipped item")
-	_expect(main.loot_item_stats.get_child_count() == Content.LOOT_STATS.size(), "The phone comparison should expose all item stats without hover")
+	_expect(main.loot_item_stats.get_child_count() == Content.LOOT_STATS.size(), "The phone comparison should expose every changed effective stat without hover")
+	_expect(main.loot_item_stats_scroll.has_meta("bounded_detail_body") and bool(main.loot_item_stats_scroll.get_meta("bounded_detail_body")), "Tall equipment details must use the reusable bounded-scroll contract")
+	_expect(main.loot_item_stats.get_combined_minimum_size().y > main.loot_item_stats_scroll.size.y, "The equipment detail body must genuinely scroll when every stat differs")
+	var phone_close_button := main.loot_item_dialog.find_child("EquipmentComparisonCloseButton", true, false) as Button
+	_expect(phone_close_button != null and not main.loot_item_stats_scroll.is_ancestor_of(phone_close_button) and phone_close_button.get_parent().get_parent() == main.loot_item_stats_scroll.get_parent(), "At 390×844 the bounded detail body must be a sibling of the persistent Close header")
 	_expect(main.loot_item_equip_button.get_combined_minimum_size().y >= 44.0 and main.loot_item_trash_button.get_combined_minimum_size().y >= 44.0, "Phone comparison actions should be touch-sized")
 	main.loot_item_trash_button.pressed.emit()
 	_expect(main.loot_item_trash_button.text == "CONFIRM TRASH", "Phone Trash should require a second deliberate press")
@@ -500,6 +507,11 @@ func _run() -> void:
 	main.locker_dialog_close_button.pressed.emit()
 	await process_frame
 	_expect(not main.locker_dialog.visible, "The in-content equipment Close button should dismiss the browser")
+	var narrow_geometry: Rect2i = main._loot_item_popup_geometry(Vector2(360.0, 700.0))
+	_expect(narrow_geometry.position.x >= 0 and narrow_geometry.position.y >= 0 and narrow_geometry.end.x <= 360 and narrow_geometry.end.y <= 700, "The narrower 360×700 comparison geometry must remain entirely in frame")
+	_expect(main.loot_item_stats.get_combined_minimum_size().y > narrow_geometry.size.y - 180, "The narrower portrait comparison contract must retain a real scrollable body")
+	main._close_loot_item_dialog()
+	main._close_locker_dialog()
 
 	main._show_mobile_overlay(main.equipment_sidebar, "LOADOUT")
 	await process_frame

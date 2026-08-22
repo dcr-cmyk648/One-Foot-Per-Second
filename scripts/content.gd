@@ -638,6 +638,20 @@ const BATTER_NAME_EXPANSIONS := [
 	{"given": ["Abyss", "Cthon", "Dread", "Eidolon", "Fallow", "Gloam"], "family": ["Hollowscore", "Inkwell", "Knot", "Liminal", "Maw", "Null"], "nickname": ["No Umpire", "Wrong Angle", "Last Echo", "Night Game", "Unwritten", "Cold Glove"], "mononym": ["Hush", "Rift", "Morrow", "Omen", "Vanta", "Woe"]},
 ]
 
+# M2 adds scorecard-scale variants across every grammar component. These stay
+# data-only and deterministic: cosmetic variety never enters save state.
+const BATTER_NAME_M2_EXPANSIONS := [
+	{"given": ["Lark", "Milo", "Poppy", "Reese", "Sunny", "Toby"], "middle": ["Sky", "Drew", "Pax", "Fox", "Rue", "Blu"], "family": ["Puddle", "Cracker", "Velcro", "Doodle", "Pancake", "Mittens"], "nickname": ["Nap Escapee", "Crayon General", "Juice Box"], "epithet": ["Marshal of Finger Paint", "First Across the Monkey Bars", "Guardian of the Spare Snack"], "mononym": ["Bubbles", "Nugget", "Waffles"], "title": ["Baron", "Coach", "Mayor"], "origin": ["the Foam Castle", "the Red Wagon", "the Big Slide"]},
+	{"given": ["Dakota", "Emerson", "Finley", "Hayden", "Logan", "Quinn"], "middle": ["Blake", "Drew", "Sage", "Lane", "Parker", "Rey"], "family": ["Snyder", "Park", "Reed", "Garcia", "Bennett", "Foster"], "nickname": ["Bracket", "Cleat Check", "Dugout DJ"], "epithet": ["Prince of the Carpool", "Keeper of the Second Base Bag", "Undefeated in Pool C"], "mononym": ["RBI", "Bunt", "Cleats"], "title": ["Baron", "Vice Captain", "Bracket Duke"], "origin": ["the Equipment Shed", "the Sunday Doubleheader", "Field Nine"]},
+	{"given": ["Ari", "Bailey", "Cameron", "Devon", "Jules", "Rowan"], "middle": ["Blair", "Drew", "Sage", "Lane", "Parker", "Rey"], "family": ["Keller", "Ortiz", "Shaw", "Vega", "Fletcher", "Dawson"], "nickname": ["Late Pass", "Group Project", "Locker Key"], "epithet": ["Ruler of the Bleachers", "Keeper of the Group Chat", "Who Escaped Study Hall"], "mononym": ["Detention", "Cafeteria", "Pencil"], "title": ["Baron", "Vice Captain", "Hall Monitor"], "origin": ["the Science Wing", "the East Stairwell", "Fourth Period"]},
+	{"given": ["Maren", "Nico", "Priya", "Reed", "Sasha", "Toby"], "middle": ["Blair", "Drew", "Sage", "Lane", "Parker", "Rey"], "family": ["Hughes", "Mendoza", "Price", "Sullivan", "Yates", "Zhang"], "nickname": ["Registrar", "Lab Fee", "Campus Tour"], "epithet": ["Keeper of the Parking Pass", "Major of Undeclared Studies", "The Tenure Track Terror"], "mononym": ["Thesis", "Dorms", "Lecture"], "title": ["Provost", "Baron", "Graduate"], "origin": ["North Campus", "the Library Annex", "the Night Class"]},
+	{"given": ["Andre", "Bianca", "Cruz", "Darla", "Eli", "Fiona"], "middle": ["Blair", "Drew", "Sage", "Lane", "Parker", "Rey"], "family": ["Hollis", "Ibarra", "Jensen", "Keane", "Lombardi", "Morrow"], "nickname": ["Bat Bag", "Room Service", "Road Trip"], "epithet": ["Baron of the Overnight Bus", "Keeper of the Per Diem", "Called Up at Dawn"], "mononym": ["Shuttle", "Locker", "Stretch"], "title": ["Captain", "Baron", "Veteran"], "origin": ["the Hotel Lobby", "the Visitor Clubhouse", "Exit 43"]},
+	{"given": ["Gia", "Hank", "Imani", "Jonah", "Kira", "Luca"], "middle": ["Blair", "Drew", "Sage", "Lane", "Parker", "Rey"], "family": ["Merritt", "Navarro", "Owens", "Pruitt", "Quincy", "Rios"], "nickname": ["Press Box", "Pinch Hit", "Clubhouse"], "epithet": ["Sovereign of the Arbitration Room", "Keeper of the Luxury Tax", "First of the Night Game"], "mononym": ["Pinch", "Scorecard", "Diamond"], "title": ["Baron", "MVP", "Commissioner"], "origin": ["the Owners' Box", "the Media Tunnel", "the Seventh Inning"]},
+	{"given": ["Axiom", "Bex", "Cinder", "Dynamo", "Evo", "Flux"], "middle": ["Mk", "Beta", "Prime", "Unit", "Node", "Patch"], "family": ["Allele", "Biomesh", "Chimera", "Doublestrand", "Enhancer", "Fleshcode"], "nickname": ["Side Effect", "Test Group", "Second Opinion"], "epithet": ["Patent Pending", "From the Auxiliary Vat", "Who Passed Inspection"], "mononym": ["Splice", "Mitosis", "Helix"], "title": ["Director", "Protocol", "Subject"], "origin": ["the Clean Room", "Vat Twelve", "the Compliance Desk"]},
+	{"given": ["Arcturus", "Boreal", "Ceti", "Dione", "Eris", "Fomalhaut"], "middle": ["Lambda", "Prime", "Nine", "Kilo", "Rho", "Vega"], "family": ["Glimmer", "Heliarch", "Iontrail", "Kepler", "Lagrange", "Meteoric"], "nickname": ["Orbit Skip", "Solar Noon", "Comms Lag"], "epithet": ["Ambassador of the Far Dugout", "First Past Aphelion", "Bearer of the Radio Delay"], "mononym": ["Aster", "Nova", "Cosma"], "title": ["Ambassador", "Comet", "Archon"], "origin": ["the Fourth Moon", "the Long Orbit", "the Away System"]},
+	{"given": ["Abyss", "Cthon", "Dread", "Eidolon", "Fallow", "Gloam"], "middle": ["Null", "Ash", "Void", "Last", "Nine", "Hush"], "family": ["Hollowscore", "Inkwell", "Knot", "Liminal", "Maw", "Null"], "nickname": ["No Umpire", "Wrong Angle", "Last Echo"], "epithet": ["Keeper of the Blank Box Score", "Who Waits Beyond the Foul Pole", "Last in the Scoreless Dark"], "mononym": ["Hush", "Rift", "Morrow"], "title": ["Archon", "Last", "Umpire"], "origin": ["the Empty Dugout", "the Ninth Shadow", "the Uncalled Inning"]},
+]
+
 const BATTER_NAME_ORDINALS := [
 	["Junior", "II", "the Tiny", "Third Snack", "After Nap", "of T-Ball"],
 	["Jr.", "II", "of Pool B", "the Select", "Saturday Edition", "of Field Three"],
@@ -1208,8 +1222,9 @@ const PITCHES := [
 		"bonus": -0.25,
 		"speed_min": 1.00,
 		"speed_max": 1.00,
+		"drag_multiplier": 0.40,
 		"color": Color("f4f7ff"),
-		"description": "Quality −250 • Speed ×1.00.",
+		"description": "Quality −250; Speed ×1.00; Air Drag ×0.40. A clean lob, somehow.",
 	},
 	{
 		"id": "four_seam",
@@ -1219,8 +1234,9 @@ const PITCHES := [
 		"bonus": 0.15,
 		"speed_min": 0.97,
 		"speed_max": 1.03,
+		"drag_multiplier": 0.52,
 		"color": Color("d8f3ff"),
-		"description": "Quality +150 • Speed ×0.97–1.03.",
+		"description": "Quality +150; Speed ×0.97–1.03; Air Drag ×0.52.",
 	},
 	{
 		"id": "changeup",
@@ -1230,8 +1246,9 @@ const PITCHES := [
 		"bonus": 0.30,
 		"speed_min": 0.78,
 		"speed_max": 0.90,
+		"drag_multiplier": 0.565,
 		"color": Color("83e6c2"),
-		"description": "Quality +300 • Speed ×0.78–0.90.",
+		"description": "Quality +300; Speed ×0.78–0.90; Air Drag ×0.565.",
 	},
 	{
 		"id": "two_seam",
@@ -1241,8 +1258,9 @@ const PITCHES := [
 		"bonus": 0.24,
 		"speed_min": 0.94,
 		"speed_max": 1.04,
+		"drag_multiplier": 0.55,
 		"color": Color("b7e5ff"),
-		"description": "Quality +240 • Speed ×0.94–1.04.",
+		"description": "Quality +240; Speed ×0.94–1.04; Air Drag ×0.55.",
 	},
 	{
 		"id": "curveball",
@@ -1252,8 +1270,9 @@ const PITCHES := [
 		"bonus": 0.48,
 		"speed_min": 0.76,
 		"speed_max": 0.91,
+		"drag_multiplier": 0.62,
 		"color": Color("8ca7ff"),
-		"description": "Quality +480 • Speed ×0.76–0.91.",
+		"description": "Quality +480; Speed ×0.76–0.91; Air Drag ×0.62.",
 	},
 	{
 		"id": "slider",
@@ -1263,8 +1282,9 @@ const PITCHES := [
 		"bonus": 0.68,
 		"speed_min": 0.84,
 		"speed_max": 0.98,
+		"drag_multiplier": 0.679,
 		"color": Color("bc91ff"),
-		"description": "Quality +680 • Speed ×0.84–0.98.",
+		"description": "Quality +680; Speed ×0.84–0.98; Air Drag ×0.679.",
 	},
 	{
 		"id": "sweeper",
@@ -1274,8 +1294,9 @@ const PITCHES := [
 		"bonus": 0.58,
 		"speed_min": 0.80,
 		"speed_max": 0.95,
+		"drag_multiplier": 0.649,
 		"color": Color("a68cff"),
-		"description": "Quality +580 • Speed ×0.80–0.95.",
+		"description": "Quality +580; Speed ×0.80–0.95; Air Drag ×0.649.",
 	},
 	{
 		"id": "circle_change",
@@ -1285,8 +1306,9 @@ const PITCHES := [
 		"bonus": 0.82,
 		"speed_min": 0.74,
 		"speed_max": 0.89,
+		"drag_multiplier": 0.721,
 		"color": Color("65d9b5"),
-		"description": "Quality +820 • Speed ×0.74–0.89.",
+		"description": "Quality +820; Speed ×0.74–0.89; Air Drag ×0.721.",
 	},
 	{
 		"id": "splitter",
@@ -1296,8 +1318,9 @@ const PITCHES := [
 		"bonus": 0.92,
 		"speed_min": 0.80,
 		"speed_max": 0.96,
+		"drag_multiplier": 0.751,
 		"color": Color("f49dff"),
-		"description": "Quality +920 • Speed ×0.80–0.96.",
+		"description": "Quality +920; Speed ×0.80–0.96; Air Drag ×0.751.",
 	},
 	{
 		"id": "knuckleball",
@@ -1307,8 +1330,9 @@ const PITCHES := [
 		"bonus": 1.20,
 		"speed_min": 0.58,
 		"speed_max": 0.82,
+		"drag_multiplier": 0.835,
 		"color": Color("ffd07d"),
-		"description": "Quality +1,200 • Speed ×0.58–0.82.",
+		"description": "Quality +1,200; Speed ×0.58–0.82; Air Drag ×0.835.",
 	},
 	{
 		"id": "forkball",
@@ -1318,8 +1342,9 @@ const PITCHES := [
 		"bonus": 1.05,
 		"speed_min": 0.76,
 		"speed_max": 0.92,
+		"drag_multiplier": 0.79,
 		"color": Color("e89bff"),
-		"description": "Quality +1,050 • Speed ×0.76–0.92.",
+		"description": "Quality +1,050; Speed ×0.76–0.92; Air Drag ×0.79.",
 	},
 	{
 		"id": "screwball",
@@ -1329,8 +1354,9 @@ const PITCHES := [
 		"bonus": 1.30,
 		"speed_min": 0.78,
 		"speed_max": 0.95,
+		"drag_multiplier": 0.865,
 		"color": Color("ff9cc9"),
-		"description": "Quality +1,300 • Speed ×0.78–0.95.",
+		"description": "Quality +1,300; Speed ×0.78–0.95; Air Drag ×0.865.",
 	},
 	{
 		"id": "buzzsaw_cutter",
@@ -1340,8 +1366,9 @@ const PITCHES := [
 		"bonus": 1.45,
 		"speed_min": 0.90,
 		"speed_max": 1.00,
+		"drag_multiplier": 0.91,
 		"color": Color("d6ff7f"),
-		"description": "Quality +1,450 • Speed ×0.90–1.00.",
+		"description": "Quality +1,450; Speed ×0.90–1.00; Air Drag ×0.91.",
 	},
 	{
 		"id": "fireball",
@@ -1351,8 +1378,9 @@ const PITCHES := [
 		"bonus": 1.75,
 		"speed_min": 0.98,
 		"speed_max": 1.04,
+		"drag_multiplier": 1.00,
 		"color": Color("ff6a4f"),
-		"description": "Quality +1,750 • Speed ×0.98–1.04.",
+		"description": "Quality +1,750; Speed ×0.98–1.04; Air Drag ×1.00.",
 	},
 	{
 		"id": "gyroball",
@@ -1362,8 +1390,9 @@ const PITCHES := [
 		"bonus": 1.58,
 		"speed_min": 0.91,
 		"speed_max": 1.05,
+		"drag_multiplier": 0.949,
 		"color": Color("c8ff77"),
-		"description": "Quality +1,580 • Speed ×0.91–1.05.",
+		"description": "Quality +1,580; Speed ×0.91–1.05; Air Drag ×0.949.",
 	},
 	{
 		"id": "eephus",
@@ -1373,8 +1402,9 @@ const PITCHES := [
 		"bonus": 2.05,
 		"speed_min": 0.40,
 		"speed_max": 0.68,
+		"drag_multiplier": 1.09,
 		"color": Color("ffd77a"),
-		"description": "Quality +2,050 • Speed ×0.40–0.68.",
+		"description": "Quality +2,050; Speed ×0.40–0.68; Air Drag ×1.09.",
 	},
 	{
 		"id": "max_effort_four_seam",
@@ -1384,8 +1414,9 @@ const PITCHES := [
 		"bonus": 1.95,
 		"speed_min": 1.04,
 		"speed_max": 1.12,
+		"drag_multiplier": 1.06,
 		"color": Color("fff2d8"),
-		"description": "Quality +1,950 • Speed ×1.04–1.12.",
+		"description": "Quality +1,950; Speed ×1.04–1.12; Air Drag ×1.06.",
 	},
 	{
 		"id": "gazorpian_strudelball",
@@ -1397,7 +1428,7 @@ const PITCHES := [
 		"speed_max": 0.32,
 		"illegal": true,
 		"color": Color("f7c6ff"),
-		"description": "Quality +5,800 • Speed ×0.18–0.32. Devastating break; breakfast-paced arrival.",
+		"description": "Quality +5,800; Speed ×0.18–0.32. Devastating break; breakfast-paced arrival.",
 	},
 	{
 		"id": "gravity_ball",
@@ -1409,7 +1440,7 @@ const PITCHES := [
 		"speed_max": 1.06,
 		"illegal": true,
 		"color": Color("65f0ff"),
-		"description": "Quality +2,500 • Speed ×0.82–1.06.",
+		"description": "Quality +2,500; Speed ×0.82–1.06.",
 	},
 	{
 		"id": "andromedan_knucklebomb",
@@ -1421,7 +1452,7 @@ const PITCHES := [
 		"speed_max": 3.80,
 		"illegal": true,
 		"color": Color("8ff7bd"),
-		"description": "Quality −1,500 • Speed ×2.50–3.80. It goes fast; nobody knows where.",
+		"description": "Quality −1,500; Speed ×2.50–3.80. It goes fast; nobody knows where.",
 	},
 	{
 		"id": "nebular_spitball",
@@ -1433,7 +1464,7 @@ const PITCHES := [
 		"speed_max": 0.80,
 		"illegal": true,
 		"color": Color("82d9b4"),
-		"description": "Quality +4,400 • Speed ×0.55–0.80. The nebula refuses to identify the substance.",
+		"description": "Quality +4,400; Speed ×0.55–0.80. The nebula refuses to identify the substance.",
 	},
 	{
 		"id": "plasma_sinker",
@@ -1445,7 +1476,7 @@ const PITCHES := [
 		"speed_max": 1.08,
 		"illegal": true,
 		"color": Color("ff8b55"),
-		"description": "Quality +3,050 • Speed ×0.94–1.08.",
+		"description": "Quality +3,050; Speed ×0.94–1.08.",
 	},
 	{
 		"id": "bubonic_swerve",
@@ -1457,7 +1488,7 @@ const PITCHES := [
 		"speed_max": 0.25,
 		"illegal": true,
 		"color": Color("b8db57"),
-		"description": "Quality +8,500 • Speed ×0.12–0.25. Historically unhittable; medically inadvisable.",
+		"description": "Quality +8,500; Speed ×0.12–0.25. Historically unhittable; medically inadvisable.",
 	},
 	{
 		"id": "quasar_riser",
@@ -1469,7 +1500,7 @@ const PITCHES := [
 		"speed_max": 8.00,
 		"illegal": true,
 		"color": Color("fff383"),
-		"description": "Quality +1,000 • Speed ×4.00–8.00. Accuracy was traded for a localized sunrise.",
+		"description": "Quality +1,000; Speed ×4.00–8.00. Accuracy was traded for a localized sunrise.",
 	},
 	{
 		"id": "quantum_fork",
@@ -1481,7 +1512,7 @@ const PITCHES := [
 		"speed_max": 1.10,
 		"illegal": true,
 		"color": Color("ff6fca"),
-		"description": "Quality +3,600 • Speed ×0.88–1.10.",
+		"description": "Quality +3,600; Speed ×0.88–1.10.",
 	},
 	{
 		"id": "false_vacuum_change",
@@ -1493,7 +1524,7 @@ const PITCHES := [
 		"speed_max": 0.12,
 		"illegal": true,
 		"color": Color("6e79ff"),
-		"description": "Quality +12,000 • Speed ×0.05–0.12. Perfect deception; unacceptable cosmological downside.",
+		"description": "Quality +12,000; Speed ×0.05–0.12. Perfect deception; unacceptable cosmological downside.",
 	},
 	{
 		"id": "wormhole_changeup",
@@ -1505,7 +1536,7 @@ const PITCHES := [
 		"speed_max": 1.18,
 		"illegal": true,
 		"color": Color("9d7bff"),
-		"description": "Quality +4,350 • Speed ×0.72–1.18.",
+		"description": "Quality +4,350; Speed ×0.72–1.18.",
 	},
 	{
 		"id": "pitch_first_death",
@@ -1517,7 +1548,7 @@ const PITCHES := [
 		"speed_max": 0.025,
 		"illegal": true,
 		"color": Color("d6c8ff"),
-		"description": "Quality +22,000 • Speed ×0.008–0.025. It has been arriving since before life began.",
+		"description": "Quality +22,000; Speed ×0.008–0.025. It has been arriving since before life began.",
 	},
 	{
 		"id": "eschaton_screwball",
@@ -1529,7 +1560,7 @@ const PITCHES := [
 		"speed_max": 40.00,
 		"illegal": true,
 		"color": Color("ff725e"),
-		"description": "Quality −6,000 • Speed ×20.00–40.00. The pitch ends before the windup agrees it began.",
+		"description": "Quality −6,000; Speed ×20.00–40.00. The pitch ends before the windup agrees it began.",
 	},
 	{
 		"id": "event_horizon",
@@ -1541,7 +1572,7 @@ const PITCHES := [
 		"speed_max": 0.16,
 		"illegal": true,
 		"color": Color("fff6a6"),
-		"description": "Quality +15,000 • Speed ×0.03–0.16. Nothing escapes, including the inning schedule.",
+		"description": "Quality +15,000; Speed ×0.03–0.16. Nothing escapes, including the inning schedule.",
 	},
 	{
 		"id": "causal_paradox_eephus",
@@ -1553,7 +1584,7 @@ const PITCHES := [
 		"speed_max": 0.006,
 		"illegal": true,
 		"color": Color("ffffff"),
-		"description": "Quality +40,000 • Speed ×0.001–0.006. The strike is called several eternities before release.",
+		"description": "Quality +40,000; Speed ×0.001–0.006. The strike is called several eternities before release.",
 	},
 ]
 
@@ -3021,6 +3052,12 @@ static func _batter_display_name_candidate(opponent_index: int, generation: int)
 		style = 15
 	elif posmod(seed, 31) == 0:
 		style = 16
+	elif posmod(seed, 37) == 0:
+		style = 17
+	elif posmod(seed, 41) == 0:
+		style = 18
+	elif posmod(seed, 43) == 0:
+		style = 19
 	var first := _batter_name_component(parts, era_index, "given", seed, 1)
 	var middle := _batter_name_component(parts, era_index, "middle", seed, 2)
 	var family := _batter_name_component(parts, era_index, "family", seed, 3)
@@ -3064,6 +3101,12 @@ static func _batter_display_name_candidate(opponent_index: int, generation: int)
 			return "%s %s %s" % [first, family, _batter_name_ordinal(era_index, seed)]
 		16:
 			return "%s \"%s\", %s" % [first, nickname, _batter_name_ordinal(era_index, seed)]
+		17:
+			return "%s. %s, %s" % [first.left(1).to_upper(), family, _batter_epithet_after_comma(epithet)]
+		18:
+			return "%s, %s of %s" % [mononym, title, origin]
+		19:
+			return "%s %s, known as %s" % [first, family, nickname]
 		_:
 			return "%s %s, %s" % [title, mononym, _batter_epithet_after_comma(epithet)]
 
@@ -3091,11 +3134,28 @@ static func _batter_name_component(parts: Dictionary, era_index: int, key: Strin
 	var expansions: Dictionary = BATTER_NAME_EXPANSIONS[clampi(era_index, 0, BATTER_NAME_EXPANSIONS.size() - 1)]
 	for value in expansions.get(key, []):
 		pool.append(value)
+	var m2_expansions: Dictionary = BATTER_NAME_M2_EXPANSIONS[clampi(era_index, 0, BATTER_NAME_M2_EXPANSIONS.size() - 1)]
+	for value in m2_expansions.get(key, []):
+		pool.append(value)
 	if pool.is_empty():
 		return "Unknown"
 	var divisor := salt * 13 + 7
 	var index := posmod(int(seed / divisor) + salt * 17, pool.size())
 	return str(pool[index])
+
+static func ordinary_name_combination_space(era_index: int) -> int:
+	var bounded_era := clampi(era_index, 0, BATTER_NAME_COMPONENTS.size() - 1)
+	var parts: Dictionary = BATTER_NAME_COMPONENTS[bounded_era]
+	var expansions: Dictionary = BATTER_NAME_EXPANSIONS[bounded_era]
+	var m2_expansions: Dictionary = BATTER_NAME_M2_EXPANSIONS[bounded_era]
+	var count := func(key: String) -> int:
+		return (parts.get(key, []) as Array).size() + (expansions.get(key, []) as Array).size() + (m2_expansions.get(key, []) as Array).size()
+	return BATTER_NAME_POOLS[bounded_era].size() + count.call("given") + count.call("mononym") + count.call("given") * count.call("family") + count.call("given") * count.call("middle") * count.call("family") + count.call("given") * count.call("nickname") * count.call("family") + count.call("given") * count.call("family") * count.call("epithet") + count.call("title") * count.call("given") * count.call("family") + count.call("given") * count.call("origin") + count.call("mononym") * count.call("title") * count.call("origin")
+
+static func v018_ordinary_name_combination_space(_era_index: int) -> int:
+	# v0.18.0 had 12 legacy names, 14 given/family/nickname/mononym entries,
+	# and eight middle/epithet/title/origin entries in this grammar.
+	return 12 + 14 + 14 + 14 * 14 + 14 * 8 * 14 + 14 * 14 * 14 + 14 * 14 * 8 + 8 * 14 * 14 + 14 * 8 + 14 * 8 * 8
 
 static func _trait_for_index(index: int) -> String:
 	match index:
@@ -3141,31 +3201,31 @@ static func _trait_for_index(index: int) -> String:
 static func trait_description(trait_id: String) -> String:
 	match trait_id:
 		"sequence_reader":
-			return "COUNTER • +700 threat per missing pitch below 2."
+			return "COUNTER: +700 threat per missing pitch below 2."
 		"scouted", "college_champion", "adaptive_legend":
-			return "COUNTER • +480 threat per missing pitch below 4."
+			return "COUNTER: +480 threat per missing pitch below 4."
 		"major_distance":
-			return "COUNTER • Below 60 ft 6 in: +400 threat per 10× closer."
+			return "COUNTER: Below 60 ft 6 in: +400 threat per 10× closer."
 		"switch_experiment":
-			return "COUNTER • One throwing arm adds +750 threat; 2+ removes it."
+			return "COUNTER: One throwing arm adds +750 threat; 2+ removes it."
 		"cybernetic_learning":
-			return "COUNTER • +550 threat per missing pitch below 6."
+			return "COUNTER: +550 threat per missing pitch below 6."
 		"four_bats":
-			return "COUNTER • +750 threat per 10× below 100 pitches/sec."
+			return "COUNTER: +750 threat per 10× below 100 pitches/sec."
 		"chrono":
-			return "COUNTER • +800 threat per 10× below 500 pitches/sec."
+			return "COUNTER: +800 threat per 10× below 500 pitches/sec."
 		"low_gravity", "plasma_bat", "giant_zone", "solar_champion":
-			return "FIELD EFFECT • +650 threat."
+			return "FIELD EFFECT: +650 threat."
 		"aeon_rookie":
-			return "COUNTER • One time layer adds +800 threat; 2+ removes it."
+			return "COUNTER: One time layer adds +800 threat; 2+ removes it."
 		"phase_hitter":
-			return "COUNTER • +500 threat per missing pitch below 8."
+			return "COUNTER: +500 threat per missing pitch below 8."
 		"hive_mind":
-			return "COUNTER • +600 threat per 3× short of 9 pitcher bodies."
+			return "COUNTER: +600 threat per 3× short of 9 pitcher bodies."
 		"black_hole":
-			return "COUNTER • +420 threat per 10× below 1M ft/s."
+			return "COUNTER: +420 threat per 10× below 1M ft/s."
 		"octopus_god":
-			return "COUNTER • +900 threat per 10× below 1,000/s; +500 per arm-doubling below 8."
+			return "COUNTER: +900 threat per 10× below 1,000/s; +500 per arm-doubling below 8."
 		_:
 			return ""
 

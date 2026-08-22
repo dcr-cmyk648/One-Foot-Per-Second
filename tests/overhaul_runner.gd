@@ -21,6 +21,7 @@ func _initialize() -> void:
 	_test_loot_and_relic_contract()
 	_test_training_batches_and_physical_scale()
 	_test_tap_signal_and_determination()
+	_test_m1_perk_upgrade_pitch_contract()
 	_test_prestige_and_endless_contract()
 	_test_first_run_story_and_body_copy()
 	_test_story_exhibitions()
@@ -36,6 +37,101 @@ func _expect(condition: bool, message: String) -> void:
 		return
 	failures += 1
 	push_error(message)
+
+func _test_m1_perk_upgrade_pitch_contract() -> void:
+	var game = GameStateScript.new()
+	game.reset_fresh()
+	game.pending_story_dialogs.clear()
+	# Three owned ordinary perks unlock a deterministic pseudorandom board roll.
+	for index in 3:
+		game.selected_run_perks.append({
+			"id": "owned_%d" % index, "definition_id": "chalk_dust_clairvoyance",
+			"name": "Owned %d" % index, "effect": {"stat": "quality", "operation": "add", "magnitude": 0.10, "value": 0.10},
+			"penalty": {}, "secondary_effects": [], "upgrade_rank": 0, "upgrade_history": [],
+		})
+	# This fixed, modest corpus checks the configured 20% chance without an
+	# expensive stochastic run. A 12–28% band gives deterministic regression
+	# signal while allowing normal seeded variation around the 20% target.
+	var upgrade_boards := 0
+	var protected_board_seen := false
+	var selected_seed := 0
+	var serialized_upgrade := {}
+	for seed in range(1, 101):
+		game.run_seed = seed
+		game.run_choice_serial = 0
+		var offer := game.create_perk_choice(10, false, false, false)
+		var upgrades := (offer.options as Array).filter(func(option: Dictionary) -> bool: return str(option.get("card_type", "")) == "upgrade")
+		_expect(upgrades.size() <= 1, "A perk board may contain at most one upgrade")
+		for option_value in offer.options:
+			var option: Dictionary = option_value
+			var definition := RunContent.perk_by_id(str(option.get("definition_id", "")))
+			if str(definition.get("stat", "")) in ["body_age", "body_build"]:
+				protected_board_seen = true
+				_expect(str(option.get("card_type", "")) != "upgrade", "Protected age/body offers must never be displaced")
+		if upgrades.size() == 1:
+			upgrade_boards += 1
+			if serialized_upgrade.is_empty():
+				serialized_upgrade = upgrades[0]
+				selected_seed = seed
+	_expect(upgrade_boards >= 12 and upgrade_boards <= 28, "The fixed 100-seed corpus must remain within the declared 12–28% 20%% upgrade band")
+	_expect(protected_board_seen, "The fixed corpus must exercise protected age/body cards")
+	game.run_seed = selected_seed
+	game.run_choice_serial = 0
+	var repeat = GameStateScript.new()
+	repeat.reset_fresh()
+	repeat.pending_story_dialogs.clear()
+	repeat.run_seed = selected_seed
+	for index in 3:
+		repeat.selected_run_perks.append(game.selected_run_perks[index].duplicate(true))
+	var repeated_offer := repeat.create_perk_choice(10, false, false, false)
+	_expect(repeated_offer == game.create_perk_choice(10, false, false, false), "Identical seed and serial must reproduce the complete perk board")
+	repeat.free()
+	_expect(not serialized_upgrade.is_empty() and serialized_upgrade.has("before_effect") and serialized_upgrade.has("after_effect"), "Upgrade cards must serialize exact before/after effects")
+	if not serialized_upgrade.is_empty():
+		game.pending_run_choices.clear()
+		game.pending_run_choices.append({"id": "upgrade", "type": "perk", "created_serial": 9, "options": [serialized_upgrade]})
+		var pending_saved := game.to_save_data()
+		var pending_restored = GameStateScript.new()
+		pending_restored.apply_save_data(pending_saved)
+		var loaded_option: Dictionary = pending_restored.pending_run_choices[0].options[0]
+		_expect(str(loaded_option.get("card_type", "")) == "upgrade" and loaded_option.get("before_effect", {}) == serialized_upgrade.get("before_effect", {}) and loaded_option.get("after_effect", {}) == serialized_upgrade.get("after_effect", {}), "Serialized upgrade offers must survive load without rerolling")
+		pending_restored.free()
+		game.resolve_run_choice("upgrade", 0, false)
+		var upgraded_id := str(serialized_upgrade.target_perk_id)
+		var upgraded_instances: Array = game.selected_run_perks.filter(func(instance: Dictionary) -> bool: return str(instance.id) == upgraded_id)
+		_expect(upgraded_instances.size() == 1 and float(upgraded_instances[0].effect.magnitude) > 0.10, "Selecting an upgrade must mutate its owned effect, not add a duplicate")
+	var saved := game.to_save_data()
+	var restored = GameStateScript.new()
+	restored.apply_save_data(saved)
+	var restored_upgrade: Array = restored.selected_run_perks.filter(func(instance: Dictionary) -> bool: return int(instance.get("upgrade_rank", 0)) > 0)
+	_expect(restored_upgrade.size() == 1 and (restored_upgrade[0].get("upgrade_history", []) as Array).size() == 1, "Upgrade ranks and history must round-trip")
+	# Exact additive derived stats agree with the card effect and their authoritative getters.
+	game.selected_run_perks.clear()
+	game.selected_run_perks.append({"id": "offline", "definition_id": "nap_time_training", "effect": {"stat": "offline", "operation": "add", "magnitude": 0.02, "value": 0.02}, "penalty": {}, "secondary_effects": []})
+	game.selected_run_perks.append({"id": "loot", "definition_id": "dryer_lint_luck", "effect": {"stat": "loot", "operation": "add", "magnitude": 0.02, "value": 0.02}, "penalty": {}, "secondary_effects": []})
+	_expect(is_equal_approx(game.get_offline_xp_efficiency(), 0.03), "Offline perk effect must equal the displayed authoritative efficiency delta")
+	_expect(is_equal_approx(game.get_loot_drop_chance(), 0.14), "Loot perk effect must equal the authoritative drop chance delta")
+	var migrated = GameStateScript.new()
+	migrated.apply_save_data({"version": 30, "determination_points": 4.0, "selected_run_perks": game.selected_run_perks})
+	_expect(is_equal_approx(migrated.get_determination_quality_bonus(), 0.08), "Old Determination meters must migrate without changing their earned bonus")
+	_expect(is_equal_approx(game.get_outcome_determination_points(Content.GRAND_SLAM_INDEX), 9.6), "Determination fills 20% more slowly at the largest landmark")
+	game.determination_points = 4.0
+	_expect(is_equal_approx(game.get_determination_quality_bonus(), 0.092), "The new Determination peak step is 15% stronger")
+	for definition_value in RunContent.RUN_PERKS:
+		var definition: Dictionary = definition_value
+		if str(definition.get("league", "")) != "human" or str(definition.get("stat", "")) not in ["offline", "loot"]:
+			continue
+		var effect := RunContent.resolved_effect(definition, 33, 4.25)
+		_expect(float(effect.magnitude) < 0.08, "Human Offline/Loot perk magnitudes must remain human-tier")
+	for first_value in Content.PITCHES.slice(0, 17):
+		var first: Dictionary = first_value
+		for second_value in Content.PITCHES.slice(0, 17):
+			var second: Dictionary = second_value
+			var dominates := float(first.bonus) >= float(second.bonus) and float(first.speed_max) >= float(second.speed_max) and float(first.drag_multiplier) <= float(second.drag_multiplier) and (float(first.bonus) > float(second.bonus) or float(first.speed_max) > float(second.speed_max) or float(first.drag_multiplier) < float(second.drag_multiplier))
+			_expect(not dominates or str(first.id) == str(second.id), "No ordinary human pitch may dominate another across quality, speed, and drag")
+	game.free()
+	restored.free()
+	migrated.free()
 
 func _test_campaign_topology() -> void:
 	var levels := Campaign.levels()

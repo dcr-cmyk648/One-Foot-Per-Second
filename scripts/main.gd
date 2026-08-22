@@ -167,6 +167,7 @@ var loot_item_dialog: Window
 var loot_item_name_label: Label
 var loot_item_meta_label: Label
 var loot_item_equipped_label: Label
+var loot_item_stats_scroll: ScrollContainer
 var loot_item_stats: VBoxContainer
 var loot_item_status_label: Label
 var loot_item_equip_button: Button
@@ -1505,6 +1506,17 @@ func _scroll_content_gutter(scroll: ScrollContainer, right_margin := 14) -> Marg
 	gutter.add_theme_constant_override("margin_right", right_margin)
 	scroll.add_child(gutter)
 	return gutter
+
+func _bounded_detail_scroll(parent: Container, scroll_name: String, right_margin := 14) -> Dictionary:
+	# Detail modals keep their title and essential actions in their parent stack.
+	# Only this bounded body scrolls, which keeps phone close/actions reachable.
+	var scroll := ScrollContainer.new()
+	scroll.name = scroll_name
+	scroll.set_meta("bounded_detail_body", true)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(scroll)
+	return {"scroll": scroll, "gutter": _scroll_content_gutter(scroll, right_margin)}
 
 func _create_navigation_icon(direction: String) -> ImageTexture:
 	var image := Image.create(28, 28, false, Image.FORMAT_RGBA8)
@@ -3516,6 +3528,7 @@ func _build_loot_item_dialog() -> void:
 	heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	heading_row.add_child(heading)
 	var close_button := Button.new()
+	close_button.name = "EquipmentComparisonCloseButton"
 	close_button.text = "CLOSE  X"
 	close_button.custom_minimum_size = Vector2(110.0, 48.0)
 	close_button.focus_mode = Control.FOCUS_NONE
@@ -3541,11 +3554,9 @@ func _build_loot_item_dialog() -> void:
 	stats_heading.add_theme_font_size_override("font_size", 12)
 	stats_heading.add_theme_color_override("font_color", COLOR_ACCENT)
 	stack.add_child(stats_heading)
-	var stats_scroll := ScrollContainer.new()
-	stats_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	stats_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stack.add_child(stats_scroll)
-	var stats_gutter := _scroll_content_gutter(stats_scroll, 14)
+	var detail_body := _bounded_detail_scroll(stack, "EquipmentComparisonScroll", 14)
+	loot_item_stats_scroll = detail_body.scroll
+	var stats_gutter: MarginContainer = detail_body.gutter
 	loot_item_stats = VBoxContainer.new()
 	loot_item_stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	loot_item_stats.add_theme_constant_override("separation", 5)
@@ -3802,7 +3813,7 @@ func _get_loot_item_inspection_text(item: Dictionary) -> String:
 	var equipped_power := 0 if equipped.is_empty() else game.get_loot_item_power(equipped)
 	var lines: Array[String] = [
 		str(item.get("name", "Unnamed equipment")),
-		"Power %d • %s • Item level %d" % [candidate_power, str(rarity.name), int(item.get("item_level", 1))],
+		"Slot %s • Power %d • %s • Item level %d" % [str(item.get("slot", "unknown")).to_upper(), candidate_power, str(rarity.name), int(item.get("item_level", 1))],
 	]
 	if same_item:
 		lines.append("Currently equipped")
@@ -3814,14 +3825,13 @@ func _get_loot_item_inspection_text(item: Dictionary) -> String:
 			"+" if candidate_power - equipped_power >= 0 else "",
 			candidate_power - equipped_power,
 		])
-	var item_stats: Dictionary = item.get("stats", {})
-	var equipped_stats: Dictionary = equipped.get("stats", {}) if not equipped.is_empty() else {}
-	var effectiveness := game.get_equipment_effectiveness_multiplier()
 	for stat_definition in Content.LOOT_STATS:
 		var stat_id := str(stat_definition.id)
-		var candidate_value := float(item_stats.get(stat_id, 0.0)) * effectiveness
-		var equipped_value := float(equipped_stats.get(stat_id, 0.0)) * effectiveness
+		var candidate_value := _get_effective_loot_stat_value(item, stat_id)
+		var equipped_value := _get_effective_loot_stat_value(equipped, stat_id)
 		var delta := candidate_value - equipped_value
+		if is_zero_approx(delta):
+			continue
 		if str(stat_definition.format) == "additive":
 			lines.append("%s: %s vs %s (%s)" % [
 				str(stat_definition.name),
@@ -3833,6 +3843,13 @@ func _get_loot_item_inspection_text(item: Dictionary) -> String:
 			lines.append("%s: ×%.3f vs ×%.3f (%+.3f)" % [str(stat_definition.name), 1.0 + candidate_value, 1.0 + equipped_value, delta])
 	lines.append("Use COMPARE for equip and trash actions")
 	return "\n".join(lines)
+
+func _get_effective_loot_stat_value(item: Dictionary, stat_id: String) -> float:
+	# Missing affixes normalize to the authoritative neutral value (zero) before
+	# applying the same item-effectiveness factor used by equipment totals.
+	if item.is_empty():
+		return 0.0
+	return float((item.get("stats", {}) as Dictionary).get(stat_id, 0.0)) * game.get_equipment_effectiveness_multiplier()
 
 func _begin_locker_item_hold_at(position: Vector2) -> void:
 	_cancel_locker_item_hold()
@@ -3914,6 +3931,13 @@ func _open_loot_item_dialog(item_id: String) -> void:
 	armed_loot_trash_id = ""
 	_rebuild_loot_item_dialog()
 	var viewport_size := _get_responsive_viewport_size()
+	var popup_geometry := _loot_item_popup_geometry(viewport_size)
+	var popup_size: Vector2i = popup_geometry.size
+	loot_item_dialog.popup_centered(popup_size)
+	if mobile_layout:
+		loot_item_dialog.position = popup_geometry.position
+
+func _loot_item_popup_geometry(viewport_size: Vector2) -> Rect2i:
 	var popup_size := (
 		Vector2i(
 			clampi(int(viewport_size.x) - 20, 330, 620),
@@ -3922,12 +3946,10 @@ func _open_loot_item_dialog(item_id: String) -> void:
 		if mobile_layout
 		else Vector2i(650, 650)
 	)
-	loot_item_dialog.popup_centered(popup_size)
-	if mobile_layout:
-		loot_item_dialog.position = Vector2i(
-			maxi((int(viewport_size.x) - popup_size.x) / 2, 0),
-			maxi((int(viewport_size.y) - popup_size.y) / 2, 0)
-		)
+	return Rect2i(
+		Vector2i(maxi((int(viewport_size.x) - popup_size.x) / 2, 0), maxi((int(viewport_size.y) - popup_size.y) / 2, 0)),
+		popup_size
+	)
 
 func _close_loot_item_dialog() -> void:
 	selected_loot_item_id = ""
@@ -3953,7 +3975,8 @@ func _rebuild_loot_item_dialog() -> void:
 	var power_delta := candidate_power - equipped_power
 	loot_item_name_label.text = str(item.get("name", "Unnamed equipment"))
 	loot_item_name_label.add_theme_color_override("font_color", Color(rarity.color))
-	loot_item_meta_label.text = "THIS ITEM  •  POWER %d  •  %s  •  ITEM LEVEL %d  •  POWER CHANGE %s%d" % [
+	loot_item_meta_label.text = "CANDIDATE  •  SLOT %s  •  POWER %d  •  %s  •  ITEM LEVEL %d  •  POWER CHANGE %s%d" % [
+		str(item.get("slot", "unknown")).to_upper(),
 		candidate_power,
 		str(rarity.name),
 		int(item.get("item_level", 1)),
@@ -3971,14 +3994,13 @@ func _rebuild_loot_item_dialog() -> void:
 	for child in loot_item_stats.get_children():
 		loot_item_stats.remove_child(child)
 		child.queue_free()
-	var item_stats: Dictionary = item.get("stats", {})
-	var equipped_stats: Dictionary = equipped.get("stats", {}) if not equipped.is_empty() else {}
-	var effectiveness := game.get_equipment_effectiveness_multiplier()
 	for stat_definition in Content.LOOT_STATS:
 		var stat_id := str(stat_definition.id)
-		var candidate_value := float(item_stats.get(stat_id, 0.0)) * effectiveness
-		var equipped_value := float(equipped_stats.get(stat_id, 0.0)) * effectiveness
+		var candidate_value := _get_effective_loot_stat_value(item, stat_id)
+		var equipped_value := _get_effective_loot_stat_value(equipped, stat_id)
 		var delta := candidate_value - equipped_value
+		if is_zero_approx(delta):
+			continue
 		var row_panel := PanelContainer.new()
 		row_panel.add_theme_stylebox_override("panel", _compact_panel_style(7.0, 5.0))
 		loot_item_stats.add_child(row_panel)
@@ -4009,8 +4031,8 @@ func _rebuild_loot_item_dialog() -> void:
 		)
 		row_stack.add_child(value_label)
 	var effectiveness_note := ""
-	if effectiveness > 1.000001:
-		effectiveness_note = " Post-human item effectiveness ×%.3f is included." % effectiveness
+	if game.get_equipment_effectiveness_multiplier() > 1.000001:
+		effectiveness_note = " Post-human item effectiveness ×%.3f is included." % game.get_equipment_effectiveness_multiplier()
 	loot_item_status_label.text = "Trash value: %s Scrap.%s Total-loadout caps apply after item bonuses.%s" % [
 		BaseballGameState.format_number(game.get_loot_scrap_value(item), 0),
 		" This item is star-protected from automatic clearing." if bool(item.get("favorite", false)) else "",
@@ -4358,7 +4380,7 @@ func _select_training_batch(quantity: int) -> void:
 
 func _build_ball_tab(tabs: TabContainer) -> void:
 	var content := _create_scroll_tab(tabs, "BALL")
-	_section_label(content, "BALL UPGRADES — POWER WITHOUT PHANTOM PROJECTILES")
+	_section_label(content, "BALL UPGRADES - POWER WITHOUT PHANTOM PROJECTILES")
 	var ball_explainer := Label.new()
 	ball_explainer.text = "Each shell replaces the previous shell. Payload multiplies XP from completed strikeouts."
 	ball_explainer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -4813,7 +4835,7 @@ func _refresh_story_tab() -> void:
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		stack.add_child(title)
 		var meta := Label.new()
-		meta.text = "ENTRY %d  •  %s" % [int(entry.get("order", 0)), str(entry.get("tier", "human")).to_upper()]
+		meta.text = "ENTRY %d - %s" % [int(entry.get("order", 0)), str(entry.get("tier", "human")).to_upper()]
 		meta.add_theme_font_size_override("font_size", 10)
 		meta.add_theme_color_override("font_color", COLOR_GOLD)
 		meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -5273,13 +5295,28 @@ func _run_effect_text(effect: Dictionary) -> String:
 		"reduction":
 			return "%s ×%s" % [stat, BaseballGameState.format_number(value, 3)]
 		_:
-			var suffix := "%" if str(effect.get("stat", "")) in ["loot", "offline"] else ""
-			var display_value := value * 100.0 if not suffix.is_empty() else value
-			return "%s %s%s" % [
-				stat,
-				BaseballGameState.format_rating(display_value, true),
-				suffix,
-			]
+			if str(effect.get("stat", "")) in ["loot", "offline"]:
+				return "%s %s" % [stat, _format_run_percent(value)]
+			return "%s %s" % [stat, BaseballGameState.format_rating(value, true)]
+
+func _format_run_percent(value: float) -> String:
+	var percent := value * 100.0
+	if percent == 0.0:
+		return "0%"
+	var absolute := absf(percent)
+	var rendered := ""
+	if absolute < 0.0001:
+		rendered = BaseballGameState.format_scientific(absolute, 3)
+	else:
+		rendered = "%.4f" % absolute
+		while rendered.ends_with("0"):
+			rendered = rendered.trim_suffix("0")
+		if rendered.ends_with("."):
+			rendered = rendered.trim_suffix(".")
+	return "%s%s%%" % ["+" if percent > 0.0 else "-", rendered]
+
+func _run_effect_transition_text(before: Dictionary, after: Dictionary) -> String:
+	return "%s -> %s" % [_run_effect_text(before), _run_effect_text(after)]
 
 func _run_choice_option_text(choice: Dictionary, option: Dictionary) -> String:
 	var choice_type := str(choice.get("type", "perk"))
@@ -5291,6 +5328,22 @@ func _run_choice_option_text(choice: Dictionary, option: Dictionary) -> String:
 			BaseballGameState.format_rating(float(option.get("quality_gain", 0.0)), true),
 			str(option.get("description", "")),
 		]
+	if str(option.get("card_type", "")) == "upgrade":
+		var target_name := str(option.get("name", "Owned Perk")).trim_prefix("UPGRADE: ")
+		var upgrade_lines: Array[String] = [
+			"UPGRADE: %s" % str(option.get("rarity_name", "COMMON")),
+			"TARGET: %s" % target_name,
+			"PRIMARY: %s" % _run_effect_transition_text(option.get("before_effect", {}), option.get("after_effect", {})),
+		]
+		for secondary_value in option.get("secondary_effects", []):
+			var secondary: Dictionary = secondary_value
+			var secondary_text := _run_effect_text(secondary)
+			if not secondary_text.is_empty():
+				upgrade_lines.append("SECONDARY: %s" % secondary_text)
+		var upgrade_description := str(option.get("description", ""))
+		if not upgrade_description.is_empty():
+			upgrade_lines.append(upgrade_description)
+		return "\n".join(upgrade_lines)
 	var lines: Array[String] = [
 		"%s  •  %s  •  LEVEL %d" % [
 			str(option.get("name", "Unknown Focus")),

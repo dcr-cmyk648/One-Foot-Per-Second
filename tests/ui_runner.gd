@@ -131,6 +131,13 @@ func _run() -> void:
 	main._accept_story_dialog()
 	main.story_dialog.hide()
 	main.game.pending_story_dialogs.clear()
+	main._refresh_story_tab()
+	var first_story_stack := (main.story_entries_stack.get_child(0) as PanelContainer).get_child(0) as VBoxContainer
+	var first_story_meta := first_story_stack.get_child(1) as Label
+	_expect(first_story_meta.text.begins_with("ENTRY ") and first_story_meta.text.contains(" - ") and not first_story_meta.text.contains("•"), "Rendered Story metadata should use the ASCII separator")
+	var ball_scroll := main.upgrade_tabs.get_tab_control(2) as ScrollContainer
+	var ball_content := ((ball_scroll.get_child(0) as MarginContainer).get_child(0) as VBoxContainer)
+	_expect((ball_content.get_child(0) as Label).text == "BALL UPGRADES - POWER WITHOUT PHANTOM PROJECTILES", "Rendered Ball heading should use the ASCII dash")
 	main._return_to_title_screen()
 	var slot_metadata: Dictionary = main.game.to_save_data()
 	slot_metadata["active_campaign_slot"] = 2
@@ -379,8 +386,8 @@ func _run() -> void:
 			_expect(str((outcome_heading.get_child(1) as Label).text).begins_with("+"), "Every outcome card should expose its compact lineup-delay bonus beside its name")
 			_expect(not outcome_panel.tooltip_text.is_empty(), "Detailed outcome rules should live in hover text")
 	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("cannot be saved"), "The Grand Slam tooltip should explicitly distinguish its absolute terminal rule from a Home Run")
-	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Determination +12000"), "The Grand Slam tooltip should expose its maximum whole-number Determination severity")
-	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Determination +200"), "The Ball tooltip should expose its small whole-number Determination nudge")
+	_expect(main.outcome_panels[Content.GRAND_SLAM_INDEX].tooltip_text.contains("Determination +9600"), "The Grand Slam tooltip should expose its retuned whole-number Determination severity")
+	_expect(main.outcome_panels[Content.BALL_INDEX].tooltip_text.contains("Determination +160"), "The Ball tooltip should expose its retuned whole-number Determination nudge")
 	_expect(main.outcome_panels[1].tooltip_text.contains("unless saved"), "The Home Run tooltip should retain ordinary hit-save behavior")
 	_expect(not main.strikeout_payout_label.text.begins_with("0 XP"), "The separate strikeout payout should not repeat zero-XP clutter")
 	_expect(main.strikeout_payout_label.text.begins_with("COMPLETED STRIKEOUT:"), "Strikeout XP should appear in one small separate readout")
@@ -622,8 +629,37 @@ func _run() -> void:
 	_expect(main.loot_item_dialog.visible, "Clicking an item should open the explicit comparison window instead of equipping immediately")
 	_expect(str(main.game.equipped_loot.hat) == "ui_rare_hat", "Opening a comparison must not alter the equipped item")
 	_expect(main.loot_item_equipped_label.text.contains("Golden Test Cap"), "The comparison should name the currently equipped item")
-	_expect(main.loot_item_stats.get_child_count() == Content.LOOT_STATS.size(), "The comparison should show every equipment stat, including zero values")
+	_expect(main.loot_item_meta_label.text.contains("CANDIDATE") and main.loot_item_meta_label.text.contains("SLOT HAT") and main.loot_item_meta_label.text.contains("POWER"), "The comparison must retain candidate identity, slot, rarity, and Power")
+	_expect(main.loot_item_stats.get_child_count() == 2, "The comparison should show only the two effective stat differences, omitting matching and absent defaults")
+	_expect(not comparison_item_stack.tooltip_text.contains("Recovery:"), "Desktop comparison hover should omit unchanged effective stats")
 	_expect(main.loot_item_equip_button.text == "SWAP", "An unequipped item should offer an explicit Swap action")
+	_expect(main._run_effect_text({"stat": "offline", "operation": "add", "value": 0.01}) == "Offline +1%", "A 0.01 Offline effect must render as +1%, never rating-scaled")
+	_expect(main._run_effect_text({"stat": "loot", "operation": "add", "value": 0.01}) == "Loot +1%", "A 0.01 Loot effect must render as +1%, never rating-scaled")
+	_expect(main._format_run_percent(0.000000001).contains("e") and main._format_run_percent(0.000000001) != "0%", "A tiny nonzero perk effect must use scientific notation instead of collapsing to zero")
+	var upgrade_card := {
+		"card_type": "upgrade", "name": "UPGRADE: Exact Offline", "rarity_name": "RARE",
+		"before_effect": {"stat": "offline", "operation": "add", "value": 0.01},
+		"after_effect": {"stat": "offline", "operation": "add", "value": 0.0125},
+		"secondary_effects": [{"stat": "loot", "operation": "add", "value": 0.01}],
+	}
+	var upgrade_card_text: String = main._run_choice_option_text({"type": "perk"}, upgrade_card)
+	_expect(upgrade_card_text.contains("UPGRADE: RARE") and upgrade_card_text.contains("TARGET: Exact Offline") and upgrade_card_text.contains("Offline +1% -> Offline +1.25%") and upgrade_card_text.contains("SECONDARY: Loot +1%") and not upgrade_card_text.contains("•"), "Upgrade cards must retain exact fractional effects with ASCII-only labels")
+	main.game.pending_run_choices.clear()
+	main.game.pending_run_choices.append({
+		"id": "ui_offline_choice", "type": "perk", "source_level_number": 1,
+		"options": [{"id": "ui_offline_perk", "name": "Exact Offline", "rarity_name": "COMMON", "color": "a9b6c5", "level": 1, "effect": {"stat": "offline", "operation": "add", "value": 0.01}, "penalty": {}, "secondary_effects": []}],
+	})
+	main._show_run_choice(main.game.pending_run_choices[0])
+	main._select_run_choice_option("ui_offline_choice", 0)
+	_expect((main.status_stat_labels.offline as Label).text == "2%", "Selecting a +1% Offline perk must immediately refresh the authoritative current stat")
+	main.game.pending_run_choices.clear()
+	main.game.pending_run_choices.append({
+		"id": "ui_offline_upgrade", "type": "perk", "source_level_number": 1,
+		"options": [{"id": "ui_offline_upgrade_card", "card_type": "upgrade", "target_perk_id": "ui_offline_perk", "name": "UPGRADE: Exact Offline", "rarity_name": "RARE", "color": "66a6ff", "before_effect": {"stat": "offline", "operation": "add", "value": 0.01}, "after_effect": {"stat": "offline", "operation": "add", "value": 0.02}, "secondary_effects": []}],
+	})
+	main._show_run_choice(main.game.pending_run_choices[0])
+	main._select_run_choice_option("ui_offline_upgrade", 0)
+	_expect((main.status_stat_labels.offline as Label).text == "3%", "Selecting an Offline upgrade must immediately refresh the exact current stat")
 	main.loot_item_trash_button.pressed.emit()
 	_expect(main.loot_item_trash_button.text == "CONFIRM TRASH", "Trash should require an explicit second confirmation")
 	_expect(not main.game.get_loot_item("ui_compare_hat").is_empty(), "The first Trash press must not destroy equipment")

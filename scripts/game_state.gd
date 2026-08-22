@@ -14,7 +14,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 30
+const SAVE_VERSION := 31
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -161,9 +161,9 @@ const MASTERY_OUTCOME_WEIGHTS := [0.0, 0.0, 0.08, 0.12, 0.18, 0.05, 0.025, 1.0]
 const STRIKEOUT_MASTERY_BONUS_COUNTS := 0.50
 # Bad results supply a second, temporary adaptation bonus. Every independently
 # resolved ball contributes its own result severity. Four Determination points
-# grant the first +0.08 quality step; every later step takes twice as many.
+# grant the first +0.092 quality step; every later step takes twice as many.
 const DETERMINATION_REFERENCE_POINTS := 4.0
-const DETERMINATION_QUALITY_PER_DOUBLING := 0.08
+const DETERMINATION_QUALITY_PER_DOUBLING := 0.092
 # Source-level aliases keep old diagnostic scripts importable; schema 27 never
 # writes these names and the player-facing system is Determination.
 const FRUSTRATION_REFERENCE_POINTS := DETERMINATION_REFERENCE_POINTS
@@ -173,7 +173,7 @@ const MASTERY_TRAINING_PER_RANK := 0.015
 const DRAG_TRAINING_FACTOR_PER_RANK := 0.985
 const XP_TRAINING_PER_RANK := 0.01
 const DETERMINATION_TRAINING_PER_RANK := 0.01
-const DETERMINATION_OUTCOME_POINTS := [12.0, 8.0, 5.0, 3.0, 1.0, 0.10, 0.20, 0.0]
+const DETERMINATION_OUTCOME_POINTS := [9.6, 6.4, 4.0, 2.4, 0.8, 0.08, 0.16, 0.0]
 const FRUSTRATION_TRAINING_PER_RANK := DETERMINATION_TRAINING_PER_RANK
 const PREMIUM_HUMAN_MILESTONE_IDS := [
 	"neighborhood_pitching_tutor",
@@ -692,7 +692,7 @@ func _make_perk_instance(
 	return {
 		"id": "perk_%d_%d_%d" % [choice_serial, level_index + 1, option_index],
 		"definition_id": str(definition.id),
-		"name": ("CORRUPTED • " if corrupted else "") + str(definition.name),
+		"name": ("CORRUPTED: " if corrupted else "") + str(definition.name),
 		"description": str(definition.get("description", "")),
 		"rarity_id": str(rarity.id),
 		"rarity_name": str(rarity.name),
@@ -700,9 +700,108 @@ func _make_perk_instance(
 		"color": str(rarity.color),
 		"level": level_index + 1,
 		"effect": effect,
+		"secondary_effects": [],
+		"upgrade_rank": 0,
+		"upgrade_history": [],
 		"corrupted": corrupted,
 		"corruption_factor": corruption_factor,
 		"penalty": penalty,
+	}
+
+func _sanitize_run_effects(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if typeof(value) != TYPE_ARRAY:
+		return result
+	for raw_effect in (value as Array).slice(0, 8):
+		var effect := _sanitize_run_effect(raw_effect)
+		if not effect.is_empty() and str(effect.get("operation", "")) != "body":
+			result.append(effect)
+	return result
+
+func _sanitize_upgrade_history(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if typeof(value) != TYPE_ARRAY:
+		return result
+	for raw_entry in (value as Array).slice(0, 999):
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var raw: Dictionary = raw_entry
+		var before := _sanitize_run_effect(raw.get("before_effect", {}))
+		var after := _sanitize_run_effect(raw.get("after_effect", {}))
+		if before.is_empty() or after.is_empty():
+			continue
+		result.append({
+			"id": str(raw.get("id", "upgrade")).substr(0, 120),
+			"rarity_id": str(raw.get("rarity_id", "common")).substr(0, 32),
+			"rarity_name": str(raw.get("rarity_name", "COMMON")).substr(0, 32),
+			"rarity_rank": clampi(int(raw.get("rarity_rank", 0)), 0, RunContent.PERK_RARITIES.size() - 1),
+			"before_effect": before, "after_effect": after,
+			"secondary_effects": _sanitize_run_effects(raw.get("secondary_effects", [])),
+		})
+	return result
+
+func _owned_upgrade_candidates() -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for instance_value in selected_run_perks:
+		var instance: Dictionary = instance_value
+		var effect: Dictionary = instance.get("effect", {})
+		if str(effect.get("operation", "")) == "body" or bool(instance.get("corrupted", false)):
+			continue
+		if not str(instance.get("id", "")).is_empty():
+			candidates.append(instance)
+	return candidates
+
+func _effect_with_added_magnitude(effect: Dictionary, delta: float) -> Dictionary:
+	var result := effect.duplicate(true)
+	var magnitude := float(result.get("magnitude", 0.0)) + delta
+	result["magnitude"] = magnitude
+	match str(result.get("operation", "add")):
+		"multiplier": result["value"] = 1.0 + magnitude
+		"reduction": result["value"] = 1.0 - magnitude
+		_: result["value"] = magnitude
+	return result
+
+func _make_perk_upgrade_option(
+	target: Dictionary,
+	rarity: Dictionary,
+	local_rng: RandomNumberGenerator,
+	choice_serial: int,
+	option_index: int
+) -> Dictionary:
+	var before_effect: Dictionary = target.get("effect", {}).duplicate(true)
+	var primary_delta := maxf(absf(float(before_effect.get("magnitude", 0.0))) * 0.25 * float(rarity.factor), 0.0001)
+	var after_effect := _effect_with_added_magnitude(before_effect, primary_delta)
+	var secondary_effects: Array[Dictionary] = []
+	var secondary: Dictionary = RunContent.PERK_UPGRADE_SECONDARY_STATS.get(str(before_effect.get("stat", "")), {})
+	if int(rarity.get("rank", 0)) >= 3 and not secondary.is_empty() and local_rng.randf() < 0.25:
+		var secondary_magnitude := primary_delta * float(secondary.get("ratio", 0.0))
+		var secondary_effect := {
+			"stat": str(secondary.get("stat", "")),
+			"operation": str(secondary.get("operation", "add")),
+			"magnitude": secondary_magnitude,
+		}
+		secondary_effect["value"] = (
+			1.0 + secondary_magnitude if str(secondary_effect.operation) == "multiplier"
+			else (1.0 - secondary_magnitude if str(secondary_effect.operation) == "reduction" else secondary_magnitude)
+		)
+		secondary_effects.append(secondary_effect)
+	return {
+		"id": "perk_upgrade_%d_%d" % [choice_serial, option_index],
+		"card_type": "upgrade",
+		"target_perk_id": str(target.get("id", "")),
+		"definition_id": str(target.get("definition_id", "")),
+		"name": "UPGRADE: %s" % str(target.get("name", "Owned Perk")),
+		"description": "Improves this owned perk; it does not create a duplicate.",
+		"rarity_id": str(rarity.id), "rarity_name": str(rarity.name), "rarity_rank": int(rarity.rank), "color": str(rarity.color),
+		"level": int(target.get("level", 1)),
+		"effect": after_effect.duplicate(true), "penalty": {}, "corrupted": false, "corruption_factor": 1.0,
+		"upgrade_rank": maxi(int(target.get("upgrade_rank", 0)), 0), "upgrade_history": [],
+		"selected_from": "", "selected_serial": 0,
+		"before_effect": before_effect, "after_effect": after_effect,
+		"delta_effect": _effect_with_added_magnitude({"stat": before_effect.get("stat", ""), "operation": before_effect.get("operation", "add"), "magnitude": 0.0, "value": 0.0}, primary_delta),
+		"secondary_effects": secondary_effects,
+		"upgrade_rank_before": maxi(int(target.get("upgrade_rank", 0)), 0),
+		"upgrade_rank_after": maxi(int(target.get("upgrade_rank", 0)), 0) + 1,
 	}
 
 func create_perk_choice(
@@ -740,6 +839,24 @@ func create_perk_choice(
 		if boss_offer:
 			rarity = RunContent.PERK_RARITIES.back()
 		options.append(_make_perk_instance(definition, rarity, bounded, local_rng, serial, option_index))
+	# A deterministic pseudorandom 20% board roll may replace one non-protected
+	# perk card. Boss rewards and age/body progression are never displacement
+	# targets, and the finished option is saved with the board.
+	var owned_candidates := _owned_upgrade_candidates()
+	var upgrade_board_roll := false
+	if not boss_offer and owned_candidates.size() >= 3:
+		upgrade_board_roll = local_rng.randf() < 0.20
+	if upgrade_board_roll:
+		var replaceable: Array[int] = []
+		for option_index in options.size():
+			var definition := RunContent.perk_by_id(str(options[option_index].get("definition_id", "")))
+			if str(definition.get("stat", "")) not in ["body_age", "body_build"]:
+				replaceable.append(option_index)
+		if not replaceable.is_empty():
+			var target: Dictionary = owned_candidates[local_rng.randi_range(0, owned_candidates.size() - 1)]
+			var rarity := _roll_run_perk_rarity(local_rng, 0)
+			var replace_index := replaceable[local_rng.randi_range(0, replaceable.size() - 1)]
+			options[replace_index] = _make_perk_upgrade_option(target, rarity, local_rng, serial, replace_index)
 	var choice := {
 		"id": "choice_%d_%s" % [serial, choice_type],
 		"type": choice_type,
@@ -895,7 +1012,24 @@ func resolve_run_choice(
 		return {}
 	var selected: Dictionary = (options[option_index] as Dictionary).duplicate(true)
 	var type := str(choice.get("type", ""))
-	if type in ["perk", "boss_perk"]:
+	if type in ["perk", "boss_perk"] and str(selected.get("card_type", "")) == "upgrade":
+		var target_id := str(selected.get("target_perk_id", ""))
+		for owned_index in selected_run_perks.size():
+			if str(selected_run_perks[owned_index].get("id", "")) != target_id:
+				continue
+			var upgraded: Dictionary = selected_run_perks[owned_index].duplicate(true)
+			upgraded["effect"] = selected.get("after_effect", upgraded.get("effect", {})).duplicate(true)
+			var stored_secondary: Array = upgraded.get("secondary_effects", [])
+			for secondary in selected.get("secondary_effects", []):
+				stored_secondary.append((secondary as Dictionary).duplicate(true))
+			upgraded["secondary_effects"] = stored_secondary
+			upgraded["upgrade_rank"] = int(selected.get("upgrade_rank_after", 1))
+			var history: Array = upgraded.get("upgrade_history", [])
+			history.append(selected.duplicate(true))
+			upgraded["upgrade_history"] = history
+			selected_run_perks[owned_index] = upgraded
+			break
+	elif type in ["perk", "boss_perk"]:
 		selected["selected_from"] = str(choice.id)
 		selected["selected_serial"] = int(choice.get("created_serial", 0))
 		selected_run_perks.append(selected)
@@ -943,7 +1077,9 @@ func get_run_stat_multiplier(stat_id: String) -> float:
 	var result := 1.0
 	for instance_value in selected_run_perks:
 		var instance: Dictionary = instance_value
-		for effect_value in [instance.get("effect", {}), instance.get("penalty", {})]:
+		var effects: Array = [instance.get("effect", {}), instance.get("penalty", {})]
+		effects.append_array(instance.get("secondary_effects", []))
+		for effect_value in effects:
 			var effect: Dictionary = effect_value
 			if str(effect.get("stat", "")) != stat_id:
 				continue
@@ -955,7 +1091,9 @@ func get_run_stat_additive(stat_id: String) -> float:
 	var result := 0.0
 	for instance_value in selected_run_perks:
 		var instance: Dictionary = instance_value
-		for effect_value in [instance.get("effect", {}), instance.get("penalty", {})]:
+		var effects: Array = [instance.get("effect", {}), instance.get("penalty", {})]
+		effects.append_array(instance.get("secondary_effects", []))
+		for effect_value in effects:
 			var effect: Dictionary = effect_value
 			if str(effect.get("stat", "")) == stat_id and str(effect.get("operation", "")) == "add":
 				result += float(effect.get("value", effect.get("magnitude", 0.0)))
@@ -1062,6 +1200,9 @@ func _sanitize_run_perk_instance(value: Variant) -> Dictionary:
 		"color": str(raw.get("color", "a9b6c5")).substr(0, 16),
 		"level": clampi(int(raw.get("level", 1)), 1, Content.CAMPAIGN_LEVEL_COUNT),
 		"effect": effect,
+		"secondary_effects": _sanitize_run_effects(raw.get("secondary_effects", [])),
+		"upgrade_rank": clampi(int(raw.get("upgrade_rank", 0)), 0, 999999),
+		"upgrade_history": _sanitize_upgrade_history(raw.get("upgrade_history", [])),
 		"corrupted": bool(raw.get("corrupted", false)),
 		"corruption_factor": clampf(float(raw.get("corruption_factor", 1.0)), 1.0, 3.0),
 		"penalty": penalty,
@@ -1109,6 +1250,17 @@ func _sanitize_run_choice(value: Variant) -> Dictionary:
 			else _sanitize_pitch_choice_option(option_value)
 		)
 		if not option.is_empty():
+			if str((option_value as Dictionary).get("card_type", "")) == "upgrade":
+				option["card_type"] = "upgrade"
+				option["target_perk_id"] = str((option_value as Dictionary).get("target_perk_id", "")).substr(0, 120)
+				option["before_effect"] = _sanitize_run_effect((option_value as Dictionary).get("before_effect", {}))
+				option["after_effect"] = _sanitize_run_effect((option_value as Dictionary).get("after_effect", {}))
+				option["delta_effect"] = _sanitize_run_effect((option_value as Dictionary).get("delta_effect", {}))
+				option["secondary_effects"] = _sanitize_run_effects((option_value as Dictionary).get("secondary_effects", []))
+				option["upgrade_rank_before"] = clampi(int((option_value as Dictionary).get("upgrade_rank_before", 0)), 0, 999999)
+				option["upgrade_rank_after"] = clampi(int((option_value as Dictionary).get("upgrade_rank_after", 1)), 1, 1000000)
+				if option.before_effect.is_empty() or option.after_effect.is_empty() or option.target_perk_id.is_empty():
+					continue
 			options.append(option)
 	if options.is_empty():
 		return {}
@@ -1156,7 +1308,7 @@ func _migrate_legacy_run_perks() -> void:
 		selected_run_perks.append({
 			"id": "legacy_body_age",
 			"definition_id": "legacy_body_age_%d" % age_order,
-			"name": "Legacy Body • %s" % _legacy_body_age_name(age_order),
+			"name": "Legacy Body: %s" % _legacy_body_age_name(age_order),
 			"description": "Converted from the body owned before run drafts existed.",
 			"rarity_id": "legacy", "rarity_name": "LEGACY", "rarity_rank": 2, "color": "ffd45c",
 			"level": maxi(highest_unlocked + 1, 1),
@@ -1176,7 +1328,7 @@ func _migrate_legacy_run_perks() -> void:
 		selected_run_perks.append({
 			"id": "legacy_body_%s" % modifier_id,
 			"definition_id": "legacy_body_%s" % modifier_id,
-			"name": "Legacy Body • %s" % str(modifier.get("name", modifier_id)),
+			"name": "Legacy Body: %s" % str(modifier.get("name", modifier_id)),
 			"description": "Converted from a body modifier owned before run drafts existed.",
 			"rarity_id": "legacy", "rarity_name": "LEGACY", "rarity_rank": 2, "color": "ffd45c",
 			"level": maxi(highest_unlocked + 1, 1),
@@ -1347,7 +1499,7 @@ func _refresh_batter_variant() -> void:
 		current_batter_variant = _generate_opponent_variant(source_index, endless_level + batter_generation)
 		current_batter_variant.opponent_index = Content.FINAL_BOSS_INDEX
 		current_batter_variant.source_index = source_index
-		current_batter_variant.class_name = "%s • EXTRA-INNING ANOMALY" % str(current_batter_variant.class_name)
+		current_batter_variant.class_name = "%s: EXTRA-INNING ANOMALY" % str(current_batter_variant.class_name)
 
 func _reset_batter_identity() -> void:
 	batter_generation = 0
@@ -1783,11 +1935,11 @@ func get_speed_gate_status_text(opponent_index: int = current_opponent) -> Strin
 		return ""
 	match opponent_index:
 		Content.HUMAN_FINAL_INDEX:
-			return "VELOCITY TRIAL • Approach the human limit: %s mph." % format_number(HUMAN_SPEED_CAP_MPH, 0)
+			return "VELOCITY TRIAL: Approach the human limit: %s mph." % format_number(HUMAN_SPEED_CAP_MPH, 0)
 		Content.ALIEN_FINAL_INDEX:
-			return "OLYMPUS LICENSE • Approach Mach 5,000."
+			return "OLYMPUS LICENSE: Approach Mach 5,000."
 		Content.FINAL_BOSS_INDEX:
-			return "CAUSALITY ARMOR • Approach 5,000c."
+			return "CAUSALITY ARMOR: Approach 5,000c."
 		_:
 			return ""
 
@@ -1800,24 +1952,24 @@ func _advance_story_encounters(seconds: float, _alien_witnessed: bool) -> void:
 func get_story_status_text() -> String:
 	if is_alien_exhibition_blocked():
 		if genetic_offer_unlocked:
-			return "TIME TRAVEL READY • Open BODY when you are ready to be born again."
+			return "TIME TRAVEL READY: Open BODY when you are ready to be born again."
 		if is_alien_help_available():
-			return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%"
-		return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%% • HUMILIATION %d / %d" % [
+			return "IMPOSSIBLE EXHIBITION: GRAND SLAM 100%"
+		return "IMPOSSIBLE EXHIBITION: GRAND SLAM 100%%; HUMILIATION %d / %d" % [
 			alien_exhibition_grand_slams,
 			ALIEN_EXHIBITION_GRAND_SLAMS_REQUIRED,
 		]
 	if is_eldritch_exhibition_blocked():
 		if eldritch_offer_unlocked:
-			return "ELDRITCH OFFER READY • Open BODY and abandon this reality."
-		return "IMPOSSIBLE EXHIBITION • GRAND SLAM 100%% • DOOM %d / %d" % [
+			return "ELDRITCH OFFER READY: Open BODY and abandon this reality."
+		return "IMPOSSIBLE EXHIBITION: GRAND SLAM 100%%; DOOM %d / %d" % [
 			eldritch_exhibition_grand_slams,
 			ELDRITCH_EXHIBITION_GRAND_SLAMS_REQUIRED,
 		]
 	if pending_special_encounter == "alien_contact":
-		return "FIRST CONTACT READY • Accept the transmission to continue."
+		return "FIRST CONTACT READY: Accept the transmission to continue."
 	if pending_special_encounter == "eldritch_contact":
-		return "SOMETHING HAS NOTICED THE LEAGUE • Accept the transmission to continue."
+		return "SOMETHING HAS NOTICED THE LEAGUE: Accept the transmission to continue."
 	return ""
 
 func reset_fresh() -> void:
@@ -2700,7 +2852,7 @@ func _begin_pitch_volley(summary: Dictionary, elapsed_offset: float) -> void:
 	var pitch_id := _sample_pitch_id()
 	var speed_fps := _sample_pitch_speed(pitch_id)
 	var distance_index := selected_distance_index
-	var drag_per_foot := get_ball_drag_per_foot(current_opponent)
+	var drag_per_foot := get_ball_drag_per_foot(current_opponent, pitch_id)
 	var plate_speed_fps := get_plate_speed_for_release(
 		speed_fps,
 		distance_index,
@@ -3179,7 +3331,7 @@ func _apply_volley_outcomes(
 	var call_text_parts: Array[String] = []
 	for line in call_lines:
 		call_text_parts.append(str(line.text))
-	var call_text := " • ".join(call_text_parts)
+	var call_text := "; ".join(call_text_parts)
 	summary.visual_outcome = primary_outcome
 	summary.visual_strikeout = struck_out
 	summary.visual_saved = saved_hit_count > 0 and unsaved_hit_count == 0
@@ -3548,10 +3700,12 @@ func _resolve_strikeout_loot(
 	summary.loot_found = int(summary.get("loot_found", 0)) + successes
 
 	var reward_opponent := clampi(opponent_index, 0, opponents.size() - 1)
-	if first_career_drop and reward_opponent == 0:
+	if first_career_drop:
 		var first_item := _generate_loot_item(reward_opponent, 0, 0)
 		first_item.name = "Little Timmy's Oversized Cap"
-		_store_generated_loot(first_item, summary)
+		var first_item_was_kept := _store_generated_loot(first_item, summary)
+		if reward_opponent == 0 and first_item_was_kept:
+			record_story("little_timmy_hat")
 		successes -= 1
 	if successes <= 0:
 		return
@@ -3821,7 +3975,7 @@ func _make_loot_name(item: Dictionary, slot: Dictionary, rarity: Dictionary, sel
 		return "The %s %s of %s" % [prefix, base_name, suffix]
 	return "%s %s of %s" % [prefix, base_name, suffix]
 
-func _store_generated_loot(item: Dictionary, summary: Dictionary) -> void:
+func _store_generated_loot(item: Dictionary, summary: Dictionary) -> bool:
 	var result := _add_loot_item(item)
 	if bool(result.kept):
 		summary.loot_kept = int(summary.get("loot_kept", 0)) + 1
@@ -3833,10 +3987,11 @@ func _store_generated_loot(item: Dictionary, summary: Dictionary) -> void:
 		summary.loot_discarded = int(summary.get("loot_discarded", 0)) + removed.size()
 	var scrap_gained := float(result.get("scrap", 0.0))
 	if scrap_gained > 0.0:
-		summary.loot_scrap_gained = minf(
-			MAX_NUMBER,
-			float(summary.get("loot_scrap_gained", 0.0)) + scrap_gained
-		)
+			summary.loot_scrap_gained = minf(
+				MAX_NUMBER,
+				float(summary.get("loot_scrap_gained", 0.0)) + scrap_gained
+			)
+	return bool(result.kept)
 
 func _add_loot_item(item: Dictionary) -> Dictionary:
 	var stored: Dictionary = item.duplicate(true)
@@ -4156,7 +4311,7 @@ func get_loot_item_stat_lines(item: Dictionary) -> Array[String]:
 	return lines
 
 func get_loot_item_description(item: Dictionary) -> String:
-	return " • ".join(get_loot_item_stat_lines(item))
+	return "; ".join(get_loot_item_stat_lines(item))
 
 func get_raw_equipment_bonuses() -> Dictionary:
 	var unlock_state := "%d:%d:%d:%d:%d" % [
@@ -4225,7 +4380,7 @@ func get_equipment_bonuses() -> Dictionary:
 
 func get_equipment_bonus_summary(raw := false) -> String:
 	var bonuses := get_raw_equipment_bonuses() if raw else get_equipment_bonuses()
-	return "Speed ×%.3f • Recovery ×%.3f • Quality %s • XP ×%.3f • Mastery ×%.3f • Payload ×%.3f • Distance threat ×%.3f" % [
+	return "Speed ×%.3f; Recovery ×%.3f; Quality %s; XP ×%.3f; Mastery ×%.3f; Payload ×%.3f; Distance threat ×%.3f" % [
 		1.0 + float(bonuses.speed_bonus),
 		1.0 + float(bonuses.rate_bonus),
 		format_rating(float(bonuses.quality_bonus), true),
@@ -4765,7 +4920,7 @@ func sample_hit_save(outcome: int, _opponent_index: int = current_opponent) -> b
 
 func get_hit_protection_summary() -> String:
 	if has_divine_blessing("angels_outfield"):
-		return "All ordinary hits protected • Grand Slams always terminal"
+		return "All ordinary hits protected; Grand Slams always terminal"
 	var eligible: Array[String] = []
 	var tier := get_clone_fielding_tier()
 	if tier >= 1:
@@ -4777,8 +4932,8 @@ func get_hit_protection_summary() -> String:
 	if tier >= 4:
 		eligible.append("HR")
 	if get_clone_count() <= 1.0 or eligible.is_empty():
-		return "No clone field coverage • Grand Slams always terminal"
-	return "%s eligible • coverage %.1f%% • catch %.1f%% • combined %.1f%%" % [
+		return "No clone field coverage; Grand Slams always terminal"
+	return "%s eligible; coverage %.1f%%; catch %.1f%%; combined %.1f%%" % [
 		", ".join(eligible),
 		get_clone_field_coverage_chance() * 100.0,
 		get_clone_catch_chance() * 100.0,
@@ -5435,10 +5590,10 @@ func get_human_velocity_cap_fps() -> float:
 
 func get_velocity_stage_name() -> String:
 	if eldritch_ascensions > 0:
-		return "ELDRITCH LIMIT • 5,000c"
+		return "ELDRITCH LIMIT: 5,000c"
 	if genetic_rebirths > 0:
-		return "GENETIC LIMIT • MACH 5,000"
-	return "HUMAN DEVELOPMENT LIMIT • %s MPH" % format_number(
+		return "GENETIC LIMIT: MACH 5,000"
+	return "HUMAN DEVELOPMENT LIMIT: %s MPH" % format_number(
 		get_human_velocity_cap_fps() * 0.681818,
 		1
 	)
@@ -5549,7 +5704,7 @@ func get_current_ball_profile() -> Dictionary:
 func get_ball_profile_text(id: String = "") -> String:
 	var definition := get_current_ball_definition() if id.is_empty() else Content.ball_upgrade_by_id(id)
 	var profile: Dictionary = Content.BALL_PROFILES.get(str(definition.get("id", "")), {})
-	return "Payload ×%s • Release Speed ×%s • Quality %s • Air Drag ×%s" % [
+	return "Payload ×%s; Release Speed ×%s; Quality %s; Air Drag ×%s" % [
 		format_number(float(profile.get("payload", 1.0)), 2),
 		format_number(float(profile.get("speed", 1.0)), 2),
 		format_rating(float(profile.get("quality", 0.0)), true),
@@ -5577,7 +5732,7 @@ func get_ball_upgrade_delta_text(id: String) -> String:
 				{"payload": "Payload ×", "speed": "Speed ×", "quality": "Quality +", "drag": "Air Drag ×"}[key],
 				before_text, after_text
 			])
-	return " • ".join(changes)
+	return "; ".join(changes)
 
 func get_pitch_potency() -> float:
 	var potency := float(get_current_ball_profile().payload)
@@ -6084,7 +6239,11 @@ func get_pitch_distance_feet_for_index(distance_index: int = -1) -> float:
 func get_pitch_distance_feet() -> float:
 	return get_pitch_distance_feet_for_index(selected_distance_index)
 
-func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
+func get_pitch_drag_multiplier(pitch_id: String) -> float:
+	var definition := Content.pitch_by_id(pitch_id)
+	return clampf(float(definition.get("drag_multiplier", 1.0)), 0.05, 4.0) if not definition.is_empty() else 1.0
+
+func get_ball_drag_per_foot(opponent_index: int = current_opponent, pitch_id: String = "") -> float:
 	# Human baseball happens in air. The untouched opening Wiffle Ball stays at
 	# the title's literal 1 ft/s for 3 ft; purchased lightweight shells visibly
 	# bleed speed, while regulation leather approaches real-baseball retention.
@@ -6139,6 +6298,7 @@ func get_ball_drag_per_foot(opponent_index: int = current_opponent) -> float:
 		base_drag
 		* training_factor
 		* float(get_current_ball_profile().drag)
+		* get_pitch_drag_multiplier(pitch_id)
 		* get_body_growth_effect_multiplier("drag")
 		* get_run_stat_multiplier("drag")
 		/ maxf(1.0 + float(get_equipment_bonuses().drag_bonus), 0.05)
@@ -6350,7 +6510,7 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 		consecutive_home_runs = 0
 		_reset_batter_identity()
 		batter_replacement_pending = batter_cooldown_remaining > 0.0
-		var endless_message := "EXTRA INNING %d CLEARED • EXTRA INNING %d is at the plate." % [
+		var endless_message := "EXTRA INNING %d CLEARED: EXTRA INNING %d is at the plate." % [
 			cleared_inning,
 			endless_level,
 		]
@@ -6426,7 +6586,7 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 		and can_auto_advance_to(highest_unlocked)
 	):
 		if set_current_opponent(highest_unlocked):
-			message += " • auto-advanced"
+			message += "; auto-advanced"
 	progression_changed.emit(message)
 	check_achievements()
 	return message
@@ -6492,7 +6652,7 @@ func get_overmastery_summary(index: int = current_opponent) -> String:
 	var doublings := get_overmastery_doublings(index)
 	if doublings <= 0.000001:
 		return ""
-	return "FARM BONUS  •  XP ×%.3f  •  LOOT LUCK +%.1f%%" % [
+	return "FARM BONUS: XP ×%.3f; LOOT LUCK +%.1f%%" % [
 		get_opponent_farm_xp_multiplier(index),
 		get_opponent_loot_luck(index) * 100.0,
 	]
@@ -6942,7 +7102,7 @@ func can_auto_advance_to(opponent_index: int) -> bool:
 	return false
 
 func get_auto_advance_capacity_text() -> String:
-	return "Human %d/%d  •  Alien %d/%d" % [
+	return "Human %d/%d; Alien %d/%d" % [
 		get_human_auto_advance_capacity(),
 		Content.HUMAN_FINAL_INDEX,
 		get_alien_auto_advance_capacity(),
@@ -7631,6 +7791,13 @@ func apply_save_data(data: Dictionary) -> void:
 			0.0,
 			MAX_NUMBER
 		)
+		# v31 charges new Determination 20% more deliberately but makes every
+		# doubling 15% stronger. Convert an in-progress old meter so loading does
+		# not secretly change its already-earned quality bonus.
+		if saved_version < 31:
+			var legacy_intervals := determination_points / DETERMINATION_REFERENCE_POINTS
+			var converted_intervals := pow(1.0 + legacy_intervals, 0.08 / DETERMINATION_QUALITY_PER_DOUBLING) - 1.0
+			determination_points = minf(MAX_NUMBER, converted_intervals * DETERMINATION_REFERENCE_POINTS)
 	else:
 		var legacy_seconds := clampf(float(data.get("seconds_since_strikeout", 0.0)), 0.0, MAX_NUMBER)
 		determination_points = minf(
@@ -8092,6 +8259,11 @@ func apply_save_data(data: Dictionary) -> void:
 	if has_genetic_upgrade("autonomic_wardrobe"):
 		auto_equip_highest_power(false)
 	lifetime_loot_found = maxf(lifetime_loot_found, float(loot_items.size()))
+	# The v31 M2 equipment story must never ambush an established wardrobe. A
+	# loaded save with any prior acquisition receives the durable ID quietly;
+	# fresh careers record and queue it at the actual kept Little Timmy cap.
+	if lifetime_loot_found >= 1.0 and "little_timmy_hat" not in story_seen:
+		record_story("little_timmy_hat", "", "", false)
 	loot_revision += 1
 	last_time_travel_retained_slots.clear()
 
@@ -8252,7 +8424,7 @@ func get_owned_equipment_summary() -> String:
 		names.append("Halo r%d" % divine_halos)
 	if names.is_empty():
 		return "No facilities owned yet"
-	return " • ".join(names)
+	return "; ".join(names)
 
 static func rounded_cost(value: float) -> float:
 	if value <= 0.0:

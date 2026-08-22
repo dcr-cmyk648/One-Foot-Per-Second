@@ -11,6 +11,26 @@ const PERK_RARITIES := [
 	{"id": "boss", "name": "BOSS", "rank": 4, "factor": 4.25, "color": "d68cff", "weight": 0.2},
 ]
 
+# Upgrade secondary effects are deliberately limited to existing, visible
+# ordinary-run axes.  A rare upgrade stays a larger primary improvement;
+# legendary and boss upgrades can occasionally add one compatible sidegrade.
+const PERK_UPGRADE_SECONDARY_STATS := {
+	"speed": {"stat": "quality", "operation": "add", "ratio": 0.20},
+	"quality": {"stat": "calling", "operation": "multiplier", "ratio": 0.20},
+	"recovery": {"stat": "speed", "operation": "multiplier", "ratio": 0.18},
+	"lineup": {"stat": "recovery", "operation": "multiplier", "ratio": 0.18},
+	"hit_delay": {"stat": "lineup", "operation": "reduction", "ratio": 0.18},
+	"calling": {"stat": "quality", "operation": "add", "ratio": 0.20},
+	"payload": {"stat": "xp", "operation": "multiplier", "ratio": 0.18},
+	"mastery": {"stat": "quality", "operation": "add", "ratio": 0.18},
+	"loot": {"stat": "offline", "operation": "add", "ratio": 0.20},
+	"offline": {"stat": "loot", "operation": "add", "ratio": 0.20},
+	"tap": {"stat": "determination", "operation": "multiplier", "ratio": 0.18},
+	"determination": {"stat": "quality", "operation": "add", "ratio": 0.18},
+	"drag": {"stat": "speed", "operation": "multiplier", "ratio": 0.16},
+	"xp": {"stat": "payload", "operation": "multiplier", "ratio": 0.16},
+}
+
 # Perks own one clear primary effect.  The magnitude is calculated from the
 # defeated level and rolled rarity; cards store the resolved effect so changing
 # balance later never mutates an already chosen run.  `operation` is one of:
@@ -90,7 +110,7 @@ const RUN_PERKS := [
 	{"id": "age_little_kid", "name": "Become a Little Kid", "league": "human", "stat": "body_age", "operation": "body", "age_order": 1, "normal_by_level": 4, "base": 1.0, "level_growth": 0.0, "description": "You are now old enough to know this is weird."},
 	{"id": "age_big_kid", "name": "Become a Big Kid", "league": "human", "stat": "body_age", "operation": "body", "age_order": 2, "min_level": 3, "normal_by_level": 8, "base": 1.0, "level_growth": 0.0, "description": "A decisive victory over being smaller."},
 	{"id": "age_preteen", "name": "Survive Preteenhood", "league": "human", "stat": "body_age", "operation": "body", "age_order": 3, "min_level": 9, "normal_by_level": 13, "base": 1.0, "level_growth": 0.0, "description": "The uniform no longer fits for unrelated reasons."},
-	{"id": "age_teen", "name": "Puberty, Apparently", "league": "human", "stat": "body_age", "operation": "body", "age_order": 4, "min_level": 12, "normal_by_level": 18, "base": 1.0, "level_growth": 0.0, "description": "Voice −1 octave • Fastball +awkwardness."},
+	{"id": "age_teen", "name": "Puberty, Apparently", "league": "human", "stat": "body_age", "operation": "body", "age_order": 4, "min_level": 12, "normal_by_level": 18, "base": 1.0, "level_growth": 0.0, "description": "Voice −1 octave; Fastball +awkwardness."},
 	{"id": "age_young_adult", "name": "Become a Young Adult", "league": "human", "stat": "body_age", "operation": "body", "age_order": 5, "min_level": 18, "normal_by_level": 24, "base": 1.0, "level_growth": 0.0, "description": "Old enough to sign your own tendon waivers."},
 	{"id": "age_regular_guy", "name": "Become a Regular Ol' Guy", "league": "human", "stat": "body_age", "operation": "body", "age_order": 6, "min_level": 24, "normal_by_level": 30, "base": 1.0, "level_growth": 0.0, "description": "Entirely ordinary, except for the baseball destiny."},
 	{"id": "build_athletic", "name": "Look Vaguely Athletic", "league": "human", "stat": "body_build", "operation": "body", "adjective": "athletic", "base": 1.0, "level_growth": 0.0, "description": "Speed and posture improve slightly."},
@@ -98,7 +118,7 @@ const RUN_PERKS := [
 	{"id": "build_toned", "name": "Suspiciously Toned", "league": "human", "stat": "body_build", "operation": "body", "adjective": "toned", "min_level": 15, "base": 1.0, "level_growth": 0.0, "description": "Cardio exists and you resent it."},
 	{"id": "build_creatine", "name": "Creatine Is Just Food, Coach", "league": "human", "stat": "body_build", "operation": "body", "adjective": "creatine-loaded", "min_level": 18, "base": 1.0, "level_growth": 0.0, "description": "Water weight with excellent branding."},
 	{"id": "build_vitamins", "name": "Suspicious Vitamins", "league": "human", "stat": "body_build", "operation": "body", "adjective": "suspiciously vitaminized", "min_level": 21, "base": 1.0, "level_growth": 0.0, "description": "The label uses three alphabets."},
-	{"id": "build_roided", "name": "Extremely Obvious Steroids", "league": "human", "stat": "body_build", "operation": "body", "adjective": "roided-out", "min_level": 27, "base": 1.0, "level_growth": 0.0, "description": "Subtlety −100% • Sleeves −all."},
+	{"id": "build_roided", "name": "Extremely Obvious Steroids", "league": "human", "stat": "body_build", "operation": "body", "adjective": "roided-out", "min_level": 27, "base": 1.0, "level_growth": 0.0, "description": "Subtlety −100%; Sleeves −all."},
 ]
 
 const BOSS_PERKS := [
@@ -134,7 +154,8 @@ const BOSS_PITCHES := {
 const STORY_BEATS := [
 	{"id": "prologue_little_timmy", "tier": "human", "title": "THREE FEET OF DESTINY", "body": "You stare at your mortal enemy. Sun warms your face; your hand closes around the rough plastic contours of your weapon; every tiny muscle screams as you hurl it toward your foe at one foot per second. The Wiffle ball sails two feet, rolls across the plate, and stops at Little Timmy's feet. Clearly, you need a little more practice."},
 	{"id": "story_tab_explained", "tier": "human", "title": "THE SCOREBOOK", "body": "The important moments of your campaign are recorded in LOG → STORY. It shows newest entries first; Reverse Order restores the chronology if you are feeling responsible."},
-	{"id": "arrive_tee_ball", "tier": "human", "title": "TEE-BALL DIPLOMACY", "body": "You have crossed into tee-ball, where the battlefield has a rubber tee and the crowd carries orange slices. Every swing is applauded with the intensity of a coronation. You still intend to conquer it."},
+	{"id": "arrive_tee_ball", "tier": "human", "title": "TEE-BALL DIPLOMACY", "body": "You stride forward, knock the pathetic tee to the ground, and take the mound. The crowd gasps around its orange slices. It is time to show them real baseball."},
+	{"id": "little_timmy_hat", "tier": "human", "title": "WAIT... LEAVE THE HAT.", "body": "Little Timmy trudges away after the strikeout, then stops. \"Wait... leave the hat.\" His oversized cap remains on the grass like a surrendered crown. EQUIPMENT is now unlocked: open LOADOUT to inspect and equip the things defeated batters abandon."},
 	{"id": "arrive_coach_pitch", "tier": "human", "title": "COACH PITCH, YOUR MOUND", "body": "Adults organize the battlefield and call it Coach Pitch. You seize the mound anyway, defending it from aluminum bats and children with frighteningly confident stances. The distance expands; so does the enemy's belief in itself."},
 	{"id": "arrive_little_league", "tier": "human", "title": "THE FIRST TRYHARDS", "body": "Matching socks appear. Private lessons appear. Somebody arrives with a composite bat and a warranty, as though this were an arms race. You understand that it is."},
 	{"id": "arrive_middle_school", "tier": "human", "title": "THE AWKWARD LEAGUE", "body": "Middle school is a nation of limbs, cracked voices, and grudges conducted through sports. The strike zone is farther away, and one hitter has a laminated scouting report. You will survive this bureaucracy of puberty."},

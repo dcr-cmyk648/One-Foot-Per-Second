@@ -14,6 +14,10 @@ This file is the primary voice seed for future narrative work. Read it before au
 
 > Octathulhu will eat the universe unless you can beat him at baseball.
 
+> You stride forward, knock the pathetic tee to the ground, and take the mound. It is time to show them real baseball.
+
+> Little Timmy trudges away after the strikeout, then stops. “Wait... leave the hat.” The cap remains like a surrendered crown; the Loadout has acquired its first piece of evidence.
+
 ## Voice checklist
 
 - Address the player intimately, usually in second person.
