@@ -1,8 +1,8 @@
-ec6c71c0f2f57f2030ddd1aa359ee82711c7447f88764cfce7a8ddeea758a69d  No Hitter v0.18.0/No Hitter v0.18.0 macOS Universal.dmg
-cfddd7340d423c2ac65835ba8f5c5d3c8831e97eedf4026b4222e5f69555b067  No Hitter v0.18.0/No Hitter v0.18.0 Windows x86_64.zip
-cb7f703530e98c717e13d167fd3dc08673fd7b7d5795b4d4a37da81e5e5d4747  No Hitter v0.18.0/No Hitter v0.18.0 Windows ARM64.zip
-c259217765bbc538d0c912b238fa3dc96e0746a602b0ac10990c27cea0cd016c  No Hitter v0.18.0/No Hitter v0.18.0 Linux x86_64.tar.gz
-fd4b294f40a3a3e7d1de1643409da3f1382c8f4ff86160c6eda580db170f812d  No Hitter v0.18.0/No Hitter v0.18.0 Linux ARM64.tar.gz
-ea63697123b867ffc195df5334513d7b2e2123c4458528845d888b55282f3aed  No Hitter v0.18.0/No Hitter v0.18.0 Source.zip
-062c7a12f02c1ed18d469054abfd49a4c531bcbace982f9754610199c5b0c5b3  No Hitter v0.18.0/No Hitter v0.18.0 Browser.zip
-3233bbe7d9f78ad536446cb2d57bab7c3f1620ff3ad90b21b33334adf92af3cf  No Hitter v0.18.0 All Platforms.zip
+f8ec980ba5339a9f4dec4f2e807f44d6a90e68431233629851e4b4e307896f05  No Hitter v0.19.0/No Hitter v0.19.0 macOS Universal.dmg
+c0e9323da46c64077844ff8028b3b78e59a9d294ffda77bd250b20ee9d6dc2af  No Hitter v0.19.0/No Hitter v0.19.0 Windows x86_64.zip
+cba81c736c1933f76c2bd7e2ee7594499f0b5746598e2c0538639969d3d1ad4b  No Hitter v0.19.0/No Hitter v0.19.0 Windows ARM64.zip
+eecb0fa2355769d434ba0d2a24fe57555a7277f7633c1c61ec082929e61731f7  No Hitter v0.19.0/No Hitter v0.19.0 Linux x86_64.tar.gz
+7e7c048141143bda19262f827430160145245061be2cd7fac8b6782d25977db1  No Hitter v0.19.0/No Hitter v0.19.0 Linux ARM64.tar.gz
+c09e5fed8b3a4225d1b5885aa9641e5db00300c950eccb8f00e6bf65d0d98f97  No Hitter v0.19.0/No Hitter v0.19.0 Source.zip
+5629749be9cd24d09c84688ebedaa55b0972ff9df1bf2cd5e62f3c36a7a977d7  No Hitter v0.19.0/No Hitter v0.19.0 Browser.zip
+da3f01b6ac95e59b005e550cd32f91326da4bddcec930e8e6e603a8f617e34f2  No Hitter v0.19.0 All Platforms.zip

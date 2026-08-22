@@ -2,7 +2,7 @@
 
 ## Status
 
-M1 gameplay systems, M2 story/name/text data, and M3 interface work are accepted. Determination now fills 20% more slowly and grants a 15% stronger quality step; perk upgrades use a genuine seeded 20% board roll, serialize exact accumulated effects/history, and preserve protected rewards; human pitches now form Speed/Quality/Drag sidegrades applied to immutable release snapshots. M2 adds the Tee Ball mound premise, the once-only Little Timmy hat/equipment beat, and substantially broader deterministic name grammar. M3 adds concise effective equipment comparisons, a bounded scrolling phone detail body, exact perk percentage/upgrade rendering, immediate current-stat refresh, and rendered Story/Ball glyph cleanup. Focused gameplay, story/name, progression, desktop UI, mobile UI, and diff checks pass. M4 is stamped as v0.19.0/save schema 31 and is ready for the accepted-source commit followed by the one canonical all-platform pipeline. The prior release remains preserved at `ccbab50`/v0.18.0, and the project-root `AGENTS.md` remains an untracked user-owned instruction file that must not be staged or modified.
+M1 gameplay systems, M2 story/name/text data, and M3 interface work are accepted. Determination now fills 20% more slowly and grants a 15% stronger quality step; perk upgrades use a genuine seeded 20% board roll, serialize exact accumulated effects/history, and preserve protected rewards; human pitches now form Speed/Quality/Drag sidegrades applied to immutable release snapshots. M2 adds the Tee Ball mound premise, the once-only Little Timmy hat/equipment beat, and substantially broader deterministic name grammar. M3 adds concise effective equipment comparisons, a bounded scrolling phone detail body, exact perk percentage/upgrade rendering, immediate current-stat refresh, and rendered Story/Ball glyph cleanup. Accepted source commit `90603e2` is stamped as v0.19.0/save schema 31. The one canonical all-platform pipeline and Sites parity/build tests pass; exact generated artifacts are ready to commit and publish to the approved channels. The project-root `AGENTS.md` remains an untracked user-owned instruction file that must not be staged or modified.
 
 ## Goal
 
@@ -139,6 +139,18 @@ Make run choices legible, balanced, and replayable: Determination should charge 
 - M3: desktop `tests/ui_runner.gd -- --fresh` PASS; mobile `tests/mobile_ui_runner.gd -- --fresh` PASS; Sol precision correction desktop UI rerun PASS; `git diff --check` PASS.
 - Release metadata: project/native/distribution metadata and changelog are stamped to v0.19.0/save schema 31 before the first export. `stamp_sites_release.mjs` is intentionally deferred until the exact new Web PCK exists.
 
+## M4 release record (in progress)
+
+- Accepted gameplay source: `90603e2` (`Release No Hitter v0.19.0 source`)
+- Version / save schema: `0.19.0` / `31`
+- Canonical `scripts/package_all_platforms.sh` invocation: PASS; run exactly once
+- Release gate: PASS (`test_runner`, desktop UI, 390×844 mobile UI, macOS Universal, Windows x86_64/ARM64, Linux x86_64/ARM64, Browser, binary/archive/DMG validation)
+- Web parity and Sites adapter: PASS; all four rendered-response tests pass from the exact Web payload
+- Web PCK / Sites fingerprint: `ed8a2f498dda45d1af9149de30ebe4ecfdf874ccc126c0f71e4d0eff4d22939b`
+- Browser ZIP SHA-256: `5629749be9cd24d09c84688ebedaa55b0972ff9df1bf2cd5e62f3c36a7a977d7`
+- All Platforms ZIP SHA-256: `da3f01b6ac95e59b005e550cd32f91326da4bddcec930e8e6e603a8f617e34f2`
+- Generated artifact commit, Pages workflow, GitHub Release, and owner-only Sites deployment: pending
+
 ## Exact next action
 
-Commit the accepted v0.19.0 source (including this plan but excluding user-owned `AGENTS.md`), push that source revision, then invoke `scripts/package_all_platforms.sh` exactly once. Record the run/artifact evidence, commit the generated artifact tree, push it for Pages, and reuse those exact files for GitHub Release and owner-only Sites. Retry only failed destinations; do not rebuild successful outputs.
+Commit the generated v0.19.0 Web/Sites/checksum tree plus this release record (excluding user-owned `AGENTS.md`), push the resulting revision to `main` for Pages, publish the already-built GitHub Release assets, and save/deploy the already-tested `sites-host` payload privately. Record the aggregate results without rebuilding successful outputs.
