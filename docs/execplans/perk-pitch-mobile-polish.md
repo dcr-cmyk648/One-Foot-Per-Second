@@ -2,7 +2,7 @@
 
 ## Status
 
-M1 gameplay systems, M2 story/name/text data, and M3 interface work are accepted. Determination now fills 20% more slowly and grants a 15% stronger quality step; perk upgrades use a genuine seeded 20% board roll, serialize exact accumulated effects/history, and preserve protected rewards; human pitches now form Speed/Quality/Drag sidegrades applied to immutable release snapshots. M2 adds the Tee Ball mound premise, the once-only Little Timmy hat/equipment beat, and substantially broader deterministic name grammar. M3 adds concise effective equipment comparisons, a bounded scrolling phone detail body, exact perk percentage/upgrade rendering, immediate current-stat refresh, and rendered Story/Ball glyph cleanup. Accepted source commit `90603e2` is stamped as v0.19.0/save schema 31. The one canonical all-platform pipeline and Sites parity/build tests pass; exact generated artifacts are ready to commit and publish to the approved channels. The project-root `AGENTS.md` remains an untracked user-owned instruction file that must not be staged or modified.
+Complete. M1 gameplay systems, M2 story/name/text data, and M3 interface work are accepted. Determination now fills 20% more slowly and grants a 15% stronger quality step; perk upgrades use a genuine seeded 20% board roll, serialize exact accumulated effects/history, and preserve protected rewards; human pitches now form Speed/Quality/Drag sidegrades applied to immutable release snapshots. M2 adds the Tee Ball mound premise, the once-only Little Timmy hat/equipment beat, and substantially broader deterministic name grammar. M3 adds concise effective equipment comparisons, a bounded scrolling phone detail body, exact perk percentage/upgrade rendering, immediate current-stat refresh, and rendered Story/Ball glyph cleanup. Accepted source commit `90603e2` is released as v0.19.0/save schema 31. The canonical all-platform pipeline passed once and the exact artifacts are live on GitHub Pages, the published GitHub Release, and the owner-only Sites deployment. The project-root `AGENTS.md` remains an untracked user-owned instruction file that must not be staged or modified.
 
 ## Goal
 
@@ -130,7 +130,7 @@ Make run choices legible, balanced, and replayable: Determination should charge 
 - [x] Complete and accept M1 through one Terra implementation worker.
 - [x] Complete and accept M2 through one Terra implementation worker.
 - [x] Complete and accept M3 through one Terra implementation worker plus one bounded precision correction.
-- [ ] Complete M4 integration and synchronized release.
+- [x] Complete M4 integration and synchronized release.
 
 ## Accepted milestone evidence
 
@@ -139,9 +139,10 @@ Make run choices legible, balanced, and replayable: Determination should charge 
 - M3: desktop `tests/ui_runner.gd -- --fresh` PASS; mobile `tests/mobile_ui_runner.gd -- --fresh` PASS; Sol precision correction desktop UI rerun PASS; `git diff --check` PASS.
 - Release metadata: project/native/distribution metadata and changelog are stamped to v0.19.0/save schema 31 before the first export. `stamp_sites_release.mjs` is intentionally deferred until the exact new Web PCK exists.
 
-## M4 release record (in progress)
+## M4 release record (complete)
 
 - Accepted gameplay source: `90603e2` (`Release No Hitter v0.19.0 source`)
+- Generated artifact commit: `6d9293e` (`Package No Hitter v0.19.0 artifacts`)
 - Version / save schema: `0.19.0` / `31`
 - Canonical `scripts/package_all_platforms.sh` invocation: PASS; run exactly once
 - Release gate: PASS (`test_runner`, desktop UI, 390×844 mobile UI, macOS Universal, Windows x86_64/ARM64, Linux x86_64/ARM64, Browser, binary/archive/DMG validation)
@@ -149,8 +150,12 @@ Make run choices legible, balanced, and replayable: Determination should charge 
 - Web PCK / Sites fingerprint: `ed8a2f498dda45d1af9149de30ebe4ecfdf874ccc126c0f71e4d0eff4d22939b`
 - Browser ZIP SHA-256: `5629749be9cd24d09c84688ebedaa55b0972ff9df1bf2cd5e62f3c36a7a977d7`
 - All Platforms ZIP SHA-256: `da3f01b6ac95e59b005e550cd32f91326da4bddcec930e8e6e603a8f617e34f2`
-- Generated artifact commit, Pages workflow, GitHub Release, and owner-only Sites deployment: pending
+- GitHub Pages: workflow `32548179053` PASS at artifact commit `6d9293e5a98d1149091905da7151d7a1e2ee2c5d`; live PCK matches the accepted fingerprint; `https://dcr-cmyk648.github.io/One-Foot-Per-Second/`
+- GitHub Release: v0.19.0 published with eight verified assets and matching local SHA-256 values; `https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/tag/v0.19.0`
+- Sites source commit: `c465b4315bca15770fb63752b27d10853343c874`
+- Sites saved version: 34, ID `appgprj_6a7d30c536848191b0b746425f81041e~appgver_efb930eb63d48191b1a30dfe015f3dc2`, 88 files, 42,106,880 bytes, archive hash `sha256:4acec3d56960a58cb44b1495df834f878c83d155f982eb6c363c19b7de97bfd4`
+- Owner-only Sites deployment: `appgdep_6a89143f6d748191850bd7c92ea464e2`, succeeded; `https://one-foot-per-second-game.burtlebope.chatgpt.site`
 
 ## Exact next action
 
-Commit the generated v0.19.0 Web/Sites/checksum tree plus this release record (excluding user-owned `AGENTS.md`), push the resulting revision to `main` for Pages, publish the already-built GitHub Release assets, and save/deploy the already-tested `sites-host` payload privately. Record the aggregate results without rebuilding successful outputs.
+None for this phase. Preserve v0.18.0 as the rollback release and treat the next feedback batch as a new phase. Do not rebuild or republish v0.19.0 unless source or release metadata changes.
