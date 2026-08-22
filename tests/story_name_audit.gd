@@ -10,6 +10,7 @@ var failures := 0
 func _initialize() -> void:
 	print("No Hitter — story and name audit")
 	_audit_story_copy()
+	_audit_story_workbook()
 	_audit_rebirth_middle_school_trigger()
 	_audit_little_timmy_equipment_beat()
 	_audit_names()
@@ -55,6 +56,59 @@ func _audit_story_copy() -> void:
 	_expect(not tee_ball.contains("you hit") and not tee_ball.contains("you bat"), "Tee Ball must never imply the player bats from the tee")
 	var hat := _story_body("little_timmy_hat").to_lower()
 	_expect(hat.contains("wait... leave the hat.") and hat.contains("equipment") and hat.contains("loadout"), "Little Timmy's equipment beat must explain the actual unlock")
+	_expect(_story_body("arrive_upper_minors").to_lower().contains("reality forgot"), "Upper human leagues must foreshadow the prior-cycle echo")
+	_expect(_story_body("xylophax_portal").to_lower().contains("invasion bracket"), "First contact must establish the Earth invasion bracket")
+	_expect(_story_body("alien_arrival_popup").to_lower().contains("baseball law"), "Xylophax popup must establish baseball law")
+	_expect(_story_body("octathulhu_contact").to_lower().contains("torn a seam"), "Eldritch contact must follow the player's reality tear")
+
+func _audit_story_workbook() -> void:
+	var workbook_path := "res://docs/writing/story-beats.md"
+	_expect(FileAccess.file_exists(workbook_path), "Story workbook must exist")
+	if not FileAccess.file_exists(workbook_path):
+		return
+	var workbook := FileAccess.get_file_as_string(workbook_path)
+	_expect(workbook.contains("<!-- NEW BEAT TEMPLATE:"), "Workbook must expose a machine-recognizable NEW BEAT template")
+	var entries := {}
+	for section_value in workbook.split("## BEAT: "):
+		var section := str(section_value)
+		if section.begins_with("new_stable_id\n"):
+			_expect(section.contains("Status: NEW") and section.contains("PENDING — no runtime implementation yet."), "NEW beat template must remain explicitly pending")
+			continue
+		if not section.contains("\nStatus:"):
+			continue
+		var id := section.get_slice("\n", 0).strip_edges()
+		_expect(not id.is_empty() and not entries.has(id), "Workbook beat IDs must be unique: %s" % id)
+		entries[id] = section
+	for beat_value in RunContent.STORY_BEATS:
+		var beat: Dictionary = beat_value
+		var id := str(beat.id)
+		_expect(entries.has(id), "Every runtime story beat needs one workbook entry: %s" % id)
+		if entries.has(id):
+			var entry := str(entries[id])
+			_expect(entry.contains("Status: IMPLEMENTED"), "Runtime beat must be marked IMPLEMENTED: %s" % id)
+			for required_field in ["Trigger / order:", "Tier:", "Direction:", "### PLAYER PROSE SEED — EDIT THIS", "### CURRENT GAME DRAFT — CODEX-MANAGED"]:
+				_expect(entry.contains(required_field), "Workbook beat is missing %s: %s" % [required_field, id])
+			var draft := _workbook_managed_draft(entry)
+			var runtime_draft := "%s — %s" % [str(beat.get("title", "")), str(beat.get("body", ""))]
+			_expect(draft == runtime_draft, "Workbook managed draft must match runtime title/body: %s" % id)
+	_expect(not workbook.contains("alien (Earth thing)") and not workbook.contains("eldritch (ordinary thing)"), "Workbook must not retain literal author-note joke placeholders")
+	for beat_value in RunContent.STORY_BEATS:
+		var body := str((beat_value as Dictionary).get("body", ""))
+		_expect(not body.contains("alien (Earth thing)") and not body.contains("eldritch (ordinary thing)"), "Runtime story copy must not ship literal author-note joke placeholders")
+	_expect(workbook.contains("You feel the sun on your face as your hand clutches the rough contours of your weapon."), "Opening supplied prose must remain verbatim in the workbook")
+	_expect(workbook.contains("You stride forward, knock the pathetic tee to the ground, and take the mound. It is time to show them real baseball."), "Tee Ball supplied prose must remain verbatim in the workbook")
+	_expect(workbook.contains("You wake up as a toddler again. Was it all a dream? Then you notice your… modifications."), "First rebirth supplied prose must remain verbatim in the workbook")
+	_expect(workbook.contains("Middle school… again. I knew it would be a wretched hive of axe body spray and acne, but I was willing to do anything to achieve my goal."), "Middle School supplied prose must remain verbatim in the workbook")
+	_expect(workbook.contains("Octathulhu will eat the universe unless you can beat him at baseball."), "Octathulhu supplied prose must remain verbatim in the workbook")
+	_expect(workbook.contains("Little Timmy trudges away after the strikeout, then stops. “Wait... leave the hat.”"), "Hat supplied prose must remain verbatim in the workbook")
+
+func _workbook_managed_draft(entry: String) -> String:
+	var marker := "### CURRENT GAME DRAFT — CODEX-MANAGED\n"
+	var marker_index := entry.find(marker)
+	if marker_index < 0:
+		return ""
+	var after_marker := entry.substr(marker_index + marker.length())
+	return after_marker.get_slice("\n", 0).strip_edges()
 
 func _audit_rebirth_middle_school_trigger() -> void:
 	var first_lifetime = GameStateScript.new()

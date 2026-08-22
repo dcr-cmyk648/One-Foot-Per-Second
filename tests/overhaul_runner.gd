@@ -601,7 +601,7 @@ func _test_prestige_and_endless_contract() -> void:
 func _test_first_run_story_and_body_copy() -> void:
 	var game = GameStateScript.new()
 	game.reset_fresh()
-	_expect(bool(game.catalog_hide_purchased.pitch) and bool(game.catalog_hide_purchased.ball) and bool(game.catalog_hide_purchased.facility) and bool(game.catalog_hide_purchased.body), "Fresh catalog filters should hide purchased one-time upgrades")
+	_expect(bool(game.catalog_hide_purchased.pitch) and bool(game.catalog_hide_purchased.ball) and bool(game.catalog_hide_purchased.facility) and not game.catalog_hide_purchased.has("body"), "Fresh catalog filters retain only visible one-time catalog controls")
 	_expect(game.get_next_story_dialog().get("id", "") == "prologue_little_timmy", "A fresh run must queue the toddler prologue before ordinary play")
 	_expect(game.story_journal.size() >= 1 and str(game.story_journal[0].body).contains("one foot per second"), "The opening story must be journaled with the one-foot-per-second premise")
 	for subera_index in range(1, 11):
@@ -644,12 +644,12 @@ func _test_first_run_story_and_body_copy() -> void:
 	explicit_false["catalog_hide_purchased"] = {"pitch": false, "ball": false, "facility": false, "body": false}
 	var restored = GameStateScript.new()
 	restored.apply_save_data(explicit_false)
-	_expect(not bool(restored.catalog_hide_purchased.pitch) and not bool(restored.catalog_hide_purchased.body), "An explicit saved false catalog preference must survive loading")
+	_expect(not bool(restored.catalog_hide_purchased.pitch) and not restored.catalog_hide_purchased.has("body"), "Saved Body filter preferences are ignored because BODY has no visible filter")
 	var missing_filters := game.to_save_data()
 	missing_filters.erase("catalog_hide_purchased")
 	var migrated = GameStateScript.new()
 	migrated.apply_save_data(missing_filters)
-	_expect(bool(migrated.catalog_hide_purchased.pitch) and bool(migrated.catalog_hide_purchased.body), "Missing catalog preferences must receive the fresh hidden default")
+	_expect(bool(migrated.catalog_hide_purchased.pitch) and not migrated.catalog_hide_purchased.has("body"), "Missing catalog preferences preserve visible catalog defaults without inventing a Body filter")
 	game.free()
 	restored.free()
 	migrated.free()

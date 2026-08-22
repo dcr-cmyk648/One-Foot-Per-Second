@@ -1,6 +1,6 @@
 # No Hitter story voice seed
 
-This file is the primary voice seed for future narrative work. Read it before authoring or revising story copy. Runtime copy is authored in `scripts/run_content.gd`; do not parse this Markdown at runtime.
+This file is the primary voice seed for future narrative work. Read it before authoring or revising story copy, then read `docs/writing/story-beats.md`, the durable per-beat workbook. Runtime copy is authored in `scripts/run_content.gd`; do not parse this Markdown at runtime.
 
 ## Supplied narrative passages
 

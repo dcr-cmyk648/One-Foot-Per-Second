@@ -195,8 +195,8 @@ const STAT_HELP := {
 	"tap": "Tapping builds a short rolling input signal that accelerates Recovery, flight, and lineup clocks. Long timers gain more than short timers; ultra-fast tapping has diminishing returns instead of teleporting a timer.",
 	"auto_tap": "Automatic clickers feed the same rolling signal and rapid-tap diminishing curve as manual taps. Genetic ranks raise each clicker's cadence and tolerance; Eldritch ranks add more clickers.",
 	"payload": "Payload multiplies XP from completed strikeouts.",
-	"mastery": "Every called Strike builds mastery against that batter. All mastery logarithmically improves your quality in that matchup; the unlock bar stops at 100%, but the advantage does not.",
-	"determination": "Bad results build Determination by severity: huge hits add the most, Singles add little, and Balls or Fouls add almost nothing. Every doubling adds Quality; a completed strikeout resets it.",
+	"mastery": "Every called Strike adds 0.70× base mastery. A completed strikeout adds an extra 0.80× base mastery; all mastery logarithmically improves that matchup. The unlock bar stops at 100%, but the advantage does not.",
+	"determination": "Bad results build Determination by severity: Grand Slam +12,000, Home Run +8,000, Triple +5,000, Double +3,000, Single +1,000, Ball +200, Foul +100. Every 6,000-point doubling adds +140 Quality before multipliers; a completed strikeout resets it.",
 	"drag": "Air drag slows a released ball continuously on its trip to the plate. Lower drag preserves more of its release speed.",
 	"xp": "Strikeout XP multiplies the payout awarded only when the required strike count is completed.",
 	"loot": "Loot chance is the chance that an eligible strikeout copies one player-wearable item from the batter's visible loadout, keeping its slot and rarity. The pity rule still ends long dry streaks.",
@@ -900,7 +900,23 @@ const ACHIEVEMENTS := [
 	{"id": "extra_innings_10", "tier": "divine", "name": "Bottom of the Nineteenth Dimension", "metric": "endless", "threshold": 10.0, "description": "Reach Extra Inning 10."},
 	{"id": "extra_innings_100", "tier": "divine", "name": "Please Let the Umpire Go Home", "metric": "endless", "threshold": 100.0, "secret": true, "description": "Reach Extra Inning 100."},
 	{"id": "no_hitter", "tier": "divine", "name": "No Hitter", "metric": "no_hitter", "threshold": 1.0, "secret": true, "description": "Defeat the entire campaign through Octathulhu without allowing a single fair hit."},
+	{"id": "original_timmy_hat", "tier": "divine", "name": "The Hat Stays On", "metric": "original_timmy_hat", "threshold": 1.0, "secret": true, "description": "Conquer level 100 while still wearing this reality’s original Little Timmy cap."},
 ]
+
+# Catch-up may resolve authoritative campaign state, but never player-action
+# achievements. Keeping the classification beside the catalog makes that audit
+# enforceable without marking story or prestige achievements as live-only.
+const LIVE_ACTION_ACHIEVEMENT_METRICS := ["live_pitches", "live_strikeouts", "live_saved_hits", "live_outcome", "live_volley_size"]
+const LIVE_INPUT_ACHIEVEMENT_METRICS := ["field_taps"] # incremented only by a successful manual field tap
+const LIVE_ACTION_ACHIEVEMENT_EVENTS := ["bat_overload", "double_strike_volley", "triple_strike_volley", "thousand_strike_volley", "hit_and_strike_volley", "grand_slam_and_strike", "triple_single_volley", "mixed_hit_combo", "saved_hit_and_strike", "eight_saved_hits_volley", "rainbow_volley", "all_outcome_volley", "multi_ball_strikeout", "simultaneous_walk_strikeout", "post_rebirth_toddler_strikeout", "multi_arm_toddler_strikeout", "eight_arm_toddler_strikeout", "posthuman_human_champion_strikeout", "fourfold_overwhelmed", "octathulhu_overwhelmed"]
+
+static func achievement_progress_classification(definition: Dictionary) -> String:
+	var metric := str(definition.get("metric", ""))
+	if metric in LIVE_ACTION_ACHIEVEMENT_METRICS or metric in LIVE_INPUT_ACHIEVEMENT_METRICS:
+		return "live_action"
+	if metric == "event" and str(definition.get("key", "")) in LIVE_ACTION_ACHIEVEMENT_EVENTS:
+		return "live_action"
+	return "authoritative"
 
 # Ordinary aging is an optional XP track. Stages are intentionally granular so
 # the body displayed beside youth, school, college, and professional opponents
@@ -1056,7 +1072,7 @@ const BODY_MODIFIERS := [
 	{"id": "sports_nutrition", "name": "Professional Sports Nutrition", "cost": 9000000.0, "required_level": 18, "adjective": "Well-Fed", "effects": {"payload": 1.06, "xp": 1.025, "mastery": 1.025}, "stats": ["payload", "xp", "mastery"], "description": "Payload ×1.06; strikeout XP ×1.025; mastery ×1.025."},
 	{"id": "advanced_strength", "name": "Advanced Strength Program", "cost": 900000000.0, "required_level": 23, "adjective": "Very Buff", "effects": {"speed": 1.065, "payload": 1.045, "visual_size": 1.018}, "stats": ["speed", "payload"], "description": "Speed ×1.065; Payload ×1.045."},
 	{"id": "altitude_cardio", "name": "Altitude Cardio Camp", "cost": 900000000.0, "required_level": 23, "adjective": "Very Toned", "effects": {"recovery": 1.035, "hit_delay": 0.95, "lineup": 0.97}, "stats": ["recovery", "hit_delay", "lineup"], "description": "Recovery ×1.035; hit delay ×0.95; lineup time ×0.97."},
-	{"id": "steroids", "name": "Extremely Obvious Steroids", "cost": 90000000000.0, "required_level": 27, "required_speed_fps": 132.0, "adjective": "Roided-Out", "effects": {"speed": 1.10, "recovery": 1.025, "visual_size": 1.028}, "stats": ["speed", "recovery"], "description": "Speed ×1.10; Recovery ×1.025."},
+	{"id": "steroids", "name": "Extremely Obvious Steroids", "cost": 90000000000.0, "required_level": 27, "required_speed_fps": 132.0, "adjective": "Roided-Out", "effects": {"speed": 1.45, "payload": 1.15, "recovery": 0.82, "visual_size": 1.08}, "stats": ["speed", "payload", "recovery"], "description": "Speed ×1.45; Payload ×1.15; Recovery ×0.82 (windup ×1.22)."},
 	{"id": "professional_rehab", "name": "Professional Rehab Staff", "cost": 90000000000.0, "required_level": 27, "adjective": "Rebuilt", "effects": {"quality_add": 0.04, "drag": 0.94, "mastery": 1.04}, "stats": ["quality", "drag", "mastery"], "description": "Quality +40; air drag ×0.94; mastery ×1.04."},
 ]
 
@@ -2629,6 +2645,22 @@ const GENETIC_UPGRADES := [
 		"description": "Speed ×1.80.",
 	},
 	{
+		"id": "xenobiotic_overclock",
+		"name": "Xenobiotic Overclock Gland",
+		"base_cost": 4.0,
+		"growth": 1.0,
+		"max_level": 1,
+		"description": "Speed ×4; Recovery ×2; Ball payload ×5. No side effects recognized by human medicine.",
+	},
+	{
+		"id": "scoreboard_calculus",
+		"name": "Scoreboard Calculus Cortex",
+		"base_cost": 1.0,
+		"growth": 1.0,
+		"max_level": 1,
+		"description": "Reveal the accurate XP/second estimator. Visibility only; XP income is unchanged.",
+	},
+	{
 		"id": "compound_pitching_eye",
 		"name": "Compound Pitching Eye",
 		"base_cost": 2.0,
@@ -2812,6 +2844,14 @@ const ELDRITCH_UPGRADES := [
 		"growth": 4.0,
 		"max_level": 6,
 		"description": "Speed ×12.",
+	},
+	{
+		"id": "recursive_muscle",
+		"name": "Recursive Muscle Geometry",
+		"base_cost": 6.0,
+		"growth": 1.0,
+		"max_level": 1,
+		"description": "Speed ×50; Ball payload ×100; Recovery ×0.15 (windup ×6.67); pitcher mass becomes visibly recursive.",
 	},
 	{
 		"id": "eyes_behind_moon",

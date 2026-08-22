@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "channel": "stable",
-  "version": "0.19.0",
-  "release_page": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/tag/v0.19.0",
+  "version": "0.20.0",
+  "release_page": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/tag/v0.20.0",
   "downloads": {
-    "macos": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.19.0/No.Hitter.v0.19.0.macOS.Universal.dmg",
-    "windows_x86_64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.19.0/No.Hitter.v0.19.0.Windows.x86_64.zip",
-    "windows_arm64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.19.0/No.Hitter.v0.19.0.Windows.ARM64.zip",
-    "linux_x86_64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.19.0/No.Hitter.v0.19.0.Linux.x86_64.tar.gz",
-    "linux_arm64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.19.0/No.Hitter.v0.19.0.Linux.ARM64.tar.gz"
+    "macos": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.20.0/No.Hitter.v0.20.0.macOS.Universal.dmg",
+    "windows_x86_64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.20.0/No.Hitter.v0.20.0.Windows.x86_64.zip",
+    "windows_arm64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.20.0/No.Hitter.v0.20.0.Windows.ARM64.zip",
+    "linux_x86_64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.20.0/No.Hitter.v0.20.0.Linux.x86_64.tar.gz",
+    "linux_arm64": "https://github.com/dcr-cmyk648/One-Foot-Per-Second/releases/download/v0.20.0/No.Hitter.v0.20.0.Linux.ARM64.tar.gz"
   }
 }

@@ -275,7 +275,7 @@ func _run() -> void:
 	main._update_upgrade_row_hold(MainScript.UPGRADE_ROW_HOLD_SECONDS + 0.01)
 	await process_frame
 	_expect(main.mobile_inspection_dialog.visible, "Holding passive phone upgrade text should open its full explanation")
-	_expect(main.mobile_inspection_dialog.dialog_text.contains("raw 0.75 ft/s"), "The phone upgrade explanation should show the unabridged effect")
+	_expect(main.mobile_inspection_body_label.text.contains("raw 0.75 ft/s"), "The phone upgrade explanation should show the unabridged effect")
 	main.mobile_inspection_dialog.hide()
 	_expect(main.mobile_tab_navigation.visible, "The phone upgrade overlay should show tab navigation")
 	_expect(
@@ -357,7 +357,7 @@ func _run() -> void:
 	_expect(Vector2(portrait_entrance.offset).x > 0.0 and Vector2(portrait_entrance.offset).y > 0.0, "A portrait replacement should enter from the opposite lower-right side")
 	main.pitch_field.batter_phase = "active"
 	_expect(main.mobile_tab_previous_button.disabled, "The first upgrade tab should disable Back")
-	_expect(main.catalog_hide_purchased_toggles.size() == 3, "Phone upgrade catalogs should retain the run-scoped Hide Purchased controls")
+	_expect(main.catalog_hide_purchased_toggles.size() == 2 and not main.catalog_hide_purchased_toggles.has("body"), "Phone BODY removes the invisible Hide Purchased state while Ball and Facility retain controls")
 	for catalog_toggle in main.catalog_hide_purchased_toggles.values():
 		_expect((catalog_toggle as CheckButton).get_combined_minimum_size().y >= 44.0, "Phone Hide Purchased controls should remain touch-sized")
 	_expect(main.body_section_buttons.run.visible, "Phone BODY should expose its drafted RUN subtab")
@@ -391,20 +391,17 @@ func _run() -> void:
 	main._show_mobile_inspection_for_control(main.outcome_panels[0])
 	await process_frame
 	_expect(main.mobile_inspection_dialog.visible, "Tapping a result card should open mobile details")
-	_expect(main.mobile_inspection_dialog.dialog_text.to_upper().contains("GRAND SLAM"), "Result-card details should reuse the desktop tooltip")
-	_expect(main.mobile_inspection_dialog.dialog_text.contains("cannot be saved"), "Phone Grand Slam details should state that no save mechanic applies")
-	_expect(
-		main.mobile_inspection_dialog.get_ok_button().get_combined_minimum_size().y >= 44.0,
-		"Mobile inspection should always have a touch-sized Close action, not %s"
-		% str(main.mobile_inspection_dialog.get_ok_button().get_combined_minimum_size())
-	)
+	_expect(main.mobile_inspection_body_label.text.to_upper().contains("GRAND SLAM"), "Result-card details should reuse the desktop tooltip")
+	_expect(main.mobile_inspection_body_label.text.contains("cannot be saved"), "Phone Grand Slam details should state that no save mechanic applies")
+	var mobile_close := main.mobile_inspection_dialog.find_child("MobileInspectionCloseButton", true, false) as Button
+	_expect(mobile_close != null and mobile_close.get_combined_minimum_size().y >= 44.0, "Mobile inspection should always have a touch-sized Close action")
 	main.mobile_inspection_dialog.hide()
 	if main.opponent_loadout_dock.get_child_count() > 0:
 		var opponent_item := main.opponent_loadout_dock.get_child(0) as Control
 		main._show_mobile_inspection_for_control(opponent_item)
 		await process_frame
 		_expect(main.mobile_inspection_dialog.visible, "Tapping enemy equipment should open mobile details")
-		_expect(main.mobile_inspection_dialog.dialog_text.contains("Batter threat"), "Enemy equipment details should include its threat modifier")
+		_expect(main.mobile_inspection_body_label.text.contains("Batter threat"), "Enemy equipment details should include its threat modifier")
 		main.mobile_inspection_dialog.hide()
 	_expect(main.power_comparison_panel.size.x <= 64.0, "The label-only phone Power gauge should remain narrow beside enemy equipment")
 	_expect(main.power_comparison_panel.size.y > main.power_comparison_panel.size.x * 2.0, "The phone Power gauge should be vertical")
@@ -412,7 +409,7 @@ func _run() -> void:
 	main._show_mobile_inspection_for_control(main.power_comparison_panel)
 	await process_frame
 	_expect(main.mobile_inspection_dialog.visible, "Tapping Power should expose the same detailed odds available on desktop")
-	_expect(main.mobile_inspection_dialog.dialog_text.contains("called-Strike matchup"), "Phone Power details should explain the probability calibration")
+	_expect(main.mobile_inspection_body_label.text.contains("called-Strike matchup"), "Phone Power details should explain the probability calibration")
 	main.mobile_inspection_dialog.hide()
 
 	main.game.opponent_mastery[0] = float(main.game.opponents[0].mastery_required) * 124.0
@@ -425,6 +422,23 @@ func _run() -> void:
 	await process_frame
 	_expect(main.mobile_inspection_dialog.visible, "Phone mastery should expose its full desktop explanation on tap")
 	main.mobile_inspection_dialog.hide()
+	main._open_mobile_inspection("LONG DETAILS", "This deliberately oversized explanation must scroll without moving the Close control. ".repeat(40))
+	await process_frame
+	var long_close := main.mobile_inspection_dialog.find_child("MobileInspectionCloseButton", true, false) as Button
+	_expect(main.mobile_inspection_body_scroll.has_meta("bounded_detail_body") and main.mobile_inspection_body_label.get_combined_minimum_size().y > main.mobile_inspection_body_scroll.size.y, "At 390×844 long mobile details use a genuinely scrollable bounded body")
+	_expect(long_close != null and not main.mobile_inspection_body_scroll.is_ancestor_of(long_close) and long_close.get_global_rect().end.y <= root.size.y + 1.0, "At 390×844 long mobile details keep Close fixed and in frame")
+	main.mobile_inspection_dialog.hide()
+	root.size = Vector2i(360, 700)
+	main._set_mobile_layout(true, true)
+	await process_frame
+	main._open_mobile_inspection("LONG DETAILS", "This deliberately oversized explanation must scroll without moving the Close control. ".repeat(40))
+	await process_frame
+	_expect(main.mobile_inspection_dialog.position.y >= 0 and main.mobile_inspection_dialog.position.y + main.mobile_inspection_dialog.size.y <= 700 and long_close.get_global_rect().end.y <= 700, "At 360×700 long mobile details keep title and Close in frame")
+	_expect(main.mobile_inspection_body_label.get_combined_minimum_size().y > main.mobile_inspection_body_scroll.size.y, "At 360×700 the oversized mobile detail body still scrolls")
+	main.mobile_inspection_dialog.hide()
+	root.size = Vector2i(390, 844)
+	main._set_mobile_layout(true, true)
+	await process_frame
 
 	main.game._add_loot_item({
 		"id": "phone_equipped_hat", "slot": "hat", "item_level": 1, "rarity": 0,

@@ -14,7 +14,7 @@ const SAVE_PATH := "user://one_foot_per_second_save.json"
 const SAVE_BACKUP_PATH := "user://one_foot_per_second_save.backup.json"
 const SAVE_TEMP_PATH := "user://one_foot_per_second_save.pending.json"
 const SAVE_CORRUPT_PATH := "user://one_foot_per_second_save.unreadable.json"
-const SAVE_VERSION := 31
+const SAVE_VERSION := 33
 const MAX_IMPORTED_SAVE_CHARACTERS := 16 * 1024 * 1024
 const SIMULATION_STEP := 0.10
 const OFFLINE_AGGREGATE_CYCLE_THRESHOLD := 8.0
@@ -157,13 +157,15 @@ const MASTERY_REQUIREMENT_FACTOR_PER_RANK := 0.85
 # The logarithm deliberately has no hard ceiling: doubling an already enormous
 # mastery total always helps, but by the same modest +quality step.
 const MASTERY_MATCHUP_QUALITY_PER_DOUBLING := 0.12
-const MASTERY_OUTCOME_WEIGHTS := [0.0, 0.0, 0.08, 0.12, 0.18, 0.05, 0.025, 1.0]
-const STRIKEOUT_MASTERY_BONUS_COUNTS := 0.50
+const MASTERY_OUTCOME_WEIGHTS := [0.0, 0.0, 0.05, 0.08, 0.12, 0.025, 0.0125, 0.70]
+const STRIKEOUT_MASTERY_BONUS_COUNTS := 0.80
 # Bad results supply a second, temporary adaptation bonus. Every independently
-# resolved ball contributes its own result severity. Four Determination points
-# grant the first +0.092 quality step; every later step takes twice as many.
-const DETERMINATION_REFERENCE_POINTS := 4.0
-const DETERMINATION_QUALITY_PER_DOUBLING := 0.092
+# resolved ball contributes its own result severity. Six Determination points
+# grant the first +0.140 quality step; every later step takes twice as many.
+const DETERMINATION_REFERENCE_POINTS := 6.0
+const DETERMINATION_QUALITY_PER_DOUBLING := 0.140
+const V31_DETERMINATION_REFERENCE_POINTS := 4.0
+const V31_DETERMINATION_QUALITY_PER_DOUBLING := 0.092
 # Source-level aliases keep old diagnostic scripts importable; schema 27 never
 # writes these names and the player-facing system is Determination.
 const FRUSTRATION_REFERENCE_POINTS := DETERMINATION_REFERENCE_POINTS
@@ -173,7 +175,7 @@ const MASTERY_TRAINING_PER_RANK := 0.015
 const DRAG_TRAINING_FACTOR_PER_RANK := 0.985
 const XP_TRAINING_PER_RANK := 0.01
 const DETERMINATION_TRAINING_PER_RANK := 0.01
-const DETERMINATION_OUTCOME_POINTS := [9.6, 6.4, 4.0, 2.4, 0.8, 0.08, 0.16, 0.0]
+const DETERMINATION_OUTCOME_POINTS := [12.0, 8.0, 5.0, 3.0, 1.0, 0.10, 0.20, 0.0]
 const FRUSTRATION_TRAINING_PER_RANK := DETERMINATION_TRAINING_PER_RANK
 const PREMIUM_HUMAN_MILESTONE_IDS := [
 	"neighborhood_pitching_tutor",
@@ -381,9 +383,11 @@ var catalog_hide_purchased := {
 	"pitch": true,
 	"ball": true,
 	"facility": true,
-	"body": true,
 }
 var achievement_hide_achieved := false
+# v33 tracks this by item ID, not the cap's display name. Pre-v33 saves cannot
+# prove continuity and become eligible when a later reality begins.
+var original_timmy_hat_attempt := {"eligible": true, "awaiting_hat": true, "hat_id": "", "armed": false, "valid": true, "conquered": false}
 var milestone_effect_cache_count := -1
 var milestone_effect_cache := {}
 var opponent_mastery: Array[float] = []
@@ -1554,6 +1558,16 @@ func _sample_opponent_rarity(local_rng: RandomNumberGenerator, opponent_index: i
 		maximum = 14
 	return clampi(int(round(local_rng.randfn(center, deviation))), 0, maximum)
 
+func get_equipment_affix_tier_multiplier(opponent_index: int) -> float:
+	# This is stored on each generated item. Do not derive it while loading: a
+	# v0.19 wardrobe has no post-human affix metadata and must remain neutral.
+	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
+	if bounded >= Content.ELDRITCH_EXHIBITION_INDEX:
+		return 12.0
+	if bounded >= Content.ALIEN_EXHIBITION_INDEX:
+		return 3.0
+	return 1.0
+
 func _generate_opponent_variant(opponent_index: int, generation: int) -> Dictionary:
 	var bounded := clampi(opponent_index, 0, opponents.size() - 1)
 	var local_rng := RandomNumberGenerator.new()
@@ -1574,7 +1588,9 @@ func _generate_opponent_variant(opponent_index: int, generation: int) -> Diction
 		"difficulty_bonus": body_roll,
 	}]
 	var bat_rarity := _sample_opponent_rarity(local_rng, bounded)
+	var affix_tier := get_equipment_affix_tier_multiplier(bounded)
 	var bat_bonus := lerpf(0.025, 0.105, float(bounded) / float(maxi(opponents.size() - 1, 1)))
+	bat_bonus *= affix_tier
 	bat_bonus *= float(Content.loot_rarity(bat_rarity).strength) * local_rng.randf_range(0.82, 1.18)
 	entries.append({
 		"id": "bat",
@@ -1596,7 +1612,7 @@ func _generate_opponent_variant(opponent_index: int, generation: int) -> Diction
 		var base_names: Array = definition.base_names
 		var gear_name := str(base_names[era_index])
 		var gear_bonus := lerpf(0.010, 0.048, float(bounded) / float(maxi(opponents.size() - 1, 1)))
-		gear_bonus *= float(rarity.strength) * local_rng.randf_range(0.78, 1.16)
+		gear_bonus *= affix_tier * float(rarity.strength) * local_rng.randf_range(0.78, 1.16)
 		entries.append({
 			"id": str(definition.id),
 			"letter": str(definition.letter),
@@ -1609,7 +1625,7 @@ func _generate_opponent_variant(opponent_index: int, generation: int) -> Diction
 		var relic_definition: Dictionary = Content.LOOT_SLOTS.back()
 		var relic_rarity := _sample_opponent_rarity(local_rng, bounded)
 		var relic_bonus := lerpf(0.045, 0.16, float(bounded - Content.ALIEN_EXHIBITION_INDEX) / float(maxi(Content.FINAL_BOSS_INDEX - Content.ALIEN_EXHIBITION_INDEX, 1)))
-		relic_bonus *= float(Content.loot_rarity(relic_rarity).strength) * local_rng.randf_range(0.85, 1.15)
+		relic_bonus *= affix_tier * float(Content.loot_rarity(relic_rarity).strength) * local_rng.randf_range(0.85, 1.15)
 		entries.append({
 			"id": "relic",
 			"letter": str(relic_definition.letter),
@@ -1628,6 +1644,7 @@ func _generate_opponent_variant(opponent_index: int, generation: int) -> Diction
 		"class_name": str(opponents[bounded].name),
 		"body_scale": float(Content.campaign_level(bounded).get("body_scale", 1.0)) * local_rng.randf_range(0.96, 1.04),
 		"difficulty_bonus": total_bonus,
+		"affix_tier": affix_tier,
 		"loadout": entries,
 	}
 
@@ -1696,6 +1713,8 @@ func _reset_genetic_levels() -> void:
 	genetic_levels = {
 		"ancestral_memory": 0,
 		"fast_twitch_everything": 0,
+		"xenobiotic_overclock": 0,
+		"scoreboard_calculus": 0,
 		"compound_pitching_eye": 0,
 		"extra_arms": 0,
 		"parallel_pitching_lobes": 0,
@@ -1722,6 +1741,7 @@ func _reset_eldritch_levels() -> void:
 		"non_euclidean_bullpen": 0,
 		"unbound_windup": 0,
 		"velocity_without_distance": 0,
+		"recursive_muscle": 0,
 		"eyes_behind_moon": 0,
 		"causal_seams": 0,
 		"portal_outfield": 0,
@@ -2056,8 +2076,8 @@ func reset_fresh() -> void:
 		"pitch": true,
 		"ball": true,
 		"facility": true,
-		"body": true,
 	}
+	_start_original_timmy_hat_attempt()
 	achievement_hide_achieved = false
 	_invalidate_milestone_effect_cache()
 	result_totals = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -3691,7 +3711,8 @@ func _resolve_strikeout_loot(
 		return
 	loot_roll_cooldown_remaining = LOOT_ROLL_INTERVAL_SECONDS
 
-	var first_career_drop := lifetime_loot_found < 1.0
+	var awaiting_original_hat := bool(original_timmy_hat_attempt.get("eligible", false)) and bool(original_timmy_hat_attempt.get("awaiting_hat", false))
+	var first_career_drop := lifetime_loot_found < 1.0 or awaiting_original_hat
 	var successes := _roll_loot_success_count(opportunities, first_career_drop)
 	if successes <= 0:
 		return
@@ -3702,8 +3723,13 @@ func _resolve_strikeout_loot(
 	var reward_opponent := clampi(opponent_index, 0, opponents.size() - 1)
 	if first_career_drop:
 		var first_item := _generate_loot_item(reward_opponent, 0, 0)
-		first_item.name = "Little Timmy's Oversized Cap"
+		if awaiting_original_hat:
+			first_item.name = "Little Timmy's Oversized Cap"
 		var first_item_was_kept := _store_generated_loot(first_item, summary)
+		if awaiting_original_hat:
+			original_timmy_hat_attempt.awaiting_hat = false
+			original_timmy_hat_attempt.hat_id = str(first_item.get("id", "")) if first_item_was_kept else ""
+			original_timmy_hat_attempt.valid = first_item_was_kept
 		if reward_opponent == 0 and first_item_was_kept:
 			record_story("little_timmy_hat")
 		successes -= 1
@@ -3854,6 +3880,7 @@ func _generate_loot_item(opponent_index: int, forced_slot := -1, forced_rarity :
 	var rarity: Dictionary = Content.LOOT_RARITIES[rarity_index]
 	var item_level := clampi(opponent_index + 1, 1, opponents.size())
 	var level_progress := float(item_level - 1) / float(maxi(opponents.size() - 1, 1))
+	var affix_tier := get_equipment_affix_tier_multiplier(opponent_index)
 	var is_relic := str(slot.id) == "relic"
 	var selected_stats: Array[String] = []
 	var available_stats: Array[String] = []
@@ -3896,7 +3923,8 @@ func _generate_loot_item(opponent_index: int, forced_slot := -1, forced_rarity :
 			float(rarity.strength),
 			roll_quality,
 			primary,
-			is_relic
+			is_relic,
+			affix_tier
 		)
 		if stat_id == negative_stat_id:
 			value *= -1.35
@@ -3928,6 +3956,7 @@ func _generate_loot_item(opponent_index: int, forced_slot := -1, forced_rarity :
 		"favorite": false,
 		"source_name": str(drop_source.get("name", "")),
 		"tradeoff": not negative_stat_id.is_empty(),
+		"affix_tier": affix_tier,
 	}
 	item.name = _make_loot_name(item, slot, rarity, selected_stats)
 	return item
@@ -3938,7 +3967,8 @@ func _loot_stat_value(
 	rarity_strength: float,
 	roll_quality: float,
 	primary: bool,
-	is_relic := false
+	is_relic := false,
+	affix_tier := 1.0
 ) -> float:
 	var value := 0.0
 	if is_relic:
@@ -3954,7 +3984,7 @@ func _loot_stat_value(
 		value = lerpf(0.018, 0.070, level_progress) if primary else lerpf(0.008, 0.035, level_progress)
 	else:
 		value = lerpf(0.010, 0.042, level_progress) if primary else lerpf(0.006, 0.026, level_progress)
-	return value * rarity_strength * roll_quality
+	return value * rarity_strength * roll_quality * maxf(affix_tier, 1.0)
 
 func _make_loot_name(item: Dictionary, slot: Dictionary, rarity: Dictionary, selected_stats: Array[String]) -> String:
 	var era_index := clampi(int((int(item.item_level) - 1) / 5), 0, Content.ERA_NAMES.size() - 1)
@@ -4161,6 +4191,7 @@ func auto_equip_highest_power(emit_message := true) -> int:
 			equipped_relics = next_relics
 			equipped_loot.relic = equipped_relics[0] if not equipped_relics.is_empty() else ""
 	if changed > 0:
+		_update_original_timmy_hat_attempt()
 		loot_revision += 1
 		if emit_message:
 			progression_changed.emit("AUTONOMIC WARDROBE: equipped %d highest-Power item%s." % [
@@ -4203,6 +4234,7 @@ func equip_loot(item_id: String, relic_slot_index := -1) -> bool:
 			equipped_relics[existing_index] = ""
 			equipped_loot.relic = equipped_relics[0] if not equipped_relics.is_empty() else ""
 			loot_revision += 1
+			_update_original_timmy_hat_attempt()
 			progression_changed.emit("UNEQUIPPED RELIC: %s." % str(item.name))
 			return true
 		if equipped_relics.is_empty():
@@ -4215,17 +4247,22 @@ func equip_loot(item_id: String, relic_slot_index := -1) -> bool:
 		equipped_relics[target_index] = item_id
 		equipped_loot.relic = equipped_relics[0]
 		loot_revision += 1
+		_update_original_timmy_hat_attempt()
 		progression_changed.emit("EQUIPPED RELIC %d: %s." % [target_index + 1, str(item.name)])
 		check_achievements()
 		return true
 	if str(equipped_loot.get(slot, "")) == item_id:
 		equipped_loot[slot] = ""
 		loot_revision += 1
+		_update_original_timmy_hat_attempt()
 		progression_changed.emit("UNEQUIPPED: %s." % str(item.name))
 		check_achievements()
 		return true
 	equipped_loot[slot] = item_id
 	loot_revision += 1
+	if slot == "hat" and str(original_timmy_hat_attempt.get("hat_id", "")) == item_id:
+		original_timmy_hat_attempt.armed = true
+	_update_original_timmy_hat_attempt()
 	progression_changed.emit("EQUIPPED: %s." % str(item.name))
 	check_achievements()
 	return true
@@ -4261,6 +4298,7 @@ func trash_loot_item(item_id: String) -> Dictionary:
 			else:
 				equipped_loot[slot] = ""
 		loot_items.remove_at(index)
+		_update_original_timmy_hat_attempt()
 		scrap = minf(MAX_NUMBER, scrap + scrap_gained)
 		loot_revision += 1
 		if has_genetic_upgrade("autonomic_wardrobe"):
@@ -4325,9 +4363,11 @@ func get_raw_equipment_bonuses() -> Dictionary:
 		return equipment_bonus_cache.duplicate(true)
 	var result := {}
 	var relic_result := {}
+	var ordinary_cap_tiers := {}
 	for definition in Content.LOOT_STATS:
 		result[str(definition.id)] = 0.0
 		relic_result[str(definition.id)] = 0.0
+		ordinary_cap_tiers[str(definition.id)] = 1.0
 	for slot in equipped_loot:
 		if str(slot) == "relic":
 			continue
@@ -4339,16 +4379,22 @@ func get_raw_equipment_bonuses() -> Dictionary:
 		var stats: Dictionary = item.get("stats", {})
 		for stat_id in result:
 			result[stat_id] = float(result[stat_id]) + float(stats.get(stat_id, 0.0))
+			if stats.has(stat_id):
+				ordinary_cap_tiers[stat_id] = maxf(
+					float(ordinary_cap_tiers[stat_id]),
+					clampf(float(item.get("affix_tier", 1.0)), 1.0, 12.0)
+				)
 	for item in get_equipped_relic_items():
 		var stats: Dictionary = item.get("stats", {})
 		for stat_id in relic_result:
 			relic_result[stat_id] = float(relic_result[stat_id]) + float(stats.get(stat_id, 0.0))
 	var effectiveness := get_equipment_effectiveness_multiplier()
 	for stat_id in result:
-		var cap := float(EQUIPMENT_CAPS.get(stat_id, 0.25))
+		var cap_tier := float(ordinary_cap_tiers.get(stat_id, 1.0))
+		var cap := float(EQUIPMENT_CAPS.get(stat_id, 0.25)) * cap_tier
 		var ordinary := clampf(
 			float(result[stat_id]) * effectiveness,
-			-maxf(cap * 0.75, 0.05),
+			-maxf(float(EQUIPMENT_CAPS.get(stat_id, 0.25)) * 0.75, 0.05) * cap_tier,
 			cap
 		)
 		# A Relic's lone stat is intentionally uncapped by clothing limits. Keep
@@ -5555,7 +5601,9 @@ func get_body_velocity_fps() -> float:
 	velocity *= get_milestone_effect_multiplier("speed")
 	velocity *= get_run_stat_multiplier("speed")
 	velocity *= pow(1.80, int(genetic_levels.fast_twitch_everything))
+	velocity *= pow(4.0, int(genetic_levels.xenobiotic_overclock))
 	velocity *= pow(12.0, int(eldritch_levels.velocity_without_distance))
+	velocity *= pow(50.0, int(eldritch_levels.recursive_muscle))
 	var body_limit := get_velocity_cap_fps()
 	return _asymptotic_upper_limit(
 		velocity,
@@ -5644,7 +5692,10 @@ func get_pitcher_size_multiplier() -> float:
 		+ log(maxf(get_time_multiplier(), 1.0)) / log(2.0)
 	) * 2.0
 	var strength := quality_strength + rate_strength + speed_strength + payload_strength + anatomy_strength
-	return growth_floor + (2.0 - growth_floor) * (1.0 - exp(-strength / 70.0))
+	var result := growth_floor + (2.0 - growth_floor) * (1.0 - exp(-strength / 70.0))
+	# Recursive muscle must have a visible cost as well as its deliberately
+	# absurd throughput: it makes the pitcher visibly less human-shaped.
+	return minf(result * pow(1.35, int(eldritch_levels.recursive_muscle)), 3.0)
 
 func get_recovery_rate() -> float:
 	var recovery_rank := maxi(int(training_levels.recovery), 0)
@@ -5672,6 +5723,8 @@ func get_recovery_rate() -> float:
 		TIME_COMPRESSION_RECOVERY_PER_RANK,
 		maxi(int(eldritch_levels.time_compression), 0)
 	)
+	rate *= pow(2.0, int(genetic_levels.xenobiotic_overclock))
+	rate *= pow(0.15, int(eldritch_levels.recursive_muscle))
 	rate *= 1.0 + float(get_equipment_bonuses().rate_bonus)
 	return minf(rate, MAX_PHYSICAL_PITCH_RATE)
 
@@ -5742,7 +5795,9 @@ func get_pitch_potency() -> float:
 	potency *= maxf(1.0 + float(get_equipment_bonuses().payload_bonus), 0.05)
 	potency *= 1.0 + float(maxi(int(training_levels.get("payload_training", 0)), 0)) * PAYLOAD_TRAINING_PER_RANK
 	potency *= pow(2.50, int(genetic_levels.ball_gland))
+	potency *= pow(5.0, int(genetic_levels.xenobiotic_overclock))
 	potency *= pow(10.0, int(eldritch_levels.causal_seams))
+	potency *= pow(100.0, int(eldritch_levels.recursive_muscle))
 	if has_divine_blessing("loaves_and_baseballs"):
 		potency *= 25.0
 	return minf(potency, MAX_NUMBER)
@@ -5979,6 +6034,8 @@ func _achievement_metric_value(definition: Dictionary) -> float:
 			)
 		"no_hitter":
 			return 1.0 if cosmos_conquered and no_hitter_attempt_valid else 0.0
+		"original_timmy_hat":
+			return 1.0 if bool(original_timmy_hat_attempt.get("conquered", false)) else 0.0
 		"divine_ascensions":
 			return float(divine_ascensions)
 		"divine_blessings":
@@ -6010,7 +6067,7 @@ func get_achievement_progress(definition: Dictionary) -> Dictionary:
 			progress_text = "Rank %d / %d" % [int(current), int(threshold)]
 		"run_perks", "pitch_drafts", "human_story_chapters", "body_adjectives", "pitch_specialization":
 			progress_text = "%d / %d" % [int(current), int(threshold)]
-		"genetic_offer", "eldritch_offer", "relic_owned", "illegal_pitch", "cosmos", "human_champion_toddler", "no_hitter", "event", "human_final_strikeout_certainty":
+		"genetic_offer", "eldritch_offer", "relic_owned", "illegal_pitch", "cosmos", "human_champion_toddler", "no_hitter", "original_timmy_hat", "event", "human_final_strikeout_certainty":
 			progress_text = "COMPLETE" if ratio >= 1.0 else "LOCKED"
 	return {
 		"current": current,
@@ -6374,6 +6431,8 @@ func set_current_opponent(index: int) -> bool:
 	if index > current_opponent and has_pending_run_choices():
 		progression_changed.emit("Resolve the queued run choices before entering the next level.")
 		return false
+	if current_opponent == 0 and index > 0:
+		_leave_level_one_original_hat_grace()
 	current_opponent = index
 	_sync_distance_to_current_opponent()
 	consecutive_home_runs = 0
@@ -6401,6 +6460,7 @@ func get_mastery_per_called_strike(index: int = current_opponent) -> float:
 	return (
 		get_strikeout_base_points(bounded)
 		/ float(maxi(get_strikes_required(bounded), 1))
+		* float(MASTERY_OUTCOME_WEIGHTS[Content.STRIKE_INDEX])
 		* get_mastery_multiplier()
 	)
 
@@ -6410,6 +6470,13 @@ func get_strikeout_mastery_bonus(index: int = current_opponent) -> float:
 		get_strikeout_base_points(bounded)
 		* STRIKEOUT_MASTERY_BONUS_COUNTS
 		* get_mastery_multiplier()
+	)
+
+func get_completed_strikeout_mastery(index: int = current_opponent) -> float:
+	var bounded := clampi(index, 0, opponents.size() - 1)
+	return (
+		get_mastery_per_called_strike(bounded) * float(get_strikes_required(bounded))
+		+ get_strikeout_mastery_bonus(bounded)
 	)
 
 func is_opponent_ready_for_strikeout(index: int = current_opponent) -> bool:
@@ -6424,10 +6491,7 @@ func _update_sticky_boss_state(index: int = current_opponent) -> bool:
 		or bounded in sticky_boss_levels
 	):
 		return false
-	var next_strikeout_reaches := (
-		opponent_mastery[bounded] + get_strikeout_mastery_bonus(bounded)
-		>= get_mastery_requirement(bounded)
-	)
+	var next_strikeout_reaches := opponent_mastery[bounded] + get_completed_strikeout_mastery(bounded) >= get_mastery_requirement(bounded)
 	if not next_strikeout_reaches:
 		return false
 	sticky_boss_levels.append(bounded)
@@ -6529,14 +6593,14 @@ func _check_opponent_unlock(completing_strikeouts: float = 0.0, witnessed: bool 
 	_record_campaign_clear_story(cleared_index)
 	if highest_unlocked >= opponents.size() - 1:
 		cosmos_conquered = true
+		if witnessed and bool(original_timmy_hat_attempt.get("eligible", false)) and bool(original_timmy_hat_attempt.get("valid", false)) and bool(original_timmy_hat_attempt.get("armed", false)):
+			_update_original_timmy_hat_attempt()
+			if bool(original_timmy_hat_attempt.get("valid", false)):
+				original_timmy_hat_attempt.conquered = true
 		record_story("god_offer")
 		if divine_ascensions > 0 and not endless_unlocked:
 			endless_unlocked = true
-			record_story(
-				"endless_unlocked",
-				"Octathulhu is out again. God quietly admits that the official scorebook ends here, then points toward an infinite on-deck circle full of increasingly unreasonable opponents. You may enter Extra Innings—or reset the universe again whenever you prefer.",
-				"EXTRA INNINGS",
-			)
+			record_story("endless_unlocked")
 		var victory_message := "COSMOS CONQUERED: Octathulhu has run out of causality."
 		if endless_unlocked:
 			victory_message += " Extra Innings are now available."
@@ -7054,6 +7118,9 @@ func buy_scale(id: String) -> bool:
 func has_genetic_upgrade(id: String) -> bool:
 	return int(genetic_levels.get(id, 0)) > 0
 
+func has_xp_estimator() -> bool:
+	return has_genetic_upgrade("scoreboard_calculus")
+
 func has_eldritch_upgrade(id: String) -> bool:
 	return int(eldritch_levels.get(id, 0)) > 0
 
@@ -7293,7 +7360,24 @@ func _prepare_genetic_time_travel_loot() -> Array[String]:
 	loot_roll_cooldown_remaining = 0.0
 	last_time_travel_retained_slots = retained_slots.duplicate()
 	loot_revision += 1
+	_update_original_timmy_hat_attempt()
 	return retained_slots
+
+func _start_original_timmy_hat_attempt() -> void:
+	original_timmy_hat_attempt = {"eligible": true, "awaiting_hat": true, "hat_id": "", "armed": false, "valid": true, "conquered": false}
+
+func _update_original_timmy_hat_attempt() -> void:
+	if not bool(original_timmy_hat_attempt.get("eligible", false)) or not bool(original_timmy_hat_attempt.get("armed", false)):
+		return
+	var hat_id := str(original_timmy_hat_attempt.get("hat_id", ""))
+	if hat_id.is_empty() or get_loot_item(hat_id).is_empty() or str(equipped_loot.get("hat", "")) != hat_id:
+		original_timmy_hat_attempt.valid = false
+
+func _leave_level_one_original_hat_grace() -> void:
+	if bool(original_timmy_hat_attempt.get("eligible", false)) and bool(original_timmy_hat_attempt.get("valid", false)):
+		if bool(original_timmy_hat_attempt.get("awaiting_hat", false)) or not bool(original_timmy_hat_attempt.get("armed", false)):
+			original_timmy_hat_attempt.valid = false
+			original_timmy_hat_attempt.awaiting_hat = false
 
 func _reset_body_progress() -> void:
 	xp = 0.0
@@ -7403,7 +7487,9 @@ func perform_eldritch_ascension() -> int:
 	eldritch_exhibition_grand_slams = ELDRITCH_EXHIBITION_GRAND_SLAMS_REQUIRED
 	auto_farm_enabled = false
 	_clear_all_loot_for_reset()
+	_update_original_timmy_hat_attempt()
 	_reset_body_progress()
+	_start_original_timmy_hat_attempt()
 	if lifetime_eldritch_ascensions == 1:
 		record_story("first_eldritch_rebirth")
 		record_story("earth_defense")
@@ -7451,6 +7537,7 @@ func perform_divine_ascension(id: String) -> bool:
 	auto_farm_enabled = false
 	_clear_all_loot_for_reset()
 	_reset_body_progress()
+	_start_original_timmy_hat_attempt()
 	no_hitter_attempt_valid = true
 	var reward_name := "Another Halo" if id == "halo" else str(Content.divine_by_id(id).name)
 	progression_changed.emit(
@@ -7559,7 +7646,7 @@ func decode_save_text(text: String) -> Dictionary:
 		}
 	var dictionary_fields := [
 		"training_levels", "genetic_levels", "eldritch_levels", "equipped_loot",
-		"catalog_hide_purchased", "achievement_event_totals", "live_action_achievement_totals",
+		"catalog_hide_purchased", "achievement_event_totals", "live_action_achievement_totals", "original_timmy_hat_attempt",
 	]
 	for field in dictionary_fields:
 		if data.has(field) and typeof(data[field]) != TYPE_DICTIONARY:
@@ -7726,6 +7813,7 @@ func to_save_data() -> Dictionary:
 		"purchased_body_modifiers": purchased_body_modifiers,
 		"human_league_completed_as_toddler": human_league_completed_as_toddler,
 		"no_hitter_attempt_valid": no_hitter_attempt_valid,
+		"original_timmy_hat_attempt": original_timmy_hat_attempt,
 		"run_seed": run_seed,
 		"run_choice_serial": run_choice_serial,
 		"selected_run_perks": selected_run_perks,
@@ -7795,9 +7883,15 @@ func apply_save_data(data: Dictionary) -> void:
 		# doubling 15% stronger. Convert an in-progress old meter so loading does
 		# not secretly change its already-earned quality bonus.
 		if saved_version < 31:
-			var legacy_intervals := determination_points / DETERMINATION_REFERENCE_POINTS
-			var converted_intervals := pow(1.0 + legacy_intervals, 0.08 / DETERMINATION_QUALITY_PER_DOUBLING) - 1.0
-			determination_points = minf(MAX_NUMBER, converted_intervals * DETERMINATION_REFERENCE_POINTS)
+			var legacy_intervals := determination_points / V31_DETERMINATION_REFERENCE_POINTS
+			var converted_intervals := pow(1.0 + legacy_intervals, 0.08 / V31_DETERMINATION_QUALITY_PER_DOUBLING) - 1.0
+			determination_points = minf(MAX_NUMBER, converted_intervals * V31_DETERMINATION_REFERENCE_POINTS)
+		if saved_version < 32:
+			# Preserve the exact in-progress v31 bonus while upgrading its slower,
+			# stronger v32 curve. New bad-result values apply only after loading.
+			var v31_intervals := determination_points / V31_DETERMINATION_REFERENCE_POINTS
+			var v32_intervals := pow(1.0 + v31_intervals, V31_DETERMINATION_QUALITY_PER_DOUBLING / DETERMINATION_QUALITY_PER_DOUBLING) - 1.0
+			determination_points = minf(MAX_NUMBER, v32_intervals * DETERMINATION_REFERENCE_POINTS)
 	else:
 		var legacy_seconds := clampf(float(data.get("seconds_since_strikeout", 0.0)), 0.0, MAX_NUMBER)
 		determination_points = minf(
@@ -7947,6 +8041,15 @@ func apply_save_data(data: Dictionary) -> void:
 		# Existing explicit preferences remain authoritative. Missing filter fields
 		# adopt the current fresh-run default rather than silently exposing owned rows.
 		catalog_hide_purchased[catalog_id] = bool(saved_catalog_filters.get(catalog_id, true))
+	if saved_version >= 33:
+		var saved_hat_attempt: Dictionary = data.get("original_timmy_hat_attempt", {})
+		original_timmy_hat_attempt = {
+			"eligible": bool(saved_hat_attempt.get("eligible", false)), "awaiting_hat": bool(saved_hat_attempt.get("awaiting_hat", false)),
+			"hat_id": str(saved_hat_attempt.get("hat_id", "")), "armed": bool(saved_hat_attempt.get("armed", false)),
+			"valid": bool(saved_hat_attempt.get("valid", false)), "conquered": bool(saved_hat_attempt.get("conquered", false)),
+		}
+	else:
+		original_timmy_hat_attempt = {"eligible": false, "awaiting_hat": false, "hat_id": "", "armed": false, "valid": false, "conquered": false}
 	achievement_hide_achieved = bool(data.get("achievement_hide_achieved", false))
 
 	var saved_training: Dictionary = data.get("training_levels", {})
@@ -8006,6 +8109,11 @@ func apply_save_data(data: Dictionary) -> void:
 		if definition.has("max_level"):
 			genetic_saved_rank = mini(genetic_saved_rank, int(definition.max_level))
 		genetic_levels[id] = genetic_saved_rank
+	# The estimator was previously unconditional. Any legacy career that has
+	# discovered genetic rebirth keeps that convenience; undiscovered and fresh
+	# careers must buy the visibility-only one-DNA upgrade.
+	if saved_version < 32 and genetic_offer_unlocked:
+		genetic_levels.scoreboard_calculus = 1
 	_reset_eldritch_levels()
 	var saved_eldritch: Dictionary = data.get("eldritch_levels", {})
 	for id in eldritch_levels.keys():
@@ -8326,6 +8434,7 @@ func apply_save_data(data: Dictionary) -> void:
 			highest_unlocked == opponents.size() - 1
 			and opponent_mastery.back() >= get_mastery_requirement(opponents.size() - 1)
 		)
+	_update_original_timmy_hat_attempt()
 	# Older saves receive everything their persisted history proves, but loading
 	# never floods the player with a backlog of toast notifications.
 	check_achievements(false)
@@ -8341,6 +8450,9 @@ func _sanitize_loot_item(value: Variant) -> Dictionary:
 		return {}
 	var rarity := clampi(int(raw.get("rarity", 0)), 0, Content.LOOT_RARITIES.size() - 1)
 	var item_level := clampi(int(raw.get("item_level", 1)), 1, opponents.size())
+	# Missing metadata means an item predates tiered affixes. Preserve it at the
+	# original human bounds instead of upgrading a released save by implication.
+	var affix_tier := clampf(float(raw.get("affix_tier", 1.0)), 1.0, 12.0)
 	var stats := {}
 	var raw_stats: Dictionary = raw.get("stats", {})
 	var is_relic := slot == "relic"
@@ -8351,7 +8463,7 @@ func _sanitize_loot_item(value: Variant) -> Dictionary:
 		var maximum := (
 			20.0
 			if is_relic
-			else (0.20 if stat_id == "quality_bonus" else 0.15)
+			else (0.20 if stat_id == "quality_bonus" else 0.15) * affix_tier
 		)
 		var minimum := 0.0 if is_relic else -maximum
 		stats[stat_id] = clampf(float(raw_stats[stat_id]), minimum, maximum)
@@ -8373,6 +8485,7 @@ func _sanitize_loot_item(value: Variant) -> Dictionary:
 		"favorite": bool(raw.get("favorite", false)),
 		"source_name": str(raw.get("source_name", "")).substr(0, 120),
 		"tradeoff": bool(raw.get("tradeoff", false)),
+		"affix_tier": affix_tier,
 	}
 
 func delete_save() -> bool:

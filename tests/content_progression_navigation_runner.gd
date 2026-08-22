@@ -61,7 +61,7 @@ func _test_ball_profiles() -> void:
 	game.purchased_ball_upgrades.append("taped_seams")
 	_expect(game.get_current_ball_name() == "World-Series Game Ball" and game.get_current_ball_profile() == Content.BALL_PROFILES.world_series_ball, "The highest catalog shell replaces historical ownership without stacking")
 	_expect(game.get_ball_upgrade_delta_text("real_leather") == "Quality + 0 → +80", "A readable shell delta reports whole-number Quality only")
-	_expect(game.get_ball_profile_text("real_leather") == "Payload ×1.45 • Release Speed ×1.04 • Quality +80 • Air Drag ×1.00", "The full profile reports every current axis without stale payload-only copy")
+	_expect(game.get_ball_profile_text("real_leather") == "Payload ×1.45; Release Speed ×1.04; Quality +80; Air Drag ×1.00", "The full profile reports every current axis without stale payload-only copy")
 	game.free()
 
 func _test_immutable_release_snapshot() -> void:
@@ -80,12 +80,12 @@ func _test_immutable_release_snapshot() -> void:
 	game._begin_pitch_volley(second_summary, 0.1)
 	var second: Dictionary = game.active_volleys[1]
 	_expect(not is_equal_approx(float(second.drag_per_foot), float(first.drag_per_foot)), "The next release computes air drag from the later shell")
-	_expect(is_equal_approx(float(second.drag_per_foot), game.get_ball_drag_per_foot(game.current_opponent)), "The next release stores the current shell drag")
+	_expect(is_equal_approx(float(second.drag_per_foot), game.get_ball_drag_per_foot(game.current_opponent, str(second.pitch_id))), "The next release stores current shell and pitch drag")
 	game.free()
 
 func _test_body_adjective_copy() -> void:
 	var game = _fresh_game()
-	var expected := {"athletic": "Speed ×1.025; Quality +8.", "buff": "Speed ×1.045; Payload ×1.025.", "toned": "Recovery ×1.025; Hit delay ×0.975.", "creatine-loaded": "Speed ×1.045; Payload ×1.04.", "suspiciously vitaminized": "Speed ×1.07; Recovery ×1.025.", "roided-out": "Speed ×1.10; Recovery ×1.025."}
+	var expected := {"athletic": "Speed ×1.025; Quality +8.", "buff": "Speed ×1.045; Payload ×1.025.", "toned": "Recovery ×1.025; Hit delay ×0.975.", "creatine-loaded": "Speed ×1.045; Payload ×1.04.", "suspiciously vitaminized": "Speed ×1.07; Recovery ×1.025.", "roided-out": "Speed ×1.45; Payload ×1.15; Recovery ×0.82 (windup ×1.22)."}
 	var modifier_ids := {"athletic": "playground_conditioning", "buff": "pushup_phase", "toned": "running_laps", "creatine-loaded": "creatine", "suspiciously vitaminized": "suspicious_vitamins", "roided-out": "steroids"}
 	for adjective in expected:
 		var copy := game.get_run_body_adjective_effect_text(adjective)
@@ -128,6 +128,10 @@ func _test_live_action_achievements_and_save() -> void:
 	_resolve_outcome(offline, Content.STRIKE_INDEX, 3, false)
 	_expect(offline.lifetime_pitches == 3.0 and offline.lifetime_strikeouts == 1.0 and offline.result_totals[Content.STRIKE_INDEX] == 3.0 and offline.opponent_mastery[0] > 0.0, "Offline resolution still advances XP/mastery/career lifetime and result totals")
 	_expect(offline.live_action_achievement_totals.is_empty() and offline.achievement_event_totals == offline_events and "first_pitch" not in offline.unlocked_achievements, "Offline resolution never changes live action counters/events or unlocks action achievements")
+	for definition_value in Content.ACHIEVEMENTS:
+		var definition: Dictionary = definition_value
+		if Content.achievement_progress_classification(definition) == "live_action":
+			_expect(not offline.has_achievement(str(definition.id)), "Offline aggregate play must not unlock live action achievement: %s" % str(definition.id))
 	var offline_save := offline.to_save_data()
 	offline.free()
 	var live = _fresh_game()
@@ -167,6 +171,77 @@ func _test_achievement_semantics() -> void:
 		var signature := "%s|%s|%s" % [definition.metric, str(definition.get("key", "")), str(definition.threshold)]
 		_expect(not signatures.has(signature), "No duplicate achievement predicate signature: %s" % signature)
 		signatures[signature] = id
+		var classification := Content.achievement_progress_classification(definition)
+		_expect(classification in ["live_action", "authoritative"], "Every catalog achievement has a progress-source classification: %s" % id)
+		if classification == "live_action":
+			_expect(str(definition.metric).begins_with("live_") or str(definition.metric) in ["field_taps", "event"], "Live action achievements use explicit live totals, manual-input gates, or live-gated events: %s" % id)
+
+func _armed_original_timmy_hat_game():
+	var game = _fresh_game()
+	var summary := {"loot_found": 0, "loot_kept": 0, "loot_drops": [], "loot_discarded": 0, "loot_scrap_gained": 0.0}
+	game._resolve_strikeout_loot(1.0, 0.0, summary, 0)
+	var hat_id := str(game.original_timmy_hat_attempt.hat_id)
+	_expect(not hat_id.is_empty() and game.equip_loot(hat_id), "The forced first Little Timmy cap arms the identity challenge when equipped")
+	return game
+
+func _make_genetic_rebirth_ready(game) -> void:
+	game.genetic_offer_unlocked = true
+	game.highest_unlocked = Content.ALIEN_EXHIBITION_INDEX
+	game.run_xp = GameState.DNA_XP_THRESHOLD
+
+func _test_original_timmy_hat_challenge() -> void:
+	var skipped = _fresh_game()
+	skipped.highest_unlocked = 1
+	_expect(skipped.set_current_opponent(1) and not bool(skipped.original_timmy_hat_attempt.valid), "Leaving level 1 before acquiring and equipping the exact original cap invalidates the attempt")
+	skipped.free()
+
+	var game = _armed_original_timmy_hat_game()
+	_expect(bool(game.original_timmy_hat_attempt.armed) and bool(game.original_timmy_hat_attempt.valid), "Armed Little Timmy attempt starts valid")
+	var restored = GameState.new()
+	restored.apply_save_data(game.to_save_data())
+	_expect(restored.original_timmy_hat_attempt == game.original_timmy_hat_attempt, "Original-hat attempt state round-trips exactly")
+	var replacement := {"id": "replacement_hat", "slot": "hat", "item_level": 1, "rarity": 0, "name": "Replacement Cap", "stats": {"quality_bonus": 0.01}, "roll_quality": 1.0, "color": "ffffff"}
+	restored._add_loot_item(replacement)
+	_expect(restored.equip_loot("replacement_hat") and not bool(restored.original_timmy_hat_attempt.valid), "Replacing the exact cap permanently invalidates the attempt")
+	var unequipped = _armed_original_timmy_hat_game()
+	var unequipped_id := str(unequipped.original_timmy_hat_attempt.hat_id)
+	_expect(unequipped.equip_loot(unequipped_id) and not bool(unequipped.original_timmy_hat_attempt.valid), "Unequipping the exact cap permanently invalidates the attempt")
+	var trashed = _armed_original_timmy_hat_game()
+	trashed.trash_loot_item(str(trashed.original_timmy_hat_attempt.hat_id))
+	_expect(not bool(trashed.original_timmy_hat_attempt.valid), "Scrapping the tracked cap permanently invalidates the attempt")
+
+	var no_retention = _armed_original_timmy_hat_game()
+	_make_genetic_rebirth_ready(no_retention)
+	_expect(no_retention.perform_genetic_rebirth() > 0 and not bool(no_retention.original_timmy_hat_attempt.valid), "Genetic rebirth without wardrobe retention invalidates the attempt")
+	var retained = _armed_original_timmy_hat_game()
+	var retained_id := str(retained.original_timmy_hat_attempt.hat_id)
+	retained.eldritch_levels.reverse_terminator = 1
+	_make_genetic_rebirth_ready(retained)
+	_expect(retained.perform_genetic_rebirth() > 0 and str(retained.equipped_loot.hat) == retained_id and not retained.get_loot_item(retained_id).is_empty() and bool(retained.original_timmy_hat_attempt.valid), "Reverse Terminator retains the exact equipped original cap and its valid attempt")
+
+	var eldritch = _armed_original_timmy_hat_game()
+	eldritch.eldritch_offer_unlocked = true
+	eldritch.highest_unlocked = Content.ELDRITCH_EXHIBITION_INDEX
+	eldritch.reality_dna_earned = 1.0
+	_expect(eldritch.perform_eldritch_ascension() > 0 and bool(eldritch.original_timmy_hat_attempt.eligible) and bool(eldritch.original_timmy_hat_attempt.awaiting_hat), "Eldritch ascension destroys the old gear then starts a new eligible reality attempt")
+
+	var legacy = GameState.new()
+	var legacy_save := game.to_save_data()
+	legacy_save.version = 32
+	legacy.apply_save_data(legacy_save)
+	_expect(not bool(legacy.original_timmy_hat_attempt.eligible), "Pre-v33 saves remain ineligible until divine restoration")
+	game.highest_unlocked = Content.FINAL_BOSS_INDEX
+	game.current_opponent = Content.FINAL_BOSS_INDEX
+	game.opponent_mastery[Content.FINAL_BOSS_INDEX] = game.get_mastery_requirement(Content.FINAL_BOSS_INDEX)
+	game._check_opponent_unlock(1.0, false)
+	_expect(not bool(game.original_timmy_hat_attempt.conquered), "Offline aggregate resolution cannot certify the original-hat final conquest")
+	game._check_opponent_unlock(1.0, true)
+	_expect(bool(game.original_timmy_hat_attempt.conquered) and game.has_achievement("original_timmy_hat"), "A witnessed level-100 conquest grants the armed original-hat challenge")
+	game.cosmos_conquered = true
+	_expect(game.perform_divine_ascension(str(Content.DIVINE_BLESSINGS[0].id)), "Divine restoration starts a new Little Timmy attempt")
+	_expect(bool(game.original_timmy_hat_attempt.eligible) and bool(game.original_timmy_hat_attempt.awaiting_hat), "Divine restoration awaits that reality's forced original cap")
+	for fixture in [game, restored, unequipped, trashed, no_retention, retained, eldritch, legacy]:
+		fixture.free()
 
 func _initialize() -> void:
 	_test_ball_profiles()
@@ -175,6 +250,7 @@ func _initialize() -> void:
 	_test_mastery_semantics()
 	_test_live_action_achievements_and_save()
 	_test_achievement_semantics()
+	_test_original_timmy_hat_challenge()
 	if failures == 0:
 		print("PASS: M1 content/progression/navigation contract")
 		quit(0)

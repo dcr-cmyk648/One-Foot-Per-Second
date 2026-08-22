@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20.0 — The steroids were worth the blood price
+
+- Completed the direct story-edit workflow for 37 durable beats and aligned the release arc with the causal chain: obsessive human rise, alien conquest by baseball law, and eldritch causality break.
+- Made post-human steroids and equipment fully tier-distinct (human / alien / eldritch) and added the 1/3/12 post-human gear structure.
+- Retuned Mastery and Determination for sharper late-campaign reward pacing while preserving the strikeout-first progression contract.
+- Moved XP-per-second visibility behind the first genetic prestige upgrade and added explicit schema-33 save migration for its unlock state.
+- Applied the bounded mobile detail contract to long-press inspections, removed Body’s purchased-items hide toggle, and enforced online-only action achievement counting.
+- Added the exact Little Timmy original-cap challenge with continuity-safe migration and save compatibility.
+- Advanced release metadata to v0.20.0 and save schema 33 across project/version, native export manifests, browser update metadata, and release manifests.
+
 ## 0.19.0 — The perk cards learned to level up
 
 - Determination now fills 20% more slowly while each logarithmic quality step is 15% stronger, preserving smooth decay and slower early ramps while improving endgame payoff.

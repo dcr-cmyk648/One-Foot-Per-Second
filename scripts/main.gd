@@ -1,6 +1,7 @@
 extends Control
 
 const Content = preload("res://scripts/content.gd")
+const RunContent = preload("res://scripts/run_content.gd")
 const GameStateScript = preload("res://scripts/game_state.gd")
 const PitchFieldScript = preload("res://scripts/pitch_field.gd")
 const TitleArtScript = preload("res://scripts/title_art.gd")
@@ -196,7 +197,9 @@ var load_save_dialog: FileDialog
 var import_save_confirmation: ConfirmationDialog
 var save_transfer_message_dialog: AcceptDialog
 var mobile_install_dialog: AcceptDialog
-var mobile_inspection_dialog: AcceptDialog
+var mobile_inspection_dialog: Window
+var mobile_inspection_body_scroll: ScrollContainer
+var mobile_inspection_body_label: Label
 var pitch_arsenal_dialog: Window
 var pitch_arsenal_entries: VBoxContainer
 var pitch_arsenal_close_button: Button
@@ -889,15 +892,7 @@ func _show_mobile_inspection_for_control(control: Control) -> void:
 	var details := control.tooltip_text.strip_edges()
 	if details.is_empty():
 		return
-	mobile_inspection_dialog.title = str(
-		control.get_meta("mobile_inspection_title", "DETAILS")
-	).to_upper()
-	mobile_inspection_dialog.dialog_text = details
-	mobile_inspection_dialog.popup_centered_clamped(Vector2i(360, 245), 0.94)
-	mobile_inspection_dialog.get_ok_button().set_deferred(
-		"custom_minimum_size",
-		Vector2(100.0, 44.0)
-	)
+	_open_mobile_inspection(str(control.get_meta("mobile_inspection_title", "DETAILS")), details)
 
 func _update_browser_release_status(delta: float) -> void:
 	web_update_status_elapsed += delta
@@ -4495,7 +4490,6 @@ func _build_rebirth_tab(tabs: TabContainer) -> void:
 	ascension_currency_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ascension_currency_label.add_theme_color_override("font_color", COLOR_TEXT)
 	content.add_child(ascension_currency_label)
-	_build_catalog_hide_toggle(content, "body")
 
 	body_section_navigation = HBoxContainer.new()
 	body_section_navigation.name = "BodySectionTabs"
@@ -4733,22 +4727,17 @@ func _show_achievement_details(id: String) -> void:
 	if definition.is_empty():
 		return
 	var revealed := game.is_achievement_information_revealed(definition)
-	mobile_inspection_dialog.title = (
-		str(definition.name).to_upper() if revealed else "HIDDEN ACHIEVEMENT"
-	)
+	var title := str(definition.name).to_upper() if revealed else "HIDDEN ACHIEVEMENT"
+	var details := ""
 	if not revealed:
-		mobile_inspection_dialog.dialog_text = "No details are available yet."
+		details = "No details are available yet."
 	else:
 		var progress := game.get_achievement_progress(definition)
-		mobile_inspection_dialog.dialog_text = "%s\n\n%s  •  PERMANENT XP +0.5%%" % [
+		details = "%s\n\n%s  •  PERMANENT XP +0.5%%" % [
 			str(definition.description),
 			"COMPLETE" if game.has_achievement(id) else str(progress.text),
 		]
-	mobile_inspection_dialog.popup_centered_clamped(Vector2i(360, 245), 0.94)
-	mobile_inspection_dialog.get_ok_button().set_deferred(
-		"custom_minimum_size",
-		Vector2(100.0, 44.0)
-	)
+	_open_mobile_inspection(title, details)
 
 func _achievement_card_style(state: String) -> StyleBoxFlat:
 	var style := _compact_panel_style(10.0, 7.0, 6)
@@ -5471,15 +5460,10 @@ func _build_native_update_confirmation() -> void:
 func _build_alien_help_dialog() -> void:
 	alien_arrival_dialog = AcceptDialog.new()
 	alien_arrival_dialog.name = "AlienArrivalDialog"
-	alien_arrival_dialog.title = "SO YOU THINK YOU'RE HOT STUFF"
+	alien_arrival_dialog.title = str(RunContent.story_by_id("alien_arrival_popup").get("title", "SO YOU THINK YOU'RE HOT STUFF"))
 	alien_arrival_dialog.dialog_autowrap = true
 	alien_arrival_dialog.min_size = Vector2i(320, 270)
-	alien_arrival_dialog.dialog_text = (
-		"The stadium folds inside out. You, the mound, and several confused hot-dog vendors "
-		+ "are teleported beneath a sky full of cheering aliens.\n\n"
-		+ "Their commissioner, Xylophax, steps to the plate. The Power display appears to be "
-		+ "laughing at you."
-	)
+	alien_arrival_dialog.dialog_text = str(RunContent.story_by_id("alien_arrival_popup").get("body", ""))
 	alien_arrival_dialog.get_ok_button().text = "PITCH ANYWAY"
 	alien_arrival_dialog.get_ok_button().custom_minimum_size.y = 44.0
 	alien_arrival_dialog.confirmed.connect(_begin_alien_contact)
@@ -5487,14 +5471,10 @@ func _build_alien_help_dialog() -> void:
 
 	eldritch_arrival_dialog = AcceptDialog.new()
 	eldritch_arrival_dialog.name = "EldritchArrivalDialog"
-	eldritch_arrival_dialog.title = "SOMETHING WANTS TO PLAY"
+	eldritch_arrival_dialog.title = str(RunContent.story_by_id("eldritch_arrival_popup").get("title", "SOMETHING WANTS TO PLAY"))
 	eldritch_arrival_dialog.dialog_autowrap = true
 	eldritch_arrival_dialog.min_size = Vector2i(320, 285)
-	eldritch_arrival_dialog.dialog_text = (
-		"The alien crowd stops making noise. Eight bats unfold beyond the scoreboard, "
-		+ "each held by something too large for the current reality.\n\n"
-		+ "Octathulhu has mistaken the universe for a baseball. It would like to bat."
-	)
+	eldritch_arrival_dialog.dialog_text = str(RunContent.story_by_id("eldritch_arrival_popup").get("body", ""))
 	eldritch_arrival_dialog.get_ok_button().text = "PITCH ANYWAY"
 	eldritch_arrival_dialog.get_ok_button().custom_minimum_size.y = 44.0
 	eldritch_arrival_dialog.confirmed.connect(_begin_eldritch_contact)
@@ -5502,16 +5482,10 @@ func _build_alien_help_dialog() -> void:
 
 	alien_help_dialog = AcceptDialog.new()
 	alien_help_dialog.name = "AlienHelpDialog"
-	alien_help_dialog.title = "A MAN STEPS OUT OF A PORTAL"
+	alien_help_dialog.title = str(RunContent.story_by_id("alien_help_popup").get("title", "A MAN STEPS OUT OF A PORTAL"))
 	alien_help_dialog.dialog_autowrap = true
 	alien_help_dialog.min_size = Vector2i(320, 260)
-	alien_help_dialog.dialog_text = (
-		"He watches Xylophax turn another perfect pitch into an unavoidable Grand Slam. "
-		+ "Then he lowers his sunglasses.\n\n"
-		+ "‘Come with me if you want to… be really good at baseball.’\n\n"
-		+ "He has a Time Machine and an alarming prenatal genetics waiver. Getting into the "
-		+ "portal will restart this life immediately."
-	)
+	alien_help_dialog.dialog_text = str(RunContent.story_by_id("alien_help_popup").get("body", ""))
 	alien_help_dialog.get_ok_button().text = "GET IN THE PORTAL"
 	alien_help_dialog.get_ok_button().custom_minimum_size.y = 44.0
 	alien_help_dialog.confirmed.connect(_complete_first_genetic_rebirth)
@@ -5519,7 +5493,7 @@ func _build_alien_help_dialog() -> void:
 
 	genetic_rebirth_explanation_dialog = AcceptDialog.new()
 	genetic_rebirth_explanation_dialog.name = "GeneticRebirthExplanationDialog"
-	genetic_rebirth_explanation_dialog.title = "WELCOME BACK, TINY"
+	genetic_rebirth_explanation_dialog.title = str(RunContent.story_by_id("genetic_rebirth_explanation_popup").get("title", "WELCOME BACK, TINY"))
 	genetic_rebirth_explanation_dialog.dialog_autowrap = true
 	genetic_rebirth_explanation_dialog.min_size = Vector2i(320, 285)
 	genetic_rebirth_explanation_dialog.get_ok_button().text = "OPEN BODY"
@@ -5546,14 +5520,53 @@ func _build_mobile_install_dialog() -> void:
 	_configure_mobile_install_dialog("ios")
 
 func _build_mobile_inspection_dialog() -> void:
-	mobile_inspection_dialog = AcceptDialog.new()
+	mobile_inspection_dialog = Window.new()
 	mobile_inspection_dialog.name = "MobileInspectionDialog"
 	mobile_inspection_dialog.title = "DETAILS"
-	mobile_inspection_dialog.dialog_autowrap = true
-	mobile_inspection_dialog.min_size = Vector2i(330, 190)
-	mobile_inspection_dialog.get_ok_button().text = "CLOSE"
-	mobile_inspection_dialog.get_ok_button().add_theme_font_size_override("font_size", 22)
+	mobile_inspection_dialog.borderless = true
+	mobile_inspection_dialog.unresizable = true
+	mobile_inspection_dialog.transient = true
+	mobile_inspection_dialog.min_size = Vector2i(300, 220)
+	mobile_inspection_dialog.close_requested.connect(func() -> void: mobile_inspection_dialog.hide())
 	add_child(mobile_inspection_dialog)
+	mobile_inspection_dialog.hide()
+	var surface := PanelContainer.new()
+	surface.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	surface.add_theme_stylebox_override("panel", _compact_panel_style(14.0, 12.0))
+	mobile_inspection_dialog.add_child(surface)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 9)
+	surface.add_child(stack)
+	var heading_row := HBoxContainer.new()
+	stack.add_child(heading_row)
+	var heading := Label.new()
+	heading.name = "MobileInspectionHeading"
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_theme_font_size_override("font_size", 17)
+	heading.add_theme_color_override("font_color", COLOR_ACCENT)
+	heading_row.add_child(heading)
+	var close := Button.new()
+	close.name = "MobileInspectionCloseButton"
+	close.text = "CLOSE  X"
+	close.custom_minimum_size = Vector2(110.0, 48.0)
+	close.pressed.connect(func() -> void: mobile_inspection_dialog.hide())
+	heading_row.add_child(close)
+	var detail_body := _bounded_detail_scroll(stack, "MobileInspectionScroll", 14)
+	mobile_inspection_body_scroll = detail_body.scroll
+	mobile_inspection_body_label = Label.new()
+	mobile_inspection_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mobile_inspection_body_label.add_theme_font_size_override("font_size", 14)
+	mobile_inspection_body_label.add_theme_color_override("font_color", COLOR_TEXT)
+	(detail_body.gutter as MarginContainer).add_child(mobile_inspection_body_label)
+
+func _open_mobile_inspection(title: String, details: String) -> void:
+	if mobile_inspection_dialog == null or mobile_inspection_body_label == null:
+		return
+	(mobile_inspection_dialog.find_child("MobileInspectionHeading", true, false) as Label).text = title.to_upper()
+	mobile_inspection_body_label.text = details
+	var viewport := get_viewport_rect().size
+	var popup_size := Vector2i(mini(int(viewport.x * 0.94), 360), mini(int(viewport.y * 0.88), 620))
+	mobile_inspection_dialog.popup_centered_clamped(popup_size, 0.94)
 
 func _build_pitch_arsenal_dialog() -> void:
 	pitch_arsenal_dialog = Window.new()
@@ -5589,16 +5602,12 @@ func _build_pitch_arsenal_dialog() -> void:
 	pitch_arsenal_close_button.focus_mode = Control.FOCUS_NONE
 	pitch_arsenal_close_button.pressed.connect(_close_pitch_arsenal)
 	heading.add_child(pitch_arsenal_close_button)
-	var scroll := ScrollContainer.new()
-	scroll.name = "PitchArsenalScroll"
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stack.add_child(scroll)
+	var detail_body := _bounded_detail_scroll(stack, "PitchArsenalScroll", 14)
 	pitch_arsenal_entries = VBoxContainer.new()
 	pitch_arsenal_entries.name = "PitchArsenalEntries"
 	pitch_arsenal_entries.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pitch_arsenal_entries.add_theme_constant_override("separation", 7)
-	scroll.add_child(pitch_arsenal_entries)
+	(detail_body.gutter as MarginContainer).add_child(pitch_arsenal_entries)
 
 func _build_save_transfer_dialogs() -> void:
 	export_save_dialog = FileDialog.new()
@@ -5836,6 +5845,7 @@ func _refresh_reveal_visibility() -> void:
 		stat_rows[id].visible = eldritch_revealed
 	for id in ["divine_ascensions", "divine_blessings", "completion"]:
 		stat_rows[id].visible = divine_revealed
+	stat_rows.income.visible = game.has_xp_estimator()
 	stat_rows.speed_limit.visible = game.is_velocity_body_capped()
 	_refresh_guide_text(genetic_revealed, eldritch_revealed, divine_revealed)
 
@@ -6058,7 +6068,10 @@ func _refresh_interface(refresh_expensive := true) -> void:
 	xp_label.text = BaseballGameState.format_xp_total(game.xp)
 	if mobile_overlay_xp_label != null:
 		mobile_overlay_xp_label.text = "XP %s" % BaseballGameState.format_xp_total(game.xp)
-	rate_label.text = BaseballGameState.format_number(estimated_xp_per_second)
+	var estimator_visible := game.has_xp_estimator()
+	rate_label.get_parent().visible = estimator_visible
+	if estimator_visible:
+		rate_label.text = BaseballGameState.format_number(estimated_xp_per_second)
 	if development_session:
 		save_button.disabled = true
 		export_save_button.disabled = true
@@ -6138,7 +6151,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 	var mastery_quality_bonus := game.get_opponent_mastery_quality_bonus()
 	var overmastery_summary := game.get_overmastery_summary()
 	mastery_label.tooltip_text = (
-		"Every called Strike builds mastery against this batter. Current mastery adds %s Quality to this matchup. "
+		"Every called Strike adds 0.70× base mastery against this batter. A completed strikeout adds an extra 0.80× base mastery. Current mastery adds %s Quality to this matchup. "
 		+ "The advantage is uncapped and logarithmic; reaching 100%% unlocks progression, while excess mastery also improves XP and loot."
 	) % BaseballGameState.format_rating(mastery_quality_bonus, true)
 	if game.is_alien_exhibition_blocked():
@@ -6196,7 +6209,7 @@ func _refresh_interface(refresh_expensive := true) -> void:
 			BaseballGameState.format_rating(mastery_quality_bonus, true),
 		]
 		mastery_label.tooltip_text = (
-			"Every called Strike builds mastery and immediately improves the called-Strike rate against this batter. Reach 100% to unlock the next batter; every point beyond it still helps logarithmically."
+			"Every called Strike adds 0.70× base mastery and immediately improves the called-Strike rate against this batter. A completed strikeout adds an extra 0.80× base mastery. Reach 100% to unlock the next batter; every point beyond it still helps logarithmically."
 		)
 	if not game.is_story_exhibition_blocked() and not game.is_speed_gate_blocked():
 		mastery_bar.value = game.get_mastery_ratio_unclamped() * 100.0
@@ -7514,13 +7527,10 @@ func _complete_first_genetic_rebirth() -> void:
 		)
 	else:
 		pitch_field.reset_visual_state()
-		genetic_rebirth_explanation_dialog.title = "WELCOME BACK, TINY"
-		genetic_rebirth_explanation_dialog.dialog_text = (
-			"You wake up as a toddler again. Baseball chronology is apparently optional.\n\n"
-			+ "You gained %d DNA. Spend it in BODY → DNA on permanent genetic upgrades before growing "
-			+ "through the human leagues again. All prestige upgrades are retained on later "
-			+ "genetic rebirths."
-		) % award
+		genetic_rebirth_explanation_dialog.title = str(RunContent.story_by_id("genetic_rebirth_explanation_popup").get("title", "WELCOME BACK, TINY"))
+		genetic_rebirth_explanation_dialog.dialog_text = str(
+			RunContent.story_by_id("genetic_rebirth_explanation_popup").get("body", "")
+		).replace("{{DNA_AWARD}}", str(award))
 	if not development_session and not game.save_writes_locked:
 		game.save_game()
 	_refresh_interface()
@@ -7637,6 +7647,8 @@ func _toggle_automation(enabled: bool, id: String) -> void:
 	_refresh_interface()
 
 func _toggle_catalog_hide_purchased(hidden: bool, catalog_id: String) -> void:
+	if catalog_id == "body":
+		return
 	if game.set_catalog_hide_purchased(catalog_id, hidden):
 		_refresh_purchase_buttons()
 		if catalog_id == "body":

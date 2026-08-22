@@ -2,7 +2,7 @@
 
 A top-down baseball idle roguelike about beginning three feet from a toddler with a one-foot-per-second wiffle-ball apology and discovering how unreasonable baseball can become.
 
-This repository contains the shared Godot 4.7.1 source and tested v0.19.0 exports for browser/PWA, macOS, Windows, Linux, GitHub Pages, and Codex Sites. Every platform uses the same campaign, simulation, save schema, and progression. Browser-only rendering limits reduce visual clutter without changing results.
+This repository contains the shared Godot 4.7.1 source and tested v0.20.0 exports for browser/PWA, macOS, Windows, Linux, GitHub Pages, and Codex Sites. Every platform uses the same campaign, simulation, save schema, and progression. Browser-only rendering limits reduce visual clutter without changing results.
 
 ## Play or share
 
@@ -15,7 +15,7 @@ The live browser build is published through [GitHub Pages](https://dcr-cmyk648.g
 The complete local distribution is:
 
 ```text
-release/No Hitter v0.19.0 All Platforms.zip
+release/No Hitter v0.20.0 All Platforms.zip
 ```
 
 It contains the browser ZIP, a Universal macOS DMG, x86_64 and ARM64 Windows ZIPs, x86_64 and ARM64 Linux archives, source, instructions, manifests, and checksums. Godot is not required to play an export.
@@ -126,7 +126,7 @@ The game autosaves every ten seconds and on clean exit/backgrounding, with up to
 
 Writes use validated pending, primary, and backup generations. Browser builds add rotating persistent mirrors and a dedicated pre-update checkpoint, flush storage before activation, and select the most advanced valid generation after reload. An older cached build refuses to overwrite a newer schema.
 
-Save schema 28 migrates all public saves. Former 30/10/5 campaign positions map by authored place inside their league; old age/build/pitch ownership becomes equivalent deterministic legacy run state. Prestige balances, upgrades, gear, achievements, story, pending drafts, active volleys, lifetime counters, and update checkpoints are preserved. The renamed game deliberately retains its original application-data folder:
+Save schema 33 migrates all public saves. Former 30/10/5 campaign positions map by authored place inside their league; old age/build/pitch ownership becomes equivalent deterministic legacy run state. Prestige balances, upgrades, gear, achievements, story, pending drafts, active volleys, lifetime counters, and update checkpoints are preserved. The renamed game deliberately retains its original application-data folder:
 
 ```text
 macOS:  ~/Library/Application Support/Godot/app_userdata/One Foot Per Second/
