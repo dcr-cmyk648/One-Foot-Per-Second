@@ -114,9 +114,9 @@ func _test_m1_perk_upgrade_pitch_contract() -> void:
 	var migrated = GameStateScript.new()
 	migrated.apply_save_data({"version": 30, "determination_points": 4.0, "selected_run_perks": game.selected_run_perks})
 	_expect(is_equal_approx(migrated.get_determination_quality_bonus(), 0.08), "Old Determination meters must migrate without changing their earned bonus")
-	_expect(is_equal_approx(game.get_outcome_determination_points(Content.GRAND_SLAM_INDEX), 9.6), "Determination fills 20% more slowly at the largest landmark")
-	game.determination_points = 4.0
-	_expect(is_equal_approx(game.get_determination_quality_bonus(), 0.092), "The new Determination peak step is 15% stronger")
+	_expect(is_equal_approx(game.get_outcome_determination_points(Content.GRAND_SLAM_INDEX), 12.0), "Grand Slam now uses the exact 6-point reference pace: 12.0 internal (12,000 displayed) at the largest landmark")
+	game.determination_points = 6.0
+	_expect(is_equal_approx(game.get_determination_quality_bonus(), 0.140), "Grand Slam peak contract is tied to the 6-point reference and now delivers +140 quality")
 	for definition_value in RunContent.RUN_PERKS:
 		var definition: Dictionary = definition_value
 		if str(definition.get("league", "")) != "human" or str(definition.get("stat", "")) not in ["offline", "loot"]:
